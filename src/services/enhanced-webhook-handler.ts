@@ -9,6 +9,8 @@ import { ConfigManager } from '../utils/config';
 import { GloriaFoodApiClient } from './gloria-food-api-client';
 import { DoorDashApiClient } from './doordash-api-client';
 import { DatabaseService } from './database-service';
+import { WebhookReliabilityService } from './webhook-reliability-service';
+import { WebhookSecurityService } from './webhook-security-service';
 import { GloriaFoodOrder, OrderStatus } from '../types/gloria-food';
 import { DoorDashDeliveryRequest, DoorDashDeliveryResponse } from '../types/doordash';
 import { DeliveryRecord } from '../types/database';
@@ -20,16 +22,20 @@ export class EnhancedWebhookHandler {
   private gloriaFoodClient: GloriaFoodApiClient;
   private doorDashClient: DoorDashApiClient;
   private databaseService: DatabaseService;
+  private webhookReliability: WebhookReliabilityService;
+  private webhookSecurity: WebhookSecurityService;
   private port: number;
 
   constructor(port: number = 3000) {
     this.app = express();
     this.port = port;
     this.logger = new Logger('EnhancedWebhookHandler');
-    this.config = new ConfigManager();
+    this.config = ConfigManager.getInstance();
     this.gloriaFoodClient = new GloriaFoodApiClient(this.config.getGloriaFoodConfig());
     this.doorDashClient = new DoorDashApiClient(this.config.getDoorDashConfig());
     this.databaseService = new DatabaseService();
+    this.webhookReliability = new WebhookReliabilityService();
+    this.webhookSecurity = new WebhookSecurityService();
 
     this.setupMiddleware();
     this.setupRoutes();
@@ -86,6 +92,13 @@ export class EnhancedWebhookHandler {
     
     // Process all pending orders endpoint
     this.app.post('/process-pending', this.handleProcessPendingOrders.bind(this));
+    
+    // Webhook reliability endpoints
+    this.app.get('/webhook/logs', this.handleGetWebhookLogs.bind(this));
+    this.app.post('/webhook/retry/:webhookId', this.handleRetryWebhook.bind(this));
+    this.app.get('/webhook/metrics', this.handleGetWebhookMetrics.bind(this));
+    this.app.get('/webhook/status', this.handleGetWebhookStatus.bind(this));
+    this.app.post('/webhook/test', this.handleTestWebhook.bind(this));
   }
 
   /**
@@ -94,45 +107,45 @@ export class EnhancedWebhookHandler {
   private async handleGloriaFoodWebhook(req: Request, res: Response): Promise<void> {
     try {
       const webhookData = req.body;
+      const signature = req.headers['x-gloria-signature'] as string;
+      
       this.logger.info('Received Gloria Food webhook', webhookData);
 
-      // Log webhook event
-      const webhookLogId = await this.databaseService.logWebhookEvent(
-        'gloria_food_webhook',
-        webhookData,
-        webhookData.order_id
-      );
-
-      try {
-        // Process the webhook based on event type
-        await this.processGloriaFoodWebhook(webhookData);
-        
-        // Mark webhook as processed
-        await this.databaseService.markWebhookProcessed(webhookLogId);
-        
-        res.status(200).json({ 
-          success: true, 
-          message: 'Webhook processed successfully',
-          webhookLogId 
-        });
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        this.logger.error('Error processing Gloria Food webhook:', error);
-        
-        // Mark webhook as processed with error
-        await this.databaseService.markWebhookProcessed(webhookLogId, errorMessage);
-        
-        res.status(500).json({ 
+      // Validate webhook security
+      const validation = this.webhookSecurity.validateWebhookRequest(req, webhookData, signature);
+      if (!validation.isValid) {
+        this.logger.warn(`Gloria Food webhook validation failed: ${validation.error}`);
+        res.status(401).json({ 
           success: false, 
-          message: 'Error processing webhook',
-          error: errorMessage 
+          message: 'Webhook validation failed',
+          error: validation.error 
         });
+        return;
       }
+
+      // Process webhook with reliability service
+      const webhookId = await this.webhookReliability.processWebhook(
+        'gloria_food',
+        webhookData.event_type || webhookData.type || 'unknown',
+        webhookData,
+        async (payload) => {
+          await this.processGloriaFoodWebhook(payload);
+        }
+      );
+      
+      res.status(200).json({ 
+        success: true, 
+        message: 'Webhook processed successfully',
+        webhookId 
+      });
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error('Error handling Gloria Food webhook:', error);
+      
       res.status(500).json({ 
         success: false, 
-        message: 'Internal server error' 
+        message: 'Error processing webhook',
+        error: errorMessage 
       });
     }
   }
@@ -143,46 +156,45 @@ export class EnhancedWebhookHandler {
   private async handleDoorDashWebhook(req: Request, res: Response): Promise<void> {
     try {
       const webhookData = req.body;
+      const signature = req.headers['x-doordash-signature'] as string;
+      
       this.logger.info('Received DoorDash webhook', webhookData);
 
-      // Log webhook event
-      const webhookLogId = await this.databaseService.logWebhookEvent(
-        'doordash_webhook',
-        webhookData,
-        undefined,
-        webhookData.delivery_id
-      );
-
-      try {
-        // Process DoorDash webhook
-        await this.processDoorDashWebhook(webhookData);
-        
-        // Mark webhook as processed
-        await this.databaseService.markWebhookProcessed(webhookLogId);
-        
-        res.status(200).json({ 
-          success: true, 
-          message: 'Webhook processed successfully',
-          webhookLogId 
-        });
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        this.logger.error('Error processing DoorDash webhook:', error);
-        
-        // Mark webhook as processed with error
-        await this.databaseService.markWebhookProcessed(webhookLogId, errorMessage);
-        
-        res.status(500).json({ 
+      // Validate webhook security
+      const validation = this.webhookSecurity.validateWebhookRequest(req, webhookData, signature);
+      if (!validation.isValid) {
+        this.logger.warn(`DoorDash webhook validation failed: ${validation.error}`);
+        res.status(401).json({ 
           success: false, 
-          message: 'Error processing webhook',
-          error: errorMessage 
+          message: 'Webhook validation failed',
+          error: validation.error 
         });
+        return;
       }
+
+      // Process webhook with reliability service
+      const webhookId = await this.webhookReliability.processWebhook(
+        'doordash',
+        webhookData.event_type || webhookData.type || 'unknown',
+        webhookData,
+        async (payload) => {
+          await this.processDoorDashWebhook(payload);
+        }
+      );
+      
+      res.status(200).json({ 
+        success: true, 
+        message: 'Webhook processed successfully',
+        webhookId 
+      });
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error('Error handling DoorDash webhook:', error);
+      
       res.status(500).json({ 
         success: false, 
-        message: 'Internal server error' 
+        message: 'Error processing webhook',
+        error: errorMessage 
       });
     }
   }
@@ -327,7 +339,13 @@ export class EnhancedWebhookHandler {
       // Prepare DoorDash delivery request
       const deliveryRequest: DoorDashDeliveryRequest = {
         external_delivery_id: order.orderNumber,
-        pickup_address: this.config.getRestaurantConfig(),
+        pickup_address: {
+          street_address: this.config.getRestaurantConfig().address.street_address,
+          city: this.config.getRestaurantConfig().address.city,
+          state: this.config.getRestaurantConfig().address.state,
+          zip_code: this.config.getRestaurantConfig().address.zip_code,
+          country: this.config.getRestaurantConfig().address.country
+        },
         dropoff_address: {
           street_address: order.delivery.address.street,
           city: order.delivery.address.city,
@@ -338,18 +356,18 @@ export class EnhancedWebhookHandler {
         pickup_phone_number: this.config.getRestaurantConfig().phone,
         dropoff_phone_number: order.customer.phone || '',
         pickup_business_name: this.config.getRestaurantConfig().name,
-        dropoff_business_name: order.customer.name,
         pickup_instructions: 'Please pick up the order from the restaurant',
-        dropoff_instructions: order.delivery.instructions || 'Please deliver to the customer',
+        dropoff_instructions: order.delivery.deliveryInstructions || 'Please deliver to the customer',
         order_value: order.total,
         items: order.items.map(item => ({
           name: item.name,
-          description: item.description || '',
+          description: item.specialInstructions || '',
           quantity: item.quantity,
-          price: item.price
+          unit_price: item.price,
+          total_price: item.totalPrice
         })),
-        pickup_time: new Date(Date.now() + 10 * 60 * 1000).toISOString(), // 10 minutes from now
-        dropoff_time: new Date(Date.now() + 45 * 60 * 1000).toISOString() // 45 minutes from now
+        estimated_pickup_time: new Date(Date.now() + 10 * 60 * 1000).toISOString(), // 10 minutes from now
+        estimated_delivery_time: new Date(Date.now() + 45 * 60 * 1000).toISOString() // 45 minutes from now
       };
 
       // Create DoorDash delivery
@@ -359,7 +377,7 @@ export class EnhancedWebhookHandler {
       const deliveryRecord: DeliveryRecord = {
         order_id: 0, // Will be updated after we get the order ID
         external_delivery_id: order.orderNumber,
-        doordash_delivery_id: deliveryResponse.id,
+        doordash_delivery_id: deliveryResponse.delivery_id,
         status: deliveryResponse.status,
         tracking_url: deliveryResponse.tracking_url,
         estimated_delivery_time: deliveryResponse.estimated_delivery_time,
@@ -375,7 +393,7 @@ export class EnhancedWebhookHandler {
         await this.databaseService.saveDelivery(deliveryRecord);
       }
 
-      this.logger.info(`Successfully created DoorDash delivery: ${deliveryResponse.id} for order: ${order.orderNumber}`);
+      this.logger.info(`Successfully created DoorDash delivery: ${deliveryResponse.delivery_id} for order: ${order.orderNumber}`);
     } catch (error) {
       this.logger.error(`Error creating DoorDash delivery for order ${order.orderNumber}:`, error);
       throw error;
@@ -696,12 +714,159 @@ export class EnhancedWebhookHandler {
   }
 
   /**
+   * Handle get webhook logs
+   */
+  private async handleGetWebhookLogs(req: Request, res: Response): Promise<void> {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+      const status = req.query.status as string;
+      const source = req.query.source as string;
+
+      const logs = await this.webhookReliability.getWebhookLogs(limit, offset, status, source);
+      
+      res.status(200).json({ 
+        success: true, 
+        logs,
+        pagination: {
+          limit,
+          offset,
+          total: logs.length
+        }
+      });
+    } catch (error) {
+      this.logger.error('Error getting webhook logs:', error);
+      res.status(500).json({ 
+        success: false, 
+        message: 'Error getting webhook logs',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+
+  /**
+   * Handle retry webhook
+   */
+  private async handleRetryWebhook(req: Request, res: Response): Promise<void> {
+    try {
+      const webhookId = req.params.webhookId;
+      
+      await this.webhookReliability.retryWebhook(webhookId);
+      
+      res.status(200).json({ 
+        success: true, 
+        message: `Webhook ${webhookId} retry scheduled` 
+      });
+    } catch (error) {
+      this.logger.error('Error retrying webhook:', error);
+      res.status(500).json({ 
+        success: false, 
+        message: 'Error retrying webhook',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+
+  /**
+   * Handle get webhook metrics
+   */
+  private async handleGetWebhookMetrics(req: Request, res: Response): Promise<void> {
+    try {
+      const metrics = this.webhookReliability.getMetrics();
+      
+      res.status(200).json({ 
+        success: true, 
+        metrics
+      });
+    } catch (error) {
+      this.logger.error('Error getting webhook metrics:', error);
+      res.status(500).json({ 
+        success: false, 
+        message: 'Error getting webhook metrics',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+
+  /**
+   * Handle get webhook status
+   */
+  private async handleGetWebhookStatus(req: Request, res: Response): Promise<void> {
+    try {
+      const metrics = this.webhookReliability.getMetrics();
+      const successRate = metrics.totalWebhooks > 0 
+        ? (metrics.successfulWebhooks / metrics.totalWebhooks) * 100 
+        : 0;
+      
+      res.status(200).json({ 
+        success: true, 
+        status: {
+          isHealthy: successRate >= 90, // 90% success rate threshold
+          successRate: Math.round(successRate * 100) / 100,
+          totalWebhooks: metrics.totalWebhooks,
+          failedWebhooks: metrics.failedWebhooks,
+          retryAttempts: metrics.retryAttempts,
+          averageResponseTime: metrics.averageResponseTime,
+          lastWebhookTime: metrics.lastWebhookTime
+        }
+      });
+    } catch (error) {
+      this.logger.error('Error getting webhook status:', error);
+      res.status(500).json({ 
+        success: false, 
+        message: 'Error getting webhook status',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+
+  /**
+   * Handle test webhook
+   */
+  private async handleTestWebhook(req: Request, res: Response): Promise<void> {
+    try {
+      const testPayload = req.body;
+      
+      // Process test webhook with reliability service
+      const webhookId = await this.webhookReliability.processWebhook(
+        'manual',
+        'test',
+        testPayload,
+        async (payload) => {
+          this.logger.info('Test webhook processed:', payload);
+          // Simulate processing time
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      );
+      
+      res.status(200).json({ 
+        success: true, 
+        message: 'Test webhook processed successfully',
+        webhookId 
+      });
+    } catch (error) {
+      this.logger.error('Error processing test webhook:', error);
+      res.status(500).json({ 
+        success: false, 
+        message: 'Error processing test webhook',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+
+  /**
    * Start the webhook server
    */
   async start(): Promise<void> {
     try {
       // Initialize database
       await this.databaseService.initialize();
+      
+      // Initialize webhook reliability service
+      await this.webhookReliability.initialize();
+      
+      // Start security cleanup timer
+      this.webhookSecurity.startCleanupTimer();
       
       // Start server
       this.app.listen(this.port, () => {
@@ -715,6 +880,11 @@ export class EnhancedWebhookHandler {
         this.logger.info(`  GET  /delivery/:deliveryId/status - Get delivery status`);
         this.logger.info(`  GET  /statistics - Get order statistics`);
         this.logger.info(`  POST /process-pending - Process all pending orders`);
+        this.logger.info(`  GET  /webhook/logs - Get webhook logs`);
+        this.logger.info(`  POST /webhook/retry/:id - Retry failed webhook`);
+        this.logger.info(`  GET  /webhook/metrics - Get webhook metrics`);
+        this.logger.info(`  GET  /webhook/status - Get webhook system status`);
+        this.logger.info(`  POST /webhook/test - Test webhook endpoint`);
       });
     } catch (error) {
       this.logger.error('Failed to start webhook handler:', error);
@@ -727,6 +897,7 @@ export class EnhancedWebhookHandler {
    */
   async stop(): Promise<void> {
     try {
+      await this.webhookReliability.close();
       await this.databaseService.close();
       this.logger.info('Enhanced webhook handler stopped');
     } catch (error) {

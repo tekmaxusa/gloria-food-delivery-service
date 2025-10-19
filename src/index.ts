@@ -22,7 +22,7 @@ class DeliveryOrderProcessor {
     }
 
     this.apiClient = new GloriaFoodApiClient(
-      this.config.getConfig(),
+      this.config.getGloriaFoodConfig(),
       this.config.getRetryConfig(),
       this.config.getRateLimitConfig()
     );

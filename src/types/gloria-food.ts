@@ -7,6 +7,7 @@ export interface GloriaFoodConfig {
   apiUrl: string;
   apiKey: string;
   restaurantId: string;
+  companyUid?: string;
   webhookSecret?: string;
 }
 
@@ -141,4 +142,49 @@ export interface RetryConfig {
 export interface RateLimitConfig {
   requestsPerMinute: number;
   burstLimit: number;
+}
+
+export interface MenuItem {
+  id: number;
+  name: string;
+  description?: string;
+  price: number;
+  category: string;
+  available: boolean;
+  imageUrl?: string;
+  modifiers?: MenuModifier[];
+  allergens?: string[];
+  calories?: number;
+}
+
+export interface MenuModifier {
+  id: number;
+  name: string;
+  price: number;
+  required: boolean;
+  options: MenuModifierOption[];
+}
+
+export interface MenuModifierOption {
+  id: number;
+  name: string;
+  price: number;
+}
+
+export interface MenuCategory {
+  id: number;
+  name: string;
+  description?: string;
+  items: MenuItem[];
+  sortOrder: number;
+}
+
+export interface MenuResponse {
+  categories: MenuCategory[];
+  restaurant: {
+    id: number;
+    name: string;
+    description?: string;
+  };
+  lastUpdated: string;
 }

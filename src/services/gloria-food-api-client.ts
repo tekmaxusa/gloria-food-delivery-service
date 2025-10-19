@@ -12,7 +12,8 @@ import {
   GloriaFoodApiResponse,
   ApiError,
   RetryConfig,
-  RateLimitConfig
+  RateLimitConfig,
+  MenuResponse
 } from '../types/gloria-food';
 import { Logger } from '../utils/logger';
 
@@ -355,6 +356,59 @@ export class GloriaFoodApiClient {
         status: 'unhealthy',
         timestamp: new Date().toISOString()
       };
+    }
+  }
+
+  /**
+   * Get restaurant menu using company UID
+   */
+  async getMenu(): Promise<MenuResponse> {
+    try {
+      if (!this.config.companyUid) {
+        throw new Error('Company UID is required to fetch menu');
+      }
+
+      const operation = async () => {
+        const response: AxiosResponse<MenuResponse> = 
+          await this.client.get(`/menu?company_uid=${this.config.companyUid}`);
+        
+        return response.data;
+      };
+
+      return this.queueRequest(() => this.executeWithRetry(operation));
+    } catch (error) {
+      this.logger.error('Failed to fetch menu:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get menu for a specific restaurant using company UID
+   */
+  async getRestaurantMenu(restaurantId?: string): Promise<MenuResponse> {
+    try {
+      if (!this.config.companyUid) {
+        throw new Error('Company UID is required to fetch menu');
+      }
+
+      const operation = async () => {
+        const params = new URLSearchParams();
+        params.append('company_uid', this.config.companyUid!);
+        
+        if (restaurantId) {
+          params.append('restaurant_id', restaurantId);
+        }
+
+        const response: AxiosResponse<MenuResponse> = 
+          await this.client.get(`/menu?${params.toString()}`);
+        
+        return response.data;
+      };
+
+      return this.queueRequest(() => this.executeWithRetry(operation));
+    } catch (error) {
+      this.logger.error('Failed to fetch restaurant menu:', error);
+      throw error;
     }
   }
 }

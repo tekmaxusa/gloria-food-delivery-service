@@ -1,6 +1,6 @@
 /**
- * MySQL Database Service
- * Replaces SQLite with MySQL/MariaDB for better performance and scalability
+ * MySQL Database Service for Sue's Hero
+ * Connects to XAMPP MySQL database
  */
 
 import mysql from 'mysql2/promise';
@@ -24,7 +24,6 @@ export class MySQLDatabaseService {
     this.config = ConfigManager.getInstance();
     this.logger = new Logger('MySQLDatabaseService');
     
-    // MySQL configuration
     this.dbConfig = {
       host: process.env.MYSQL_HOST || 'localhost',
       port: parseInt(process.env.MYSQL_PORT || '3306'),
@@ -39,376 +38,145 @@ export class MySQLDatabaseService {
    */
   async initialize(): Promise<void> {
     try {
-      this.logger.info('Initializing MySQL database connection...');
-      
-      // Create connection
-      this.connection = await mysql.createConnection({
+      this.logger.info('Connecting to XAMPP MySQL database...', {
         host: this.dbConfig.host,
         port: this.dbConfig.port,
-        user: this.dbConfig.user,
-        password: this.dbConfig.password,
-        database: this.dbConfig.database
+        database: this.dbConfig.database,
+        user: this.dbConfig.user
       });
 
-      this.logger.info('MySQL database connected successfully');
+      this.connection = await mysql.createConnection(this.dbConfig);
       
-      // Create tables if they don't exist
-      await this.createTables();
+      // Test the connection
+      await this.connection.ping();
+      
+      this.logger.info('Successfully connected to XAMPP MySQL database');
+      
+      // Check if tables exist
+      await this.checkTables();
       
     } catch (error) {
-      this.logger.error('Failed to initialize MySQL database:', error);
+      this.logger.error('Failed to connect to XAMPP MySQL database:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if required tables exist
+   */
+  private async checkTables(): Promise<void> {
+    if (!this.connection) throw new Error('Database not connected');
+
+    try {
+      const [tables] = await this.connection.execute(
+        "SHOW TABLES LIKE 'orders'"
+      );
       
-      // Try to create database if it doesn't exist
-      if (error instanceof Error && error.message.includes('Unknown database')) {
-        await this.createDatabase();
-        await this.initialize();
+      if (Array.isArray(tables) && tables.length > 0) {
+        this.logger.info('Orders table found in XAMPP database');
       } else {
-        throw error;
+        this.logger.warn('Orders table not found. You may need to create tables in XAMPP');
       }
-    }
-  }
 
-  /**
-   * Create database if it doesn't exist
-   */
-  private async createDatabase(): Promise<void> {
-    try {
-      this.logger.info(`Creating database: ${this.dbConfig.database}`);
+      const [deliveryTables] = await this.connection.execute(
+        "SHOW TABLES LIKE 'deliveries'"
+      );
       
-      const tempConnection = await mysql.createConnection({
-        host: this.dbConfig.host,
-        port: this.dbConfig.port,
-        user: this.dbConfig.user,
-        password: this.dbConfig.password
-      });
+      if (Array.isArray(deliveryTables) && deliveryTables.length > 0) {
+        this.logger.info('Deliveries table found in XAMPP database');
+      } else {
+        this.logger.warn('Deliveries table not found. You may need to create tables in XAMPP');
+      }
 
-      await tempConnection.execute(`CREATE DATABASE IF NOT EXISTS \`${this.dbConfig.database}\``);
-      await tempConnection.end();
-      
-      this.logger.info('Database created successfully');
     } catch (error) {
-      this.logger.error('Failed to create database:', error);
-      throw error;
+      this.logger.error('Error checking tables:', error);
     }
   }
 
   /**
-   * Create necessary tables
-   */
-  private async createTables(): Promise<void> {
-    if (!this.connection) {
-      throw new Error('Database connection not initialized');
-    }
-
-    try {
-      this.logger.info('Creating database tables...');
-
-      // Create orders table
-      await this.connection.execute(`
-        CREATE TABLE IF NOT EXISTS orders (
-          id INT PRIMARY KEY AUTO_INCREMENT,
-          order_id VARCHAR(255) UNIQUE NOT NULL,
-          order_number VARCHAR(255) NOT NULL,
-          restaurant_id INT DEFAULT 840639,
-          customer_id INT DEFAULT 0,
-          customer_name VARCHAR(255) NOT NULL,
-          customer_phone VARCHAR(50),
-          customer_email VARCHAR(255),
-          customer_address TEXT,
-          order_type ENUM('delivery', 'pickup') DEFAULT 'delivery',
-          status ENUM('pending', 'confirmed', 'preparing', 'ready', 'out_for_delivery', 'delivered', 'cancelled', 'refunded') DEFAULT 'pending',
-          subtotal DECIMAL(10,2) DEFAULT 0,
-          tax DECIMAL(10,2) DEFAULT 0,
-          delivery_fee DECIMAL(10,2) DEFAULT 0,
-          tip DECIMAL(10,2) DEFAULT 0,
-          total DECIMAL(10,2) NOT NULL,
-          currency VARCHAR(10) DEFAULT 'USD',
-          order_time DATETIME NOT NULL,
-          delivery_time DATETIME,
-          delivery_instructions TEXT,
-          notes TEXT,
-          special_instructions TEXT,
-          items JSON,
-          payment_method ENUM('cash', 'card', 'online') DEFAULT 'cash',
-          payment_status ENUM('pending', 'completed', 'failed') DEFAULT 'pending',
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-          INDEX idx_order_id (order_id),
-          INDEX idx_status (status),
-          INDEX idx_order_time (order_time),
-          INDEX idx_customer_name (customer_name)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-      `);
-
-      // Create order_items table
-      await this.connection.execute(`
-        CREATE TABLE IF NOT EXISTS order_items (
-          id INT PRIMARY KEY AUTO_INCREMENT,
-          order_id VARCHAR(255) NOT NULL,
-          item_name VARCHAR(255) NOT NULL,
-          item_price DECIMAL(10,2) NOT NULL,
-          quantity INT NOT NULL DEFAULT 1,
-          total_price DECIMAL(10,2) NOT NULL,
-          category VARCHAR(100),
-          modifiers JSON,
-          special_instructions TEXT,
-          notes TEXT,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE,
-          INDEX idx_order_id (order_id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-      `);
-
-      // Create webhook_logs table
-      await this.connection.execute(`
-        CREATE TABLE IF NOT EXISTS webhook_logs (
-          id INT PRIMARY KEY AUTO_INCREMENT,
-          webhook_type VARCHAR(100) NOT NULL,
-          order_id VARCHAR(255),
-          payload JSON,
-          status ENUM('success', 'failed', 'pending') DEFAULT 'pending',
-          response TEXT,
-          error_message TEXT,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          INDEX idx_webhook_type (webhook_type),
-          INDEX idx_order_id (order_id),
-          INDEX idx_status (status),
-          INDEX idx_created_at (created_at)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-      `);
-
-      // Create delivery_logs table
-      await this.connection.execute(`
-        CREATE TABLE IF NOT EXISTS delivery_logs (
-          id INT PRIMARY KEY AUTO_INCREMENT,
-          order_id VARCHAR(255) NOT NULL,
-          driver_name VARCHAR(255),
-          driver_phone VARCHAR(50),
-          status ENUM('assigned', 'picked_up', 'delivered', 'failed') DEFAULT 'assigned',
-          pickup_time DATETIME,
-          delivery_time DATETIME,
-          notes TEXT,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-          INDEX idx_order_id (order_id),
-          INDEX idx_status (status),
-          INDEX idx_driver_name (driver_name)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-      `);
-
-      this.logger.info('Database tables created successfully');
-    } catch (error) {
-      this.logger.error('Failed to create tables:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Save order to database
+   * Save order to XAMPP database
    */
   async saveOrder(order: GloriaFoodOrder): Promise<void> {
-    if (!this.connection) {
-      throw new Error('Database connection not initialized');
-    }
+    if (!this.connection) throw new Error('Database not connected');
 
     try {
-      // Insert order
-      await this.connection.execute(`
+      const query = `
         INSERT INTO orders (
-          order_id, order_number, customer_name, customer_phone, customer_email,
-          customer_address, order_type, status, total, currency, order_time,
-          delivery_time, notes, items, payment_method, payment_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          order_id, order_number, customer_name, customer_email, 
+          customer_phone, customer_address, order_type, status,
+          total, order_time, delivery_time, delivery_instructions,
+          items, payment_method, payment_status, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
           status = VALUES(status),
-          updated_at = CURRENT_TIMESTAMP
-      `, [
+          updated_at = VALUES(updated_at)
+      `;
+
+      const values = [
         order.id.toString(),
         order.orderNumber,
         order.customer.name,
-        order.customer.phone,
-        order.customer.email,
-        order.customer.address ? JSON.stringify(order.customer.address) : null,
+        order.customer.email || null,
+        order.customer.phone || null,
+        order.delivery ? `${order.delivery.address.street}, ${order.delivery.address.city}, ${order.delivery.address.state} ${order.delivery.address.zipCode}` : null,
         order.orderType,
         order.status,
         order.total,
-        'USD', // Default currency
         new Date(order.createdAt),
-        order.delivery?.estimatedDeliveryTime ? new Date(order.delivery.estimatedDeliveryTime) : null,
-        order.notes,
+        order.delivery ? new Date(order.delivery.estimatedDeliveryTime || order.createdAt) : null,
+        order.delivery ? order.delivery.deliveryInstructions : null,
         JSON.stringify(order.items),
         order.payment.method,
-        order.payment.status
-      ]);
+        order.payment.status || 'pending',
+        new Date(order.createdAt),
+        new Date(order.updatedAt)
+      ];
 
-      // Insert order items
-      if (order.items && order.items.length > 0) {
-        for (const item of order.items) {
-          await this.connection.execute(`
-            INSERT INTO order_items (order_id, item_name, item_price, quantity, total_price, category, modifiers, special_instructions, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE
-              quantity = VALUES(quantity),
-              total_price = VALUES(total_price)
-          `, [
-            order.id.toString(),
-            item.name,
-            item.price,
-            item.quantity,
-            item.totalPrice,
-            item.category || null,
-            item.modifiers ? JSON.stringify(item.modifiers) : null,
-            item.specialInstructions || null,
-            ''
-          ]);
-        }
-      }
-
-      this.logger.info(`Order saved: ${order.orderNumber}`);
-    } catch (error) {
-      this.logger.error('Failed to save order:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Get order by ID
-   */
-  async getOrder(orderId: string): Promise<GloriaFoodOrder | null> {
-    if (!this.connection) {
-      throw new Error('Database connection not initialized');
-    }
-
-    try {
-      const [rows] = await this.connection.execute(`
-        SELECT * FROM orders WHERE order_id = ?
-      `, [orderId]);
-
-      const orders = rows as any[];
-      if (orders.length === 0) {
-        return null;
-      }
-
-      const order = orders[0];
+      await this.connection.execute(query, values);
       
-      // Get order items
-      const [itemRows] = await this.connection.execute(`
-        SELECT * FROM order_items WHERE order_id = ?
-      `, [orderId]);
-
-      const items = (itemRows as any[]).map(item => ({
-        id: item.id,
-        name: item.item_name,
-        price: parseFloat(item.item_price),
-        quantity: item.quantity,
-        totalPrice: parseFloat(item.total_price),
-        category: item.category,
-        modifiers: item.modifiers ? JSON.parse(item.modifiers) : undefined,
-        specialInstructions: item.special_instructions
-      }));
-
-      return {
-        id: parseInt(order.order_id),
-        orderNumber: order.order_number,
-        restaurantId: order.restaurant_id || 840639,
-        customer: {
-          id: order.customer_id || 0,
-          name: order.customer_name,
-          phone: order.customer_phone,
-          email: order.customer_email,
-          address: order.customer_address ? JSON.parse(order.customer_address) : undefined
-        },
-        items: items,
-        subtotal: parseFloat(order.subtotal || order.total),
-        tax: parseFloat(order.tax || '0'),
-        deliveryFee: parseFloat(order.delivery_fee || '0'),
-        tip: parseFloat(order.tip || '0'),
-        total: parseFloat(order.total),
-        payment: {
-          method: order.payment_method as 'cash' | 'card' | 'online',
-          amount: parseFloat(order.total),
-          status: order.payment_status as 'pending' | 'completed' | 'failed'
-        },
-        delivery: {
-          address: order.customer_address ? JSON.parse(order.customer_address) : undefined,
-          estimatedDeliveryTime: order.delivery_time ? order.delivery_time.toISOString() : undefined,
-          deliveryFee: parseFloat(order.delivery_fee || '0'),
-          deliveryInstructions: order.delivery_instructions,
-          contactPhone: order.customer_phone
-        },
-        status: order.status as any,
-        orderType: order.order_type as 'delivery' | 'pickup',
-        createdAt: order.order_time.toISOString(),
-        updatedAt: order.updated_at.toISOString(),
-        notes: order.notes,
-        specialInstructions: order.special_instructions
-      };
-    } catch (error) {
-      this.logger.error('Failed to get order:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Get all orders with pagination
-   */
-  async getAllOrders(page: number = 1, limit: number = 20): Promise<GloriaFoodOrder[]> {
-    if (!this.connection) {
-      throw new Error('Database connection not initialized');
-    }
-
-    try {
-      const offset = (page - 1) * limit;
+      this.logger.info(`Order ${order.orderNumber} saved to XAMPP database`);
       
-      const [rows] = await this.connection.execute(`
-        SELECT * FROM orders 
-        ORDER BY created_at DESC 
-        LIMIT ? OFFSET ?
-      `, [limit, offset]);
-
-      const orders = rows as any[];
-      const result: GloriaFoodOrder[] = [];
-
-      for (const order of orders) {
-        const fullOrder = await this.getOrder(order.order_id);
-        if (fullOrder) {
-          result.push(fullOrder);
-        }
-      }
-
-      return result;
     } catch (error) {
-      this.logger.error('Failed to get all orders:', error);
+      this.logger.error('Error saving order to XAMPP database:', error);
       throw error;
     }
   }
 
   /**
-   * Get orders by status
+   * Get order by Gloria Food ID
    */
-  async getOrdersByStatus(status: string): Promise<GloriaFoodOrder[]> {
-    if (!this.connection) {
-      throw new Error('Database connection not initialized');
-    }
+  async getOrderByGloriaFoodId(orderId: number): Promise<any | null> {
+    if (!this.connection) throw new Error('Database not connected');
 
     try {
-      const [rows] = await this.connection.execute(`
-        SELECT * FROM orders WHERE status = ? ORDER BY created_at DESC
-      `, [status]);
+      const [rows] = await this.connection.execute(
+        'SELECT * FROM orders WHERE order_id = ?',
+        [orderId.toString()]
+      );
 
-      const orders = rows as any[];
-      const result: GloriaFoodOrder[] = [];
-
-      for (const order of orders) {
-        const fullOrder = await this.getOrder(order.order_id);
-        if (fullOrder) {
-          result.push(fullOrder);
-        }
-      }
-
-      return result;
+      return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+      
     } catch (error) {
-      this.logger.error('Failed to get orders by status:', error);
+      this.logger.error('Error getting order from XAMPP database:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all orders
+   */
+  async getAllOrders(): Promise<any[]> {
+    if (!this.connection) throw new Error('Database not connected');
+
+    try {
+      const [rows] = await this.connection.execute(
+        'SELECT * FROM orders ORDER BY created_at DESC'
+      );
+
+      return Array.isArray(rows) ? rows : [];
+      
+    } catch (error) {
+      this.logger.error('Error getting orders from XAMPP database:', error);
       throw error;
     }
   }
@@ -416,19 +184,19 @@ export class MySQLDatabaseService {
   /**
    * Update order status
    */
-  async updateOrderStatus(orderId: string, status: string): Promise<void> {
-    if (!this.connection) {
-      throw new Error('Database connection not initialized');
-    }
+  async updateOrderStatus(orderId: number, status: string): Promise<void> {
+    if (!this.connection) throw new Error('Database not connected');
 
     try {
-      await this.connection.execute(`
-        UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE order_id = ?
-      `, [status, orderId]);
-
-      this.logger.info(`Order status updated: ${orderId} -> ${status}`);
+      await this.connection.execute(
+        'UPDATE orders SET status = ?, updated_at = NOW() WHERE order_id = ?',
+        [status, orderId.toString()]
+      );
+      
+      this.logger.info(`Order ${orderId} status updated to ${status} in XAMPP database`);
+      
     } catch (error) {
-      this.logger.error('Failed to update order status:', error);
+      this.logger.error('Error updating order status in XAMPP database:', error);
       throw error;
     }
   }
@@ -436,73 +204,174 @@ export class MySQLDatabaseService {
   /**
    * Get order statistics
    */
-  async getOrderStatistics(): Promise<{
-    total: number;
-    pending: number;
-    confirmed: number;
-    preparing: number;
-    ready: number;
-    out_for_delivery: number;
-    delivered: number;
-    cancelled: number;
-  }> {
-    if (!this.connection) {
-      throw new Error('Database connection not initialized');
-    }
+  async getOrderStatistics(): Promise<any> {
+    if (!this.connection) throw new Error('Database not connected');
 
     try {
-      const [rows] = await this.connection.execute(`
-        SELECT 
-          COUNT(*) as total,
-          SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
-          SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END) as confirmed,
-          SUM(CASE WHEN status = 'preparing' THEN 1 ELSE 0 END) as preparing,
-          SUM(CASE WHEN status = 'ready' THEN 1 ELSE 0 END) as ready,
-          SUM(CASE WHEN status = 'out_for_delivery' THEN 1 ELSE 0 END) as out_for_delivery,
-          SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END) as delivered,
-          SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled
-        FROM orders
-      `);
+      const [totalRows] = await this.connection.execute(
+        'SELECT COUNT(*) as total FROM orders'
+      );
+      
+      const [statusRows] = await this.connection.execute(
+        'SELECT status, COUNT(*) as count FROM orders GROUP BY status'
+      );
+      
+      const [revenueRows] = await this.connection.execute(
+        'SELECT SUM(total) as total_revenue FROM orders'
+      );
 
-      const stats = (rows as any[])[0];
+      const total = Array.isArray(totalRows) && totalRows.length > 0 ? (totalRows[0] as any).total : 0;
+      const totalRevenue = Array.isArray(revenueRows) && revenueRows.length > 0 ? (revenueRows[0] as any).total_revenue : 0;
+      
+      const ordersByStatus: Record<string, number> = {};
+      if (Array.isArray(statusRows)) {
+        statusRows.forEach((row: any) => {
+          ordersByStatus[row.status] = row.count;
+        });
+      }
+
       return {
-        total: parseInt(stats.total),
-        pending: parseInt(stats.pending),
-        confirmed: parseInt(stats.confirmed),
-        preparing: parseInt(stats.preparing),
-        ready: parseInt(stats.ready),
-        out_for_delivery: parseInt(stats.out_for_delivery),
-        delivered: parseInt(stats.delivered),
-        cancelled: parseInt(stats.cancelled)
+        totalOrders: total,
+        ordersByStatus,
+        totalRevenue: totalRevenue || 0,
+        averageOrderValue: total > 0 ? totalRevenue / total : 0
       };
+      
     } catch (error) {
-      this.logger.error('Failed to get order statistics:', error);
+      this.logger.error('Error getting statistics from XAMPP database:', error);
       throw error;
     }
   }
 
   /**
-   * Log webhook event
+   * Save delivery record
    */
-  async logWebhook(webhookType: string, orderId: string, payload: any, status: string, response?: string, error?: string): Promise<void> {
-    if (!this.connection) {
-      throw new Error('Database connection not initialized');
-    }
+  async saveDelivery(delivery: any): Promise<void> {
+    if (!this.connection) throw new Error('Database not connected');
 
     try {
-      await this.connection.execute(`
-        INSERT INTO webhook_logs (webhook_type, order_id, payload, status, response, error_message)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `, [
-        webhookType,
-        orderId,
-        JSON.stringify(payload),
-        status,
-        response || null,
-        error || null
-      ]);
+      const query = `
+        INSERT INTO deliveries (
+          external_delivery_id, doordash_delivery_id, order_id, status,
+          pickup_address, dropoff_address, pickup_time, dropoff_time,
+          driver_name, driver_phone, tracking_url, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          status = VALUES(status),
+          driver_name = VALUES(driver_name),
+          driver_phone = VALUES(driver_phone),
+          tracking_url = VALUES(tracking_url),
+          updated_at = VALUES(updated_at)
+      `;
+
+      const values = [
+        delivery.external_delivery_id,
+        delivery.doordash_delivery_id,
+        delivery.order_id,
+        delivery.status,
+        delivery.pickup_address,
+        delivery.dropoff_address,
+        delivery.pickup_time,
+        delivery.dropoff_time,
+        delivery.driver_name,
+        delivery.driver_phone,
+        delivery.tracking_url,
+        delivery.created_at,
+        delivery.updated_at
+      ];
+
+      await this.connection.execute(query, values);
+      this.logger.info(`Delivery ${delivery.external_delivery_id} saved to XAMPP database`);
+      
     } catch (error) {
-      this.logger.error('Failed to log webhook:', error);
+      this.logger.error('Error saving delivery to XAMPP database:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get delivery by external ID
+   */
+  async getDeliveryByExternalId(externalId: string): Promise<any | null> {
+    if (!this.connection) throw new Error('Database not connected');
+
+    try {
+      const [rows] = await this.connection.execute(
+        'SELECT * FROM deliveries WHERE external_delivery_id = ?',
+        [externalId]
+      );
+
+      return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+      
+    } catch (error) {
+      this.logger.error('Error getting delivery by external ID from XAMPP database:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get delivery by DoorDash ID
+   */
+  async getDeliveryByDoorDashId(doorDashId: string): Promise<any | null> {
+    if (!this.connection) throw new Error('Database not connected');
+
+    try {
+      const [rows] = await this.connection.execute(
+        'SELECT * FROM deliveries WHERE doordash_delivery_id = ?',
+        [doorDashId]
+      );
+
+      return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+      
+    } catch (error) {
+      this.logger.error('Error getting delivery by DoorDash ID from XAMPP database:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update delivery status
+   */
+  async updateDeliveryStatus(deliveryId: string, status: string, driverInfo?: any): Promise<void> {
+    if (!this.connection) throw new Error('Database not connected');
+
+    try {
+      let query = 'UPDATE deliveries SET status = ?, updated_at = NOW()';
+      const values: any[] = [status];
+
+      if (driverInfo) {
+        query += ', driver_name = ?, driver_phone = ?';
+        values.push(driverInfo.name || null, driverInfo.phone || null);
+      }
+
+      query += ' WHERE doordash_delivery_id = ?';
+      values.push(deliveryId);
+
+      await this.connection.execute(query, values);
+      this.logger.info(`Delivery ${deliveryId} status updated to ${status} in XAMPP database`);
+      
+    } catch (error) {
+      this.logger.error('Error updating delivery status in XAMPP database:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all deliveries
+   */
+  async getAllDeliveries(): Promise<any[]> {
+    if (!this.connection) throw new Error('Database not connected');
+
+    try {
+      const [rows] = await this.connection.execute(
+        'SELECT * FROM deliveries ORDER BY created_at DESC'
+      );
+
+      return Array.isArray(rows) ? rows : [];
+      
+    } catch (error) {
+      this.logger.error('Error getting deliveries from XAMPP database:', error);
+      throw error;
     }
   }
 
@@ -512,8 +381,7 @@ export class MySQLDatabaseService {
   async close(): Promise<void> {
     if (this.connection) {
       await this.connection.end();
-      this.connection = null;
-      this.logger.info('MySQL database connection closed');
+      this.logger.info('XAMPP MySQL database connection closed');
     }
   }
 
@@ -522,15 +390,13 @@ export class MySQLDatabaseService {
    */
   async testConnection(): Promise<boolean> {
     try {
-      if (!this.connection) {
-        await this.initialize();
-      }
-      
-      const [rows] = await this.connection!.execute('SELECT 1 as test');
+      await this.initialize();
       return true;
     } catch (error) {
-      this.logger.error('Database connection test failed:', error);
+      this.logger.error('XAMPP MySQL connection test failed:', error);
       return false;
     }
   }
 }
+
+export default MySQLDatabaseService;

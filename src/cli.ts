@@ -542,6 +542,7 @@ program
     await cli.testWebScraping();
   });
 
+
 // Start polling command
 program
   .command('poll')
@@ -578,6 +579,7 @@ program
     const cli = new GloriaFoodCLI();
     await cli.runExamples();
   });
+
 
 // Parse command line arguments
 program.parse();

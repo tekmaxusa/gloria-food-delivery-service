@@ -75,14 +75,16 @@ export class DatabaseService {
         // Create webhook_logs table
         this.db.run(`
           CREATE TABLE IF NOT EXISTS webhook_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id TEXT PRIMARY KEY,
+            source TEXT NOT NULL,
             event_type TEXT NOT NULL,
-            gloria_food_order_id INTEGER,
-            doordash_delivery_id TEXT,
             payload TEXT NOT NULL,
-            processed BOOLEAN DEFAULT FALSE,
+            status TEXT NOT NULL DEFAULT 'pending',
             error_message TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            response_time INTEGER,
+            retry_attempts INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
           )
         `);
 
@@ -91,7 +93,9 @@ export class DatabaseService {
         this.db.run(`CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(order_status)`);
         this.db.run(`CREATE INDEX IF NOT EXISTS idx_deliveries_order_id ON deliveries(order_id)`);
         this.db.run(`CREATE INDEX IF NOT EXISTS idx_deliveries_doordash_id ON deliveries(doordash_delivery_id)`);
-        this.db.run(`CREATE INDEX IF NOT EXISTS idx_webhook_logs_event_type ON webhook_logs(event_type)`);
+        this.db.run(`CREATE INDEX IF NOT EXISTS idx_webhook_logs_source ON webhook_logs(source)`);
+        this.db.run(`CREATE INDEX IF NOT EXISTS idx_webhook_logs_status ON webhook_logs(status)`);
+        this.db.run(`CREATE INDEX IF NOT EXISTS idx_webhook_logs_created_at ON webhook_logs(created_at)`);
 
         this.logger.info('Database initialized successfully');
         this.isInitialized = true;
@@ -283,30 +287,44 @@ export class DatabaseService {
   /**
    * Log webhook event
    */
-  async logWebhookEvent(eventType: string, payload: any, gloriaFoodOrderId?: number, doordashDeliveryId?: string): Promise<number> {
-    this.logger.info(`Logging webhook event: ${eventType}`);
-
+  async logWebhookEvent(
+    source: string,
+    payload: any,
+    status?: string,
+    errorMessage?: string,
+    eventType?: string
+  ): Promise<string> {
+    const webhookId = `webhook_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
     return new Promise((resolve, reject) => {
-      const sql = `
+      const stmt = this.db.prepare(`
         INSERT INTO webhook_logs (
-          event_type, gloria_food_order_id, doordash_delivery_id, payload
-        ) VALUES (?, ?, ?, ?)
-      `;
-
-      const params = [
-        eventType,
-        gloriaFoodOrderId || null,
-        doordashDeliveryId || null,
-        JSON.stringify(payload)
-      ];
-
-      this.db.run(sql, params, function(err) {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(this.lastID);
+          id, source, event_type, payload, status, error_message, 
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      
+      const now = new Date().toISOString();
+      stmt.run(
+        webhookId,
+        source,
+        eventType || 'unknown',
+        JSON.stringify(payload),
+        status || 'pending',
+        errorMessage || null,
+        now,
+        now,
+        (err: any) => {
+          if (err) {
+            this.logger.error('Error logging webhook event:', err);
+            reject(err);
+          } else {
+            this.logger.debug(`Webhook event logged: ${webhookId}`);
+            resolve(webhookId);
+          }
         }
-      });
+      );
+      stmt.finalize();
     });
   }
 
@@ -410,6 +428,101 @@ export class DatabaseService {
           });
         }
       });
+    });
+  }
+
+  /**
+   * Update webhook log status
+   */
+  async updateWebhookLogStatus(
+    webhookId: string,
+    status: string,
+    errorMessage?: string,
+    responseTime?: number,
+    retryAttempts?: number
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const stmt = this.db.prepare(`
+        UPDATE webhook_logs 
+        SET status = ?, error_message = ?, response_time = ?, retry_attempts = ?, updated_at = ?
+        WHERE id = ?
+      `);
+      
+      stmt.run(
+        status,
+        errorMessage || null,
+        responseTime || null,
+        retryAttempts || 0,
+        new Date().toISOString(),
+        webhookId,
+        (err: any) => {
+          if (err) {
+            this.logger.error('Error updating webhook log status:', err);
+            reject(err);
+          } else {
+            this.logger.debug(`Webhook log updated: ${webhookId}`);
+            resolve();
+          }
+        }
+      );
+      stmt.finalize();
+    });
+  }
+
+  /**
+   * Get webhook logs with filtering
+   */
+  async getWebhookLogs(
+    limit: number = 50,
+    offset: number = 0,
+    status?: string,
+    source?: string
+  ): Promise<any[]> {
+    return new Promise((resolve, reject) => {
+      let query = 'SELECT * FROM webhook_logs WHERE 1=1';
+      const params: any[] = [];
+      
+      if (status) {
+        query += ' AND status = ?';
+        params.push(status);
+      }
+      
+      if (source) {
+        query += ' AND source = ?';
+        params.push(source);
+      }
+      
+      query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+      params.push(limit, offset);
+      
+      this.db.all(query, params, (err, rows) => {
+        if (err) {
+          this.logger.error('Error getting webhook logs:', err);
+          reject(err);
+        } else {
+          resolve(rows || []);
+        }
+      });
+    });
+  }
+
+  /**
+   * Get webhook log by ID
+   */
+  async getWebhookLogById(webhookId: string): Promise<any | null> {
+    return new Promise((resolve, reject) => {
+      this.db.get(
+        'SELECT * FROM webhook_logs WHERE id = ?',
+        [webhookId],
+        (err, row) => {
+          if (err) {
+            this.logger.error('Error getting webhook log by ID:', err);
+            reject(err);
+          } else {
+            resolve(row || null);
+          }
+        }
+      );
     });
   }
 

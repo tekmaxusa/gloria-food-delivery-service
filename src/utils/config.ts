@@ -43,6 +43,7 @@ export class ConfigManager {
       apiUrl: process.env.GLORIA_FOOD_API_URL!,
       apiKey: process.env.GLORIA_FOOD_API_KEY!,
       restaurantId: process.env.GLORIA_FOOD_RESTAURANT_ID!,
+      companyUid: process.env.GLORIA_FOOD_COMPANY_UID,
       webhookSecret: process.env.WEBHOOK_SECRET
     };
   }

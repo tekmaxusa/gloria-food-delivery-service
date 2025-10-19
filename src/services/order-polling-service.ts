@@ -7,6 +7,7 @@ import { Logger } from '../utils/logger';
 import { ConfigManager } from '../utils/config';
 import { DatabaseService } from './database-service';
 import { TekMaxWebScraper } from './web-scraper';
+import { WebhookReliabilityService } from './webhook-reliability-service';
 import { GloriaFoodOrder } from '../types/gloria-food';
 
 export class OrderPollingService {
@@ -14,6 +15,7 @@ export class OrderPollingService {
   private logger: Logger;
   private database: DatabaseService;
   private webScraper: TekMaxWebScraper;
+  private webhookReliability: WebhookReliabilityService;
   private pollingInterval: number;
   private isPolling: boolean = false;
   private pollingTimer?: NodeJS.Timeout;
@@ -23,6 +25,7 @@ export class OrderPollingService {
     this.logger = new Logger('OrderPollingService');
     this.database = new DatabaseService();
     this.webScraper = new TekMaxWebScraper();
+    this.webhookReliability = new WebhookReliabilityService();
     this.pollingInterval = pollingIntervalMinutes * 60 * 1000; // Convert to milliseconds
   }
 
@@ -36,6 +39,10 @@ export class OrderPollingService {
     }
 
     this.logger.info(`Starting order polling every ${this.pollingInterval / 60000} minutes`);
+    
+    // Initialize webhook reliability service
+    await this.webhookReliability.initialize();
+    
     this.isPolling = true;
 
     // Initial poll
@@ -63,6 +70,11 @@ export class OrderPollingService {
       clearInterval(this.pollingTimer);
       this.pollingTimer = undefined;
     }
+
+    // Close webhook reliability service
+    this.webhookReliability.close().catch(error => {
+      this.logger.error('Error closing webhook reliability service:', error);
+    });
   }
 
   /**
@@ -118,7 +130,7 @@ export class OrderPollingService {
     
     for (const order of orders) {
       try {
-        const existingOrder = await this.database.getOrder(order.id);
+        const existingOrder = await this.database.getOrderByGloriaFoodId(order.id);
         if (!existingOrder) {
           newOrders.push(order);
         }
@@ -145,9 +157,40 @@ export class OrderPollingService {
           orderType: order.orderType
         });
 
-        // TODO: Add webhook notifications here
-        // TODO: Add DoorDash integration here
-        // TODO: Add email notifications here
+        // Trigger webhook notification for new order
+        await this.webhookReliability.processWebhook(
+          'gloria_food',
+          'order.created',
+          {
+            event_type: 'order.created',
+            order_id: order.id,
+            order: order
+          },
+          async (payload) => {
+            this.logger.info(`Webhook notification sent for order: ${order.orderNumber}`);
+            // Here you could add additional processing like:
+            // - Send email notifications
+            // - Create DoorDash delivery
+            // - Update external systems
+          }
+        );
+
+        // If it's a delivery order, trigger delivery webhook
+        if (order.orderType === 'delivery') {
+          await this.webhookReliability.processWebhook(
+            'gloria_food',
+            'order.delivery_created',
+            {
+              event_type: 'order.delivery_created',
+              order_id: order.id,
+              order: order
+            },
+            async (payload) => {
+              this.logger.info(`Delivery webhook notification sent for order: ${order.orderNumber}`);
+              // Here you could trigger DoorDash delivery creation
+            }
+          );
+        }
         
       } catch (error) {
         this.logger.error(`Failed to process order ${order.orderNumber}:`, error);
