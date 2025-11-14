@@ -284,11 +284,20 @@ class GloriaFoodWebhookServer {
                   // Always try to get tracking URL - fetch from DoorDash if not in response
                   let trackingUrl = resp.tracking_url;
                   if (!trackingUrl && resp.id && this.doorDashClient) {
+                    // Wait a bit for DoorDash to generate the tracking URL
+                    await new Promise(resolve => setTimeout(resolve, 1000));
                     try {
                       const statusResp = await this.doorDashClient.getOrderStatus(resp.id);
                       trackingUrl = statusResp.tracking_url;
                     } catch (e) {
-                      // Ignore errors fetching status
+                      // If first attempt fails, try once more after another delay
+                      await new Promise(resolve => setTimeout(resolve, 2000));
+                      try {
+                        const statusResp = await this.doorDashClient.getOrderStatus(resp.id);
+                        trackingUrl = statusResp.tracking_url;
+                      } catch (e2) {
+                        // Ignore errors fetching status
+                      }
                     }
                   }
                   if (trackingUrl) {
@@ -325,11 +334,20 @@ class GloriaFoodWebhookServer {
                   // Always try to get tracking URL - fetch from DoorDash if not in response
                   let trackingUrl = resp.tracking_url;
                   if (!trackingUrl && resp.id && this.doorDashClient) {
+                    // Wait a bit for DoorDash to generate the tracking URL
+                    await new Promise(resolve => setTimeout(resolve, 1000));
                     try {
                       const statusResp = await this.doorDashClient.getOrderStatus(resp.id);
                       trackingUrl = statusResp.tracking_url;
                     } catch (e) {
-                      // Ignore errors fetching status
+                      // If first attempt fails, try once more after another delay
+                      await new Promise(resolve => setTimeout(resolve, 2000));
+                      try {
+                        const statusResp = await this.doorDashClient.getOrderStatus(resp.id);
+                        trackingUrl = statusResp.tracking_url;
+                      } catch (e2) {
+                        // Ignore errors fetching status
+                      }
                     }
                   }
                   if (trackingUrl) {
