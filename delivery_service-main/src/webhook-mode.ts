@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import * as dotenv from 'dotenv';
+import * as path from 'path';
 import { IDatabase, DatabaseFactory, Order } from './database-factory';
 import { GloriaFoodOrder } from './gloriafood-client';
 import { DoorDashClient } from './doordash-client';
@@ -25,10 +26,15 @@ class GloriaFoodWebhookServer {
   private doorDashClient?: DoorDashClient;
 
   constructor(config: WebhookConfig) {
+    console.log(chalk.blue.bold('\n🔵 Starting GloriaFood Webhook Server...'));
+    console.log(chalk.gray(`   Config port: ${config.port}`));
+    console.log(chalk.gray(`   Config webhookPath: ${config.webhookPath}`));
+    
     this.config = config;
     this.app = express();
     
     // Initialize DoorDash client if configured
+    console.log(chalk.blue('🔵 Initializing DoorDash client...'));
     this.initializeDoorDash();
     
     // Log which database is being used
@@ -40,10 +46,24 @@ class GloriaFoodWebhookServer {
       console.log(chalk.gray(`   User: ${process.env.DB_USER || 'root'}\n`));
     }
     
-    this.database = DatabaseFactory.createDatabase();
+    console.log(chalk.blue('🔵 Creating database connection...'));
+    try {
+      this.database = DatabaseFactory.createDatabase();
+      console.log(chalk.green('✅ Database connection created'));
+    } catch (error: any) {
+      console.error(chalk.red(`❌ Failed to create database: ${error.message}`));
+      throw error;
+    }
+    
     // Setup middleware first (body parsing), then routes
+    console.log(chalk.blue('🔵 Setting up middleware...'));
     this.setupMiddleware();
+    console.log(chalk.green('✅ Middleware setup complete'));
+    
+    console.log(chalk.blue('🔵 Setting up routes...'));
     this.setupRoutes();
+    console.log(chalk.green('✅ Routes setup complete'));
+    console.log(chalk.green('✅ Server initialization complete\n'));
   }
 
   // Helper function to handle both sync and async database results
@@ -139,6 +159,22 @@ class GloriaFoodWebhookServer {
   }
 
   private setupMiddleware(): void {
+    // Serve static files from public directory (for dashboard)
+    // Try dist/public first (production), then public (development)
+    const publicPath = path.join(__dirname, '..', 'public');
+    const distPublicPath = path.join(__dirname, 'public');
+    const fs = require('fs');
+    
+    if (fs.existsSync(distPublicPath)) {
+      console.log(chalk.blue('🔵 Serving static files from: dist/public'));
+      this.app.use(express.static(path.resolve(distPublicPath)));
+    } else if (fs.existsSync(publicPath)) {
+      console.log(chalk.blue('🔵 Serving static files from: public'));
+      this.app.use(express.static(path.resolve(publicPath)));
+    } else {
+      console.log(chalk.yellow('⚠️  Public directory not found, dashboard may not be available'));
+    }
+    
     // Parse JSON bodies
     this.app.use(express.json());
     // Also parse URL-encoded bodies (some webhooks use this)
@@ -149,7 +185,8 @@ class GloriaFoodWebhookServer {
       if (req.method === 'POST' && req.path === this.config.webhookPath) {
         const timestamp = new Date().toISOString();
         console.log(chalk.cyan(`\n📨 [${timestamp}] POST ${req.path}`));
-        console.log(chalk.yellow(`   🔔 WEBHOOK REQUEST DETECTED!`));
+        console.log(chalk.yellow(`   🔔 WEBHOOK REQUEST DETECTED FROM GLORIAFOOD!`));
+        console.log(chalk.green(`   ✅ Connected to GloriaFood - Webhook received!`));
         console.log(chalk.gray(`   Content-Type: ${req.headers['content-type'] || 'N/A'}`));
         console.log(chalk.gray(`   Body size: ${JSON.stringify(req.body || {}).length} chars`));
         console.log(chalk.gray(`   Body keys: ${Object.keys(req.body || {}).join(', ')}`));
@@ -159,29 +196,47 @@ class GloriaFoodWebhookServer {
   }
 
   private setupRoutes(): void {
-    // Root endpoint
+    // Root endpoint - serve dashboard HTML if available, otherwise return JSON
     this.app.get('/', (req: Request, res: Response) => {
-      res.json({ 
-        status: 'ok', 
-        service: 'GloriaFood Webhook Server',
-        version: this.config.protocolVersion,
-        endpoints: {
-          health: '/health',
-          webhook: this.config.webhookPath,
-          orders: '/orders',
-          stats: '/stats'
-        },
-        timestamp: new Date().toISOString()
-      });
+      console.log(chalk.blue(`📥 Root endpoint accessed at ${new Date().toISOString()}`));
+      
+      // Try to serve index.html from public directory
+      const fs = require('fs');
+      const distPublicPath = path.join(__dirname, 'public', 'index.html');
+      const publicPath = path.join(__dirname, '..', 'public', 'index.html');
+      
+      if (fs.existsSync(distPublicPath)) {
+        return res.sendFile(path.resolve(distPublicPath));
+      } else if (fs.existsSync(publicPath)) {
+        return res.sendFile(path.resolve(publicPath));
+      } else {
+        // Fallback to JSON response if HTML not found
+        res.json({ 
+          status: 'ok', 
+          service: 'GloriaFood Webhook Server',
+          version: this.config.protocolVersion,
+          endpoints: {
+            health: '/health',
+            webhook: this.config.webhookPath,
+            orders: '/orders',
+            stats: '/stats'
+          },
+          timestamp: new Date().toISOString(),
+          uptime: process.uptime()
+        });
+      }
     });
     
     // Health check endpoint
     this.app.get('/health', (req: Request, res: Response) => {
+      console.log(chalk.blue(`💚 Health check requested at ${new Date().toISOString()}`));
       res.json({ 
         status: 'ok', 
         service: 'GloriaFood Webhook Server',
         version: this.config.protocolVersion,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        port: this.config.port
       });
     });
 
@@ -268,7 +323,8 @@ class GloriaFoodWebhookServer {
 
         // Log received order
         const orderId = orderData.id || orderData.order_id || 'unknown';
-        console.log(chalk.green(`\n✅ Order data extracted successfully: #${orderId}`));
+        console.log(chalk.green(`\n✅ Order data extracted successfully from GloriaFood: #${orderId}`));
+        console.log(chalk.green(`   ✅ Connected to GloriaFood - Order received!`));
 
         // Determine if this is a new order BEFORE saving
         const existingBefore = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId.toString()));
@@ -984,35 +1040,52 @@ class GloriaFoodWebhookServer {
   }
 
   public start(): void {
-    this.app.listen(this.config.port, () => {
-      console.log(chalk.blue.bold('\n🚀 GloriaFood Webhook Server Started\n'));
-      console.log(chalk.gray('Configuration:'));
-      console.log(chalk.gray(`  Port: ${this.config.port}`));
-      console.log(chalk.gray(`  Webhook Path: ${this.config.webhookPath}`));
-      console.log(chalk.gray(`  Protocol Version: ${this.config.protocolVersion}`));
-      console.log(chalk.gray(`  Store ID: ${this.config.storeId}`));
-      console.log(chalk.gray(`  Database: ${this.config.databasePath}\n`));
-      console.log(chalk.green(`✅ Server listening on port ${this.config.port}`));
-      console.log(chalk.green(`📥 Webhook endpoint (POST): http://localhost:${this.config.port}${this.config.webhookPath}`));
-      console.log(chalk.green(`📥 Webhook endpoint (GET - test): http://localhost:${this.config.port}${this.config.webhookPath}`));
-      console.log(chalk.green(`💚 Health check: http://localhost:${this.config.port}/health`));
-      console.log(chalk.green(`📊 Statistics: http://localhost:${this.config.port}/stats`));
-      console.log(chalk.green(`📋 GET Endpoints:`));
-      console.log(chalk.gray(`   • All Orders: http://localhost:${this.config.port}/orders`));
-      console.log(chalk.gray(`   • Order by ID: http://localhost:${this.config.port}/orders/:orderId`));
-      console.log(chalk.gray(`   • Recent Orders: http://localhost:${this.config.port}/orders/recent/:minutes`));
-      console.log(chalk.gray(`   • Orders by Status: http://localhost:${this.config.port}/orders/status/:status`));
-      console.log(chalk.gray(`   • Summary: http://localhost:${this.config.port}/summary`));
-      console.log(chalk.gray(`   • Stats: http://localhost:${this.config.port}/stats`));
-      console.log(chalk.gray(`   • DoorDash Status: http://localhost:${this.config.port}/doordash/status/:orderId\n`));
-      // Show webhook URL based on environment
+    try {
+      // Bind to 0.0.0.0 to allow external connections (required for Render)
+      const server = this.app.listen(this.config.port, '0.0.0.0', () => {
+        console.log(chalk.blue.bold('\n🚀 GloriaFood Webhook Server Started\n'));
+        console.log(chalk.gray('Configuration:'));
+        console.log(chalk.gray(`  Port: ${this.config.port}`));
+        console.log(chalk.gray(`  Webhook Path: ${this.config.webhookPath}`));
+        console.log(chalk.gray(`  Protocol Version: ${this.config.protocolVersion}`));
+        console.log(chalk.gray(`  Store ID: ${this.config.storeId}`));
+        console.log(chalk.gray(`  Database: ${this.config.databasePath}\n`));
+        console.log(chalk.green(`✅ Server listening on 0.0.0.0:${this.config.port}`));
+        console.log(chalk.green(`✅ Server is accessible from external connections`));
+      
+      // Show actual URLs based on environment
       if (process.env.RENDER) {
-        // Running on Render
         const renderUrl = process.env.RENDER_EXTERNAL_URL || 'https://your-app.onrender.com';
+        console.log(chalk.green(`📥 Webhook endpoint (POST): ${renderUrl}${this.config.webhookPath}`));
+        console.log(chalk.green(`📥 Webhook endpoint (GET - test): ${renderUrl}${this.config.webhookPath}`));
+        console.log(chalk.green(`💚 Health check: ${renderUrl}/health`));
+        console.log(chalk.green(`📊 Statistics: ${renderUrl}/stats`));
+      } else {
+        console.log(chalk.green(`📥 Webhook endpoint (POST): http://localhost:${this.config.port}${this.config.webhookPath}`));
+        console.log(chalk.green(`📥 Webhook endpoint (GET - test): http://localhost:${this.config.port}${this.config.webhookPath}`));
+        console.log(chalk.green(`💚 Health check: http://localhost:${this.config.port}/health`));
+        console.log(chalk.green(`📊 Statistics: http://localhost:${this.config.port}/stats`));
+      }
+      console.log(chalk.green(`📋 GET Endpoints:`));
+      if (process.env.RENDER) {
+        const renderUrl = process.env.RENDER_EXTERNAL_URL || 'https://your-app.onrender.com';
+        console.log(chalk.gray(`   • All Orders: ${renderUrl}/orders`));
+        console.log(chalk.gray(`   • Order by ID: ${renderUrl}/orders/:orderId`));
+        console.log(chalk.gray(`   • Recent Orders: ${renderUrl}/orders/recent/:minutes`));
+        console.log(chalk.gray(`   • Orders by Status: ${renderUrl}/orders/status/:status`));
+        console.log(chalk.gray(`   • Summary: ${renderUrl}/summary`));
+        console.log(chalk.gray(`   • Stats: ${renderUrl}/stats`));
+        console.log(chalk.gray(`   • DoorDash Status: ${renderUrl}/doordash/status/:orderId\n`));
         console.log(chalk.yellow(`⚠ Configure GloriaFood webhook URL to:`));
         console.log(chalk.green(`   ${renderUrl}/webhook`));
       } else {
-        // Running locally
+        console.log(chalk.gray(`   • All Orders: http://localhost:${this.config.port}/orders`));
+        console.log(chalk.gray(`   • Order by ID: http://localhost:${this.config.port}/orders/:orderId`));
+        console.log(chalk.gray(`   • Recent Orders: http://localhost:${this.config.port}/orders/recent/:minutes`));
+        console.log(chalk.gray(`   • Orders by Status: http://localhost:${this.config.port}/orders/status/:status`));
+        console.log(chalk.gray(`   • Summary: http://localhost:${this.config.port}/summary`));
+        console.log(chalk.gray(`   • Stats: http://localhost:${this.config.port}/stats`));
+        console.log(chalk.gray(`   • DoorDash Status: http://localhost:${this.config.port}/doordash/status/:orderId\n`));
         console.log(chalk.yellow(`⚠ Configure GloriaFood to send webhooks to your public URL`));
         console.log(chalk.yellow(`⚠ For local dev, use tunnel (cloudflared/ngrok):`));
         console.log(chalk.gray(`   npx -y cloudflared tunnel --url http://localhost:${this.config.port}`));
@@ -1020,7 +1093,22 @@ class GloriaFoodWebhookServer {
       }
       console.log(chalk.yellow(`\n⚠ Note: If your GloriaFood doesn't support webhooks, use polling mode instead:`));
       console.log(chalk.green(`   npm run dev (polling mode - checks every 30 seconds)\n`));
-    });
+      });
+      
+      // Handle server errors
+      server.on('error', (error: any) => {
+        console.error(chalk.red.bold('\n❌ Server Error:'));
+        console.error(chalk.red(`   ${error.message}`));
+        if (error.code === 'EADDRINUSE') {
+          console.error(chalk.yellow(`   Port ${this.config.port} is already in use`));
+        }
+      });
+    } catch (error: any) {
+      console.error(chalk.red.bold('\n❌ Failed to start server:'));
+      console.error(chalk.red(`   ${error.message}`));
+      console.error(chalk.red(`   Stack: ${error.stack}`));
+      process.exit(1);
+    }
   }
 
   public async stop(): Promise<void> {
@@ -1034,13 +1122,25 @@ class GloriaFoodWebhookServer {
 
 // Main execution
 async function main() {
+  console.log(chalk.blue.bold('\n🚀 ========================================'));
+  console.log(chalk.blue.bold('🚀 GLORIAFOOD WEBHOOK SERVER STARTING'));
+  console.log(chalk.blue.bold('🚀 ========================================\n'));
+  console.log(chalk.gray(`   Node version: ${process.version}`));
+  console.log(chalk.gray(`   Platform: ${process.platform}`));
+  console.log(chalk.gray(`   Working directory: ${process.cwd()}\n`));
+  
   // Validate environment variables
+  console.log(chalk.blue('🔵 Checking environment variables...'));
   const apiKey = process.env.GLORIAFOOD_API_KEY;
   const storeId = process.env.GLORIAFOOD_STORE_ID;
+  
+  console.log(chalk.gray(`   GLORIAFOOD_API_KEY: ${apiKey ? '✅ SET' : '❌ NOT SET'}`));
+  console.log(chalk.gray(`   GLORIAFOOD_STORE_ID: ${storeId ? '✅ SET' : '❌ NOT SET'}`));
+  console.log(chalk.gray(`   PORT: ${process.env.PORT || 'NOT SET (will use 3000)'}`));
 
   if (!apiKey || !storeId) {
     console.error(chalk.red.bold('\n❌ Error: Missing required environment variables!\n'));
-    console.error(chalk.yellow('Please check your .env file with the following variables:'));
+    console.error(chalk.yellow('Please add these environment variables in Render Dashboard:'));
     console.error(chalk.gray('  GLORIAFOOD_API_KEY=your_api_key'));
     console.error(chalk.gray('  GLORIAFOOD_STORE_ID=your_store_id'));
     console.error(chalk.gray('  WEBHOOK_PORT=3000 (optional)'));
@@ -1055,6 +1155,8 @@ async function main() {
     console.error(chalk.gray('  DB_NAME=gloriafood_orders\n'));
     process.exit(1);
   }
+  
+  console.log(chalk.green('✅ Environment variables check passed\n'));
 
   // Support both PORT (standard for hosting services) and WEBHOOK_PORT
   const port = parseInt(process.env.PORT || process.env.WEBHOOK_PORT || '3000', 10);
@@ -1069,26 +1171,33 @@ async function main() {
     databasePath: process.env.DATABASE_PATH || './orders.db',
   };
 
+  console.log(chalk.blue('🔵 Creating server instance...'));
   const server = new GloriaFoodWebhookServer(config);
 
   // Handle graceful shutdown
   process.on('SIGINT', async () => {
+    console.log(chalk.yellow('\n⚠️  SIGINT received, shutting down gracefully...'));
     await server.stop();
     process.exit(0);
   });
 
   process.on('SIGTERM', async () => {
+    console.log(chalk.yellow('\n⚠️  SIGTERM received, shutting down gracefully...'));
     await server.stop();
     process.exit(0);
   });
 
   // Start the server
+  console.log(chalk.blue('🔵 Starting server...\n'));
   server.start();
 }
 
 // Run the application
+console.log(chalk.blue('🔵 Main function called, starting application...'));
 main().catch(error => {
-  console.error(chalk.red.bold('\n❌ Fatal Error:'), error);
+  console.error(chalk.red.bold('\n❌❌❌ FATAL ERROR ❌❌❌'));
+  console.error(chalk.red(`Error: ${error.message}`));
+  console.error(chalk.red(`Stack: ${error.stack}`));
   process.exit(1);
 });
 
