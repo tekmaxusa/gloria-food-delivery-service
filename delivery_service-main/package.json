@@ -15,7 +15,7 @@
     "view-orders-status": "ts-node view-orders-status.ts",
     "create-dd": "ts-node create-dd-order.ts",
     "postinstall": "npm run build",
-    "render-build": "npm install --production=false && npm run build"
+    "render-build": "npm ci --include=dev && npm run build"
   },
   "engines": {
     "node": "20.18.0",
