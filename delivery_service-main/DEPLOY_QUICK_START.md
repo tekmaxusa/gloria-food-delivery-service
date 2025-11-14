@@ -102,5 +102,16 @@ Pagkatapos ng deploy:
 
 ---
 
+## 📚 Additional Resources
+
+- **📖 Complete Tagalog Guide:** `SETUP_ENDPOINT_TAGALOG.md` - Detailed Tagalog instructions
+- **✅ Deployment Checklist:** `DEPLOYMENT_CHECKLIST.md` - Step-by-step checklist
+- **🆓 Free Endpoint Options:** `FREE_PERMANENT_ENDPOINT.md` - All free hosting options
+- **⚙️ Configuration Files:**
+  - `railway.json` - Railway.app deployment config (auto-detected)
+  - `render.yaml` - Render.com deployment config (auto-detected)
+
+---
+
 **🎉 Done! May permanent endpoint ka na na 100% FREE!**
 
