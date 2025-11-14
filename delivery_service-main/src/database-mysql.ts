@@ -103,7 +103,18 @@ export class OrderDatabaseMySQL {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
       `);
 
-      // Release connection and finish (no ALTERs to avoid pool/DDL issues)
+      // Add missing columns for existing installations (ignore errors if already exist)
+      try {
+        await connection.query(`ALTER TABLE orders ADD COLUMN doordash_tracking_url TEXT`);
+        console.log('✅ Added doordash_tracking_url column to existing table');
+      } catch (e: any) {
+        // Column already exists or other error - ignore
+        if (e.code !== 'ER_DUP_FIELDNAME') {
+          console.log('   Note: doordash_tracking_url column may already exist');
+        }
+      }
+
+      // Release connection
       connection.release();
       console.log('✅ Database table initialized successfully!');
     } catch (error: any) {
