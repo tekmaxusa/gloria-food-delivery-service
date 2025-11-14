@@ -14,7 +14,6 @@ export interface IDatabase {
   getRecentOrders(minutes: number): Promise<Order[]> | Order[];
   getOrdersByStatus(status: string): Promise<Order[]> | Order[];
   getOrderCount(): Promise<number> | number;
-  deleteOrder(orderId: string): Promise<boolean> | boolean;
   close(): Promise<void> | void;
 }
 

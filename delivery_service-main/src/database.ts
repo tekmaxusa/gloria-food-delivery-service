@@ -214,17 +214,6 @@ export class OrderDatabase {
     return result.count;
   }
 
-  deleteOrder(orderId: string): boolean {
-    try {
-      const stmt = this.db.prepare('DELETE FROM orders WHERE gloriafood_order_id = ?');
-      const result = stmt.run(orderId);
-      return result.changes > 0;
-    } catch (error) {
-      console.error('Error deleting order:', error);
-      return false;
-    }
-  }
-
   close(): void {
     this.db.close();
   }

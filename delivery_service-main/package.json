@@ -4,8 +4,7 @@
   "description": "TypeScript script to fetch orders from GloriaFood API and store in database",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc && npm run copy-public",
-    "copy-public": "node copy-public.js",
+    "build": "tsc",
     "start": "node dist/webhook-mode.js",
     "dev": "ts-node src/index.ts",
     "webhook": "ts-node src/webhook-mode.ts",

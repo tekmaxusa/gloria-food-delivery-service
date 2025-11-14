@@ -519,21 +519,6 @@ export class OrderDatabaseMySQL {
     }
   }
 
-  async deleteOrder(orderId: string): Promise<boolean> {
-    try {
-      const connection = await this.pool.getConnection();
-      const [result] = await connection.query(
-        'DELETE FROM orders WHERE gloriafood_order_id = ?',
-        [orderId]
-      ) as [any, any];
-      connection.release();
-      return result.affectedRows > 0;
-    } catch (error) {
-      console.error('Error deleting order:', error);
-      return false;
-    }
-  }
-
   async close(): Promise<void> {
     await this.pool.end();
   }
