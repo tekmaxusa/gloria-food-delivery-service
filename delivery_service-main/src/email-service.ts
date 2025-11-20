@@ -58,7 +58,7 @@ export class EmailService {
           socketTimeout: 10000,
         });
         
-        // Merchant emails enabled if MERCHANT_EMAIL is set
+        // Merchant emails enabled if merchant email is set (checks MERCHANT_EMAIL, API_VENDOR_CONTACT_EMAIL, VENDOR_CONTACT_EMAIL, or VENDOR_EMAIL)
         this.enabled = !!this.config.to;
         if (this.enabled) {
           console.log(chalk.green('✅ Merchant email notifications enabled'));
@@ -66,8 +66,12 @@ export class EmailService {
           console.log(chalk.gray(`   SMTP User: ${this.config.user}`));
           console.log(chalk.gray(`   Merchant Email: ${this.config.to}`));
         } else {
-          console.log(chalk.yellow('⚠️  Merchant email notifications disabled (missing MERCHANT_EMAIL)'));
-          console.log(chalk.gray('   Set MERCHANT_EMAIL environment variable to enable merchant notifications'));
+          console.log(chalk.yellow('⚠️  Merchant email notifications disabled (missing merchant email variable)'));
+          console.log(chalk.gray('   Set one of these environment variables to enable merchant notifications:'));
+          console.log(chalk.gray('   - MERCHANT_EMAIL'));
+          console.log(chalk.gray('   - API_VENDOR_CONTACT_EMAIL'));
+          console.log(chalk.gray('   - VENDOR_CONTACT_EMAIL'));
+          console.log(chalk.gray('   - VENDOR_EMAIL'));
         }
         
         // Customer emails enabled by default if SMTP is configured
@@ -99,7 +103,7 @@ export class EmailService {
       console.log(chalk.gray('   - SMTP_PASS (your email password or app password)'));
       console.log(chalk.gray('   - SMTP_PORT (optional, default: 587)'));
       console.log(chalk.gray('   - SMTP_SECURE (optional, true for port 465)'));
-      console.log(chalk.gray('   - MERCHANT_EMAIL (email address to receive order notifications)'));
+      console.log(chalk.gray('   - MERCHANT_EMAIL or API_VENDOR_CONTACT_EMAIL or VENDOR_CONTACT_EMAIL or VENDOR_EMAIL (email address to receive order notifications)'));
     }
   }
 
@@ -118,7 +122,7 @@ export class EmailService {
       } else if (!this.transporter) {
         console.log(chalk.yellow(`⚠️  Email transporter not initialized, skipping email for order ${this.getOrderId(orderData) || 'unknown'}`));
       } else if (!this.config.to) {
-        console.log(chalk.yellow(`⚠️  MERCHANT_EMAIL not set, skipping email for order ${this.getOrderId(orderData) || 'unknown'}`));
+        console.log(chalk.yellow(`⚠️  Merchant email not set (check MERCHANT_EMAIL, API_VENDOR_CONTACT_EMAIL, VENDOR_CONTACT_EMAIL, or VENDOR_EMAIL), skipping email for order ${this.getOrderId(orderData) || 'unknown'}`));
       }
       return;
     }
@@ -169,6 +173,13 @@ export class EmailService {
     const portValue = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : undefined;
     const secureEnv = (process.env.SMTP_SECURE || '').toLowerCase();
 
+    // Check for merchant email in multiple possible variable names
+    const merchantEmail = 
+      process.env.MERCHANT_EMAIL ||
+      process.env.API_VENDOR_CONTACT_EMAIL ||
+      process.env.VENDOR_CONTACT_EMAIL ||
+      process.env.VENDOR_EMAIL;
+
     return {
       host: process.env.SMTP_HOST,
       port: Number.isFinite(portValue) ? portValue : undefined,
@@ -176,7 +187,7 @@ export class EmailService {
       pass: process.env.SMTP_PASS,
       secure: secureEnv === 'true' || secureEnv === '1',
       from: process.env.SMTP_FROM,
-      to: process.env.MERCHANT_EMAIL,
+      to: merchantEmail,
     };
   }
 
