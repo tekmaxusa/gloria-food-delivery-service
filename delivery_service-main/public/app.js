@@ -2,8 +2,10 @@
 const API_BASE = window.location.origin;
 const REFRESH_INTERVAL = 5000; // 5 seconds
 let autoRefreshInterval = null;
-let lastOrderCount = 0;
 let lastOrderIds = new Set();
+let allOrders = [];
+let currentStatusFilter = '';
+let searchQuery = '';
 
 // Request notification permission on load
 if ('Notification' in window && Notification.permission === 'default') {
@@ -12,61 +14,58 @@ if ('Notification' in window && Notification.permission === 'default') {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    loadStats();
     loadOrders();
     
-    // Setup auto-refresh
-    document.getElementById('autoRefresh').addEventListener('change', (e) => {
-        if (e.target.checked) {
-            startAutoRefresh();
-        } else {
-            stopAutoRefresh();
-        }
+    // Setup status tabs
+    document.querySelectorAll('.status-tab').forEach(tab => {
+        tab.addEventListener('click', (e) => {
+            // Remove active class from all tabs
+            document.querySelectorAll('.status-tab').forEach(t => t.classList.remove('active'));
+            // Add active class to clicked tab
+            e.target.classList.add('active');
+            
+            const status = e.target.dataset.status;
+            currentStatusFilter = status;
+            filterAndDisplayOrders();
+        });
     });
     
-    // Manual refresh button
-    document.getElementById('refreshBtn').addEventListener('click', () => {
-        loadStats();
-        loadOrders();
-    });
-    
-    // Status filter
-    document.getElementById('statusFilter').addEventListener('change', (e) => {
-        loadOrders(e.target.value);
-    });
-    
-    // Start auto-refresh if enabled
-    if (document.getElementById('autoRefresh').checked) {
-        startAutoRefresh();
+    // Setup search
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            searchQuery = e.target.value.toLowerCase();
+            filterAndDisplayOrders();
+        });
     }
+    
+    // Setup select all checkbox
+    const selectAllCheckbox = document.querySelector('.select-all-checkbox');
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', (e) => {
+            const checkboxes = document.querySelectorAll('.order-checkbox');
+            checkboxes.forEach(cb => cb.checked = e.target.checked);
+        });
+    }
+    
+    // New order button
+    const newOrderBtn = document.getElementById('newOrderBtn');
+    if (newOrderBtn) {
+        newOrderBtn.addEventListener('click', () => {
+            alert('New order functionality coming soon!');
+        });
+    }
+    
+    // Start auto-refresh
+    startAutoRefresh();
 });
 
-// Load statistics
-async function loadStats() {
-    try {
-        const response = await fetch(`${API_BASE}/stats`);
-        const data = await response.json();
-        
-        if (data.success) {
-            document.getElementById('totalOrders').textContent = data.total_orders || 0;
-            document.getElementById('recent1h').textContent = data.recent_orders_1h || 0;
-            document.getElementById('recent24h').textContent = data.recent_orders_24h || 0;
-            document.getElementById('connectionStatus').textContent = '🟢 Connected';
-        }
-    } catch (error) {
-        console.error('Error loading stats:', error);
-        document.getElementById('connectionStatus').textContent = '🔴 Disconnected';
-    }
-}
-
 // Load orders
-async function loadOrders(statusFilter = '') {
+async function loadOrders() {
     try {
-        const url = statusFilter 
-            ? `${API_BASE}/orders/status/${statusFilter}`
-            : `${API_BASE}/orders?limit=50`;
+        const url = `${API_BASE}/orders?limit=100`;
         
-        console.log('Fetching orders from:', url); // Debug log
+        console.log('Fetching orders from:', url);
         
         const response = await fetch(url);
         
@@ -75,94 +74,129 @@ async function loadOrders(statusFilter = '') {
         }
         
         const data = await response.json();
-        console.log('API response:', data); // Debug log
+        console.log('API response:', data);
         
         if (data.success !== false && (data.orders || Array.isArray(data))) {
-            const orders = data.orders || data || [];
-            console.log('Loaded orders:', orders.length, orders); // Debug log
+            allOrders = data.orders || data || [];
+            console.log('Loaded orders:', allOrders.length);
             
-            if (orders.length > 0) {
-                displayOrders(orders);
-                // Check for new orders
-                checkForNewOrders(orders);
-                lastOrderCount = orders.length;
-            } else {
-                displayOrders([]);
-            }
+            // Check for new orders
+            checkForNewOrders(allOrders);
+            
+            // Filter and display
+            filterAndDisplayOrders();
         } else {
             console.error('API returned error:', data);
             showError('Failed to load orders: ' + (data.error || 'Unknown error'));
-            displayOrders([]);
+            allOrders = [];
+            filterAndDisplayOrders();
         }
     } catch (error) {
         console.error('Error loading orders:', error);
         showError('Error connecting to server: ' + error.message);
-        document.getElementById('connectionStatus').textContent = '🔴 Disconnected';
-        displayOrders([]);
+        allOrders = [];
+        filterAndDisplayOrders();
     }
 }
 
-// Display orders
-function displayOrders(orders) {
-    const container = document.getElementById('ordersContainer');
+// Filter and display orders
+function filterAndDisplayOrders() {
+    let filtered = [...allOrders];
     
-    if (!container) {
-        console.error('Orders container not found!');
+    // Apply status filter
+    if (currentStatusFilter && currentStatusFilter !== 'current') {
+        const statusMap = {
+            'scheduled': ['SCHEDULED'],
+            'completed': ['DELIVERED'],
+            'incomplete': ['CANCELLED', 'FAILED'],
+            'history': ['DELIVERED', 'CANCELLED']
+        };
+        
+        if (statusMap[currentStatusFilter]) {
+            filtered = filtered.filter(order => 
+                statusMap[currentStatusFilter].includes(order.status?.toUpperCase())
+            );
+        }
+    } else if (currentStatusFilter === 'current') {
+        // Current = all active orders (not delivered or cancelled)
+        filtered = filtered.filter(order => {
+            const status = order.status?.toUpperCase();
+            return status && !['DELIVERED', 'CANCELLED'].includes(status);
+        });
+    }
+    
+    // Apply search filter
+    if (searchQuery) {
+        filtered = filtered.filter(order => {
+            const searchableText = [
+                order.gloriafood_order_id || order.id,
+                order.customer_name,
+                order.customer_phone,
+                order.customer_email,
+                order.delivery_address,
+                order.status
+            ].join(' ').toLowerCase();
+            
+            return searchableText.includes(searchQuery);
+        });
+    }
+    
+    displayOrders(filtered);
+}
+
+// Display orders in table
+function displayOrders(orders) {
+    const tbody = document.getElementById('ordersTableBody');
+    
+    if (!tbody) {
+        console.error('Orders table body not found!');
         return;
     }
     
-    console.log('Displaying orders:', orders.length, orders); // Debug log
-    
     if (!orders || orders.length === 0) {
-        container.innerHTML = `
-            <div class="empty-state">
-                <div class="empty-state-icon">📭</div>
-                <div>No orders found</div>
-                <div style="margin-top: 16px; font-size: 14px; opacity: 0.7;">
-                    Make sure the webhook server is running and receiving orders from GloriaFood
-                </div>
-                <div style="margin-top: 8px; font-size: 12px; opacity: 0.5;">
-                    Check browser console (F12) for debug information
-                </div>
-            </div>
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="13" class="empty-state-cell">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">
+                            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <line x1="8" y1="6" x2="21" y2="6"></line>
+                                <line x1="8" y1="12" x2="21" y2="12"></line>
+                                <line x1="8" y1="18" x2="21" y2="18"></line>
+                                <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                                <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                                <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                            </svg>
+                        </div>
+                        <div class="empty-state-text">You currently have no orders</div>
+                    </div>
+                </td>
+            </tr>
         `;
         return;
     }
     
     try {
-        const html = orders.map(order => {
-            try {
-                return createOrderCard(order);
-            } catch (e) {
-                console.error('Error creating card for order:', order, e);
-                return '';
-            }
-        }).filter(html => html).join('');
-        
-        container.innerHTML = html;
-        console.log('Orders displayed successfully');
+        const rows = orders.map(order => createOrderRow(order)).join('');
+        tbody.innerHTML = rows;
     } catch (error) {
         console.error('Error displaying orders:', error);
-        container.innerHTML = `
-            <div class="empty-state">
-                <div class="empty-state-icon">❌</div>
-                <div>Error displaying orders</div>
-                <div style="margin-top: 16px; font-size: 14px; opacity: 0.7;">
-                    ${error.message}
-                </div>
-            </div>
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="13" class="empty-state-cell">
+                    <div class="empty-state">
+                        <div class="empty-state-text">Error displaying orders: ${error.message}</div>
+                    </div>
+                </td>
+            </tr>
         `;
     }
 }
 
-// Create order card HTML
-function createOrderCard(order, isNew = false) {
-    if (!order) {
-        console.error('Order is null or undefined');
-        return '';
-    }
+// Create order table row
+function createOrderRow(order) {
+    if (!order) return '';
     
-    // Escape HTML to prevent XSS
     const escapeHtml = (text) => {
         if (!text) return 'N/A';
         const div = document.createElement('div');
@@ -172,94 +206,55 @@ function createOrderCard(order, isNew = false) {
     
     const orderId = order.gloriafood_order_id || order.id || 'N/A';
     const status = (order.status || 'UNKNOWN').toUpperCase();
-    const items = parseItems(order.items);
-    const orderTime = formatDate(order.fetched_at || order.created_at || order.updated_at);
+    const customerName = escapeHtml(order.customer_name || 'N/A');
+    const customerAddress = escapeHtml(order.delivery_address || 'N/A');
+    const amount = formatCurrency(order.total_price || 0, order.currency || 'USD');
+    const orderPlaced = formatDate(order.fetched_at || order.created_at || order.updated_at);
+    const pickupTime = order.pickup_time ? formatDate(order.pickup_time) : 'N/A';
+    const deliveryTime = order.delivery_time ? formatDate(order.delivery_time) : 'N/A';
+    const readyForPickup = order.ready_for_pickup ? formatDate(order.ready_for_pickup) : 'N/A';
+    const driver = order.driver_name || 'N/A';
+    const tracking = order.doordash_tracking_url 
+        ? `<a href="${escapeHtml(order.doordash_tracking_url)}" target="_blank" style="color: #22c55e; text-decoration: underline;">Track</a>`
+        : 'N/A';
     
     return `
-        <div class="order-card ${isNew ? 'new' : ''}" data-order-id="${escapeHtml(String(orderId))}">
-            <div class="order-header">
-                <div class="order-id">Order #${escapeHtml(String(orderId))}</div>
-                <div class="order-header-right">
-                    <div class="order-status status-${status}">${escapeHtml(status)}</div>
-                    <button class="btn-delete" onclick="deleteOrder('${escapeHtml(String(orderId))}')" title="Delete order">🗑️</button>
-                </div>
-            </div>
-            <div class="order-info">
-                <div class="info-item">
-                    <span class="info-label">Customer</span>
-                    <span class="info-value">${escapeHtml(order.customer_name || 'N/A')}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-label">Phone</span>
-                    <span class="info-value">${escapeHtml(order.customer_phone || 'N/A')}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-label">Email</span>
-                    <span class="info-value">${escapeHtml(order.customer_email || 'N/A')}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-label">Total</span>
-                    <span class="info-value">${formatCurrency(order.total_price || 0, order.currency || 'USD')}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-label">Type</span>
-                    <span class="info-value">${escapeHtml(order.order_type || 'N/A')}</span>
-                </div>
-            </div>
-            ${order.delivery_address ? `
-                <div class="info-item" style="margin-top: 12px;">
-                    <span class="info-label">Delivery Address</span>
-                    <span class="info-value">${escapeHtml(order.delivery_address)}</span>
-                </div>
-            ` : ''}
-            ${order.doordash_tracking_url ? `
-                <div class="info-item" style="margin-top: 12px;">
-                    <span class="info-label">🚚 Tracking URL</span>
-                    <span class="info-value">
-                        <a href="${escapeHtml(order.doordash_tracking_url)}" target="_blank" rel="noopener noreferrer" style="color: #007bff; text-decoration: underline;">
-                            ${escapeHtml(order.doordash_tracking_url)}
-                        </a>
-                    </span>
-                </div>
-            ` : ''}
-            ${order.doordash_order_id ? `
-                <div class="info-item" style="margin-top: 8px;">
-                    <span class="info-label">DoorDash ID</span>
-                    <span class="info-value">${escapeHtml(order.doordash_order_id)}</span>
-                </div>
-            ` : ''}
-            ${items.length > 0 ? `
-                <div class="order-items">
-                    <div class="order-items-title">Items:</div>
-                    <ul class="item-list">
-                        ${items.map(item => `
-                            <li>
-                                <span>${item.name} x${item.quantity}</span>
-                                <span>${formatCurrency(item.price, order.currency)}</span>
-                            </li>
-                        `).join('')}
-                    </ul>
-                </div>
-            ` : ''}
-            <div class="order-time">
-                <span>Received: ${orderTime}</span>
-            </div>
-        </div>
+        <tr data-order-id="${escapeHtml(String(orderId))}">
+            <td>
+                <input type="checkbox" class="order-checkbox" value="${escapeHtml(String(orderId))}">
+            </td>
+            <td><strong>#${escapeHtml(String(orderId))}</strong></td>
+            <td>${customerName}</td>
+            <td>${customerAddress}</td>
+            <td>${amount}</td>
+            <td>${order.distance ? order.distance + ' km' : 'N/A'}</td>
+            <td>${orderPlaced}</td>
+            <td>${pickupTime}</td>
+            <td>${deliveryTime}</td>
+            <td>${readyForPickup}</td>
+            <td>${escapeHtml(driver)}</td>
+            <td><span class="status-badge status-${status}">${escapeHtml(status)}</span></td>
+            <td>${tracking}</td>
+        </tr>
     `;
 }
 
 // Check for new orders and show notifications
 function checkForNewOrders(orders) {
-    const currentOrderIds = new Set(orders.map(o => o.gloriafood_order_id));
+    const currentOrderIds = new Set(orders.map(o => o.gloriafood_order_id || o.id));
     
     // Find new orders
-    const newOrders = orders.filter(order => !lastOrderIds.has(order.gloriafood_order_id));
+    const newOrders = orders.filter(order => {
+        const orderId = order.gloriafood_order_id || order.id;
+        return orderId && !lastOrderIds.has(orderId);
+    });
     
     if (newOrders.length > 0) {
         // Show notification for each new order
         newOrders.forEach(order => {
-            showNotification(`New Order #${order.gloriafood_order_id}`, 
-                `${order.customer_name} - ${formatCurrency(order.total_price || 0, order.currency || 'USD')}`);
+            const orderId = order.gloriafood_order_id || order.id;
+            showNotification(`New Order #${orderId}`, 
+                `${order.customer_name || 'Customer'} - ${formatCurrency(order.total_price || 0, order.currency || 'USD')}`);
             
             // Show browser notification
             showBrowserNotification(order);
@@ -272,7 +267,15 @@ function checkForNewOrders(orders) {
 
 // Show notification
 function showNotification(title, message, isError = false) {
-    const notification = document.getElementById('notification');
+    let notification = document.getElementById('notification');
+    
+    if (!notification) {
+        notification = document.createElement('div');
+        notification.id = 'notification';
+        notification.className = 'notification hidden';
+        document.body.appendChild(notification);
+    }
+    
     notification.textContent = `${title}: ${message}`;
     notification.className = `notification ${isError ? 'error' : ''}`;
     
@@ -284,11 +287,12 @@ function showNotification(title, message, isError = false) {
 // Show browser notification
 function showBrowserNotification(order) {
     if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification(`New Order #${order.gloriafood_order_id}`, {
-            body: `${order.customer_name} - ${formatCurrency(order.total_price || 0, order.currency || 'USD')}`,
+        const orderId = order.gloriafood_order_id || order.id;
+        new Notification(`New Order #${orderId}`, {
+            body: `${order.customer_name || 'Customer'} - ${formatCurrency(order.total_price || 0, order.currency || 'USD')}`,
             icon: '🍽️',
             badge: '🍽️',
-            tag: `order-${order.gloriafood_order_id}`,
+            tag: `order-${orderId}`,
             requireInteraction: false
         });
     }
@@ -306,9 +310,7 @@ function startAutoRefresh() {
     }
     
     autoRefreshInterval = setInterval(() => {
-        const statusFilter = document.getElementById('statusFilter').value;
-        loadStats();
-        loadOrders(statusFilter);
+        loadOrders();
     }, REFRESH_INTERVAL);
 }
 
@@ -320,25 +322,9 @@ function stopAutoRefresh() {
     }
 }
 
-// Parse items from JSON string
-function parseItems(itemsStr) {
-    if (!itemsStr) return [];
-    
-    try {
-        const items = typeof itemsStr === 'string' ? JSON.parse(itemsStr) : itemsStr;
-        if (Array.isArray(items)) {
-            return items;
-        }
-        return [];
-    } catch (e) {
-        return [];
-    }
-}
-
 // Format currency
 function formatCurrency(amount, currency = 'USD') {
     if (!amount) return 'N/A';
-    // Convert string to number if needed (MySQL returns DECIMAL as string)
     const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
     if (isNaN(numAmount)) return 'N/A';
     return new Intl.NumberFormat('en-US', {
@@ -358,8 +344,7 @@ function formatDate(dateStr) {
             month: 'short',
             day: 'numeric',
             hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
+            minute: '2-digit'
         }).format(date);
     } catch (e) {
         return dateStr;
@@ -382,9 +367,7 @@ async function deleteOrder(orderId) {
         if (data.success) {
             showNotification('Success', `Order #${orderId} deleted successfully`);
             // Reload orders
-            const statusFilter = document.getElementById('statusFilter').value;
-            loadStats();
-            loadOrders(statusFilter);
+            loadOrders();
         } else {
             showError(data.error || 'Failed to delete order');
         }
@@ -396,4 +379,3 @@ async function deleteOrder(orderId) {
 
 // Make deleteOrder available globally
 window.deleteOrder = deleteOrder;
-
