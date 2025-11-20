@@ -35,16 +35,6 @@ const optional = {
   'POLL_INTERVAL_MS': false
 };
 
-const emailVars = {
-  'SMTP_HOST': false,
-  'SMTP_PORT': false,
-  'SMTP_USER': false,
-  'SMTP_PASS': false,
-  'MERCHANT_EMAIL': false,
-  'SMTP_FROM': false,
-  'SMTP_SECURE': false
-};
-
 lines.forEach(line => {
   const trimmed = line.trim();
   if (trimmed && !trimmed.startsWith('#')) {
@@ -54,9 +44,6 @@ lines.forEach(line => {
     }
     if (optional.hasOwnProperty(key)) {
       optional[key] = true;
-    }
-    if (emailVars.hasOwnProperty(key)) {
-      emailVars[key] = true;
     }
   }
 });
@@ -90,26 +77,6 @@ Object.keys(optional).forEach(key => {
   }
 });
 
-console.log('\n📧 Merchant Email Configuration:');
-let emailReady = true;
-Object.keys(emailVars).forEach(key => {
-  if (emailVars[key]) {
-    const line = lines.find(l => l.trim().startsWith(key + '='));
-    const value = line ? line.split('=')[1]?.trim() : '';
-    const masked =
-      key.includes('PASS') ? `${value.substring(0, 4)}...${value.slice(-2)}` : value;
-    console.log(`✅ ${key} = ${masked || '(set)'}`);
-  } else {
-    const isOptional = key === 'SMTP_FROM' || key === 'SMTP_SECURE';
-    if (isOptional) {
-      console.log(`⚪ ${key} = (optional)`);
-    } else {
-      console.log(`❌ ${key} = MISSING`);
-      emailReady = false;
-    }
-  }
-});
-
 // Check API URL
 const apiUrlLine = lines.find(l => l.trim().startsWith('GLORIAFOOD_API_URL='));
 const apiUrl = apiUrlLine ? apiUrlLine.split('=')[1]?.trim() : '';
@@ -126,11 +93,6 @@ if (!apiUrl || apiUrl === 'https://api.gloriafood.com') {
   console.log('   In that case, use: npm run webhook');
 }
 
-if (!emailReady) {
-  console.log('\n⚠️  Merchant email alerts are disabled (missing SMTP configuration).');
-  console.log('   Set SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASS and MERCHANT_EMAIL to enable.');
-}
-
 if (!allGood) {
   console.log('\n❌ Please fix the missing variables and try again.');
   process.exit(1);
@@ -139,8 +101,5 @@ if (!allGood) {
   console.log('\n💡 Next steps:');
   console.log('   - For polling mode: npm run dev');
   console.log('   - For webhook mode: npm run webhook');
-  if (emailReady) {
-    console.log('   - Test merchant email: npm run email:test');
-  }
 }
 

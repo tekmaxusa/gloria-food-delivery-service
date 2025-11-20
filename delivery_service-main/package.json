@@ -14,7 +14,6 @@
     "view-orders": "ts-node view-orders.ts",
     "view-orders-status": "ts-node view-orders-status.ts",
     "create-dd": "ts-node create-dd-order.ts",
-    "email:test": "ts-node src/tools/test-email.ts",
     "postinstall": "npm run build"
   },
   "engines": {
