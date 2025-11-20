@@ -3,17 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gloria Cloud - Orders</title>
+    <title>TekMax - Orders</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <!-- Top Header Bar -->
     <header class="top-header">
         <div class="header-left">
-            <div class="logo-icon">+</div>
-            <div class="logo-text">
-                <div class="logo-title">Gloria Cloud</div>
-                <div class="logo-subtitle">Powered by Shipday</div>
+            <div class="tekmax-logo">
+                <span class="tekmax-text">
+                    <span class="tekmax-tek">Tek</span><span class="tekmax-max">Max</span>
+                </span>
+                <div class="tekmax-swoosh"></div>
             </div>
         </div>
         <div class="header-right">
@@ -21,10 +22,8 @@
                 <a href="#" class="nav-link">Dispatch</a>
                 <a href="#" class="nav-link active">Orders</a>
                 <a href="#" class="nav-link">Drivers</a>
-                <a href="#" class="nav-link">Map</a>
                 <a href="#" class="nav-link">Reviews</a>
                 <a href="#" class="nav-link">Reports</a>
-                <a href="#" class="nav-link">Integrations</a>
             </nav>
             <div class="header-actions">
                 <button class="icon-btn" title="Notifications">
@@ -40,8 +39,6 @@
                         <line x1="12" y1="17" x2="12.01" y2="17"></line>
                     </svg>
                 </button>
-                <button class="upgrade-btn">Upgrade</button>
-                <div class="profile-icon">P</div>
             </div>
         </div>
     </header>
@@ -66,14 +63,6 @@
                         </svg>
                         <input type="text" id="searchInput" placeholder="Search" class="search-input">
                     </div>
-                    <button class="btn-secondary">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                            <polyline points="7 10 12 15 17 10"></polyline>
-                            <line x1="12" y1="15" x2="12" y2="3"></line>
-                        </svg>
-                        CSV upload
-                    </button>
                     <button class="btn-primary" id="newOrderBtn">+ New order</button>
                 </div>
             </div>
@@ -162,23 +151,7 @@
                     </tr>
                 </thead>
                 <tbody id="ordersTableBody">
-                    <tr>
-                        <td colspan="13" class="empty-state-cell">
-                            <div class="empty-state">
-                                <div class="empty-state-icon">
-                                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                        <line x1="8" y1="6" x2="21" y2="6"></line>
-                                        <line x1="8" y1="12" x2="21" y2="12"></line>
-                                        <line x1="8" y1="18" x2="21" y2="18"></line>
-                                        <line x1="3" y1="6" x2="3.01" y2="6"></line>
-                                        <line x1="3" y1="12" x2="3.01" y2="12"></line>
-                                        <line x1="3" y1="18" x2="3.01" y2="18"></line>
-                                    </svg>
-                                </div>
-                                <div class="empty-state-text">You currently have no orders</div>
-                            </div>
-                        </td>
-                    </tr>
+                    <!-- Orders will be inserted here by JavaScript -->
                 </tbody>
             </table>
         </div>
