@@ -10,6 +10,13 @@ export interface MerchantEmailContext {
   notes?: string;
 }
 
+export interface CustomerEmailContext {
+  event: 'order-confirmation' | 'status-update' | 'order-cancelled';
+  previousStatus?: string;
+  currentStatus?: string;
+  notes?: string;
+}
+
 interface EmailConfig {
   host?: string;
   port?: number;
@@ -24,29 +31,75 @@ export class EmailService {
   private transporter?: Transporter;
   private readonly config: EmailConfig;
   private readonly enabled: boolean;
+  private readonly customerEmailsEnabled: boolean;
 
   constructor() {
     this.config = this.loadConfig();
 
-    if (this.config.host && this.config.user && this.config.pass && this.config.to) {
-      this.transporter = nodemailer.createTransport({
-        host: this.config.host,
-        port: this.config.port || 587,
-        secure: this.config.secure ?? (this.config.port === 465),
-        auth: {
-          user: this.config.user,
-          pass: this.config.pass,
-        },
-      });
-      this.enabled = true;
-      console.log(chalk.green('✅ Merchant email notifications enabled'));
+    // Check what's missing
+    const missing: string[] = [];
+    if (!this.config.host) missing.push('SMTP_HOST');
+    if (!this.config.user) missing.push('SMTP_USER');
+    if (!this.config.pass) missing.push('SMTP_PASS');
+
+    if (this.config.host && this.config.user && this.config.pass) {
+      try {
+        this.transporter = nodemailer.createTransport({
+          host: this.config.host,
+          port: this.config.port || 587,
+          secure: this.config.secure ?? (this.config.port === 465),
+          auth: {
+            user: this.config.user,
+            pass: this.config.pass,
+          },
+          // Add connection timeout
+          connectionTimeout: 10000,
+          greetingTimeout: 10000,
+          socketTimeout: 10000,
+        });
+        
+        // Merchant emails enabled if MERCHANT_EMAIL is set
+        this.enabled = !!this.config.to;
+        if (this.enabled) {
+          console.log(chalk.green('✅ Merchant email notifications enabled'));
+          console.log(chalk.gray(`   SMTP Host: ${this.config.host}:${this.config.port || 587}`));
+          console.log(chalk.gray(`   SMTP User: ${this.config.user}`));
+          console.log(chalk.gray(`   Merchant Email: ${this.config.to}`));
+        } else {
+          console.log(chalk.yellow('⚠️  Merchant email notifications disabled (missing MERCHANT_EMAIL)'));
+          console.log(chalk.gray('   Set MERCHANT_EMAIL environment variable to enable merchant notifications'));
+        }
+        
+        // Customer emails enabled by default if SMTP is configured
+        // Can be disabled with SEND_CUSTOMER_EMAILS=false
+        const customerEmailsEnv = (process.env.SEND_CUSTOMER_EMAILS || 'true').toLowerCase();
+        this.customerEmailsEnabled = customerEmailsEnv === 'true' || customerEmailsEnv === '1';
+        
+        if (this.customerEmailsEnabled) {
+          console.log(chalk.green('✅ Customer email notifications enabled'));
+        } else {
+          console.log(chalk.yellow('⚠️  Customer email notifications disabled (SEND_CUSTOMER_EMAILS=false)'));
+        }
+      } catch (error: any) {
+        this.enabled = false;
+        this.customerEmailsEnabled = false;
+        console.error(chalk.red(`❌ Failed to initialize email transporter: ${error.message}`));
+      }
     } else {
       this.enabled = false;
+      this.customerEmailsEnabled = false;
       console.log(
         chalk.yellow(
-          '⚠️  Merchant email notifications disabled (missing SMTP_HOST/SMTP_USER/SMTP_PASS/MERCHANT_EMAIL)'
+          `⚠️  Email notifications disabled (missing: ${missing.join(', ')})`
         )
       );
+      console.log(chalk.gray('   Required environment variables:'));
+      console.log(chalk.gray('   - SMTP_HOST (e.g., smtp.gmail.com, smtp.outlook.com)'));
+      console.log(chalk.gray('   - SMTP_USER (your email address)'));
+      console.log(chalk.gray('   - SMTP_PASS (your email password or app password)'));
+      console.log(chalk.gray('   - SMTP_PORT (optional, default: 587)'));
+      console.log(chalk.gray('   - SMTP_SECURE (optional, true for port 465)'));
+      console.log(chalk.gray('   - MERCHANT_EMAIL (email address to receive order notifications)'));
     }
   }
 
@@ -54,8 +107,19 @@ export class EmailService {
     return this.enabled;
   }
 
+  isCustomerEmailsEnabled(): boolean {
+    return this.customerEmailsEnabled && !!this.transporter;
+  }
+
   async sendOrderUpdate(orderData: any, context: MerchantEmailContext): Promise<void> {
     if (!this.enabled || !this.transporter || !this.config.to) {
+      if (!this.enabled) {
+        console.log(chalk.yellow(`⚠️  Email service disabled, skipping email for order ${this.getOrderId(orderData) || 'unknown'}`));
+      } else if (!this.transporter) {
+        console.log(chalk.yellow(`⚠️  Email transporter not initialized, skipping email for order ${this.getOrderId(orderData) || 'unknown'}`));
+      } else if (!this.config.to) {
+        console.log(chalk.yellow(`⚠️  MERCHANT_EMAIL not set, skipping email for order ${this.getOrderId(orderData) || 'unknown'}`));
+      }
       return;
     }
 
@@ -63,21 +127,41 @@ export class EmailService {
     const text = this.buildTextBody(orderData, context);
     const html = this.buildHtmlBody(orderData, context);
 
+    const orderId = this.getOrderId(orderData) || 'unknown';
+    
     try {
-      await this.transporter.sendMail({
+      console.log(chalk.blue(`📧 Attempting to send merchant email for order ${orderId}...`));
+      console.log(chalk.gray(`   To: ${this.config.to}`));
+      console.log(chalk.gray(`   Subject: ${subject}`));
+      
+      const result = await this.transporter.sendMail({
         from: this.config.from || this.config.user,
         to: this.config.to,
         subject,
         text,
         html,
       });
+      
       console.log(
         chalk.green(
-          `📧 Merchant email sent (${context.event}) for order ${this.getOrderId(orderData) || 'unknown'}`
+          `✅ Merchant email sent successfully (${context.event}) for order ${orderId}`
         )
       );
+      console.log(chalk.gray(`   Message ID: ${result.messageId || 'N/A'}`));
     } catch (error: any) {
-      console.error(chalk.red(`❌ Failed to send merchant email: ${error.message}`));
+      console.error(chalk.red(`❌ Failed to send merchant email for order ${orderId}`));
+      console.error(chalk.red(`   Error: ${error.message}`));
+      if (error.response) {
+        console.error(chalk.red(`   SMTP Response: ${error.response}`));
+      }
+      if (error.responseCode) {
+        console.error(chalk.red(`   Response Code: ${error.responseCode}`));
+      }
+      if (error.command) {
+        console.error(chalk.red(`   Command: ${error.command}`));
+      }
+      // Re-throw to allow caller to handle if needed
+      throw error;
     }
   }
 

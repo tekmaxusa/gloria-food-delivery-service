@@ -244,13 +244,23 @@ class GloriaFoodWebhookServer {
   }
 
   private async notifyMerchant(orderData: any, context: MerchantEmailContext): Promise<void> {
-    if (!this.emailService?.isEnabled()) {
+    if (!this.emailService) {
+      console.log(chalk.yellow('⚠️  Email service not initialized'));
       return;
     }
+    
+    if (!this.emailService.isEnabled()) {
+      console.log(chalk.yellow('⚠️  Email service is disabled'));
+      return;
+    }
+    
     try {
       await this.emailService.sendOrderUpdate(orderData, context);
     } catch (error: any) {
       console.error(chalk.red(`❌ Failed to send merchant notification: ${error.message}`));
+      if (error.stack) {
+        console.error(chalk.gray(`   Stack: ${error.stack}`));
+      }
     }
   }
 
