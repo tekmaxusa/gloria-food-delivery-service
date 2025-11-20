@@ -66,7 +66,22 @@ class GloriaFoodWebhookServer {
       this.initializeDeliveryScheduler();
     } catch (error: any) {
       console.error(chalk.red(`❌ Failed to create database: ${error.message}`));
-      throw error;
+      console.error(chalk.yellow('⚠️  Server will continue but database operations will fail'));
+      console.error(chalk.yellow('⚠️  Check your database configuration in environment variables'));
+      // Don't throw - allow server to start for UI access
+      // Create a dummy database interface that returns empty results
+      this.database = {
+        insertOrUpdateOrder: () => { 
+          console.error(chalk.red('⚠️  Database not initialized - cannot save order')); 
+          return null; 
+        },
+        getOrderByGloriaFoodId: () => null,
+        getAllOrders: () => [],
+        getRecentOrders: () => [],
+        getOrdersByStatus: () => [],
+        getOrderCount: () => 0,
+        close: () => {}
+      } as IDatabase;
     }
     
     // Setup middleware first (body parsing), then routes
@@ -455,12 +470,30 @@ class GloriaFoodWebhookServer {
     const distPublicPath = path.join(__dirname, 'public');
     const fs = require('fs');
     
+    // Debug: Log what we're checking
+    console.log(chalk.blue('🔵 Checking for public directory...'));
+    console.log(chalk.gray(`   dist/public: ${distPublicPath} (exists: ${fs.existsSync(distPublicPath)})`));
+    console.log(chalk.gray(`   public: ${publicPath} (exists: ${fs.existsSync(publicPath)})`));
+    console.log(chalk.gray(`   __dirname: ${__dirname}`));
+    
     if (fs.existsSync(distPublicPath)) {
       console.log(chalk.blue('🔵 Serving static files from: dist/public'));
-      this.app.use(express.static(path.resolve(distPublicPath)));
+      const resolvedPath = path.resolve(distPublicPath);
+      console.log(chalk.gray(`   Resolved path: ${resolvedPath}`));
+      this.app.use(express.static(resolvedPath));
+      
+      // Also check if index.html exists
+      const indexPath = path.join(distPublicPath, 'index.html');
+      if (fs.existsSync(indexPath)) {
+        console.log(chalk.green(`   ✅ index.html found at: ${indexPath}`));
+      } else {
+        console.log(chalk.yellow(`   ⚠️  index.html not found at: ${indexPath}`));
+      }
     } else if (fs.existsSync(publicPath)) {
       console.log(chalk.blue('🔵 Serving static files from: public'));
-      this.app.use(express.static(path.resolve(publicPath)));
+      const resolvedPath = path.resolve(publicPath);
+      console.log(chalk.gray(`   Resolved path: ${resolvedPath}`));
+      this.app.use(express.static(resolvedPath));
     } else {
       console.log(chalk.yellow('⚠️  Public directory not found, dashboard may not be available'));
     }
@@ -487,6 +520,7 @@ class GloriaFoodWebhookServer {
 
   private setupRoutes(): void {
     // Root endpoint - serve dashboard HTML if available, otherwise return JSON
+    // Note: This route takes precedence over static middleware, so we manually serve the file
     this.app.get('/', (req: Request, res: Response) => {
       console.log(chalk.blue(`📥 Root endpoint accessed at ${new Date().toISOString()}`));
       
@@ -495,11 +529,34 @@ class GloriaFoodWebhookServer {
       const distPublicPath = path.join(__dirname, 'public', 'index.html');
       const publicPath = path.join(__dirname, '..', 'public', 'index.html');
       
-      if (fs.existsSync(distPublicPath)) {
+      // Debug: Log paths being checked
+      console.log(chalk.gray(`   Checking dist/public: ${distPublicPath}`));
+      console.log(chalk.gray(`   Checking public: ${publicPath}`));
+      console.log(chalk.gray(`   __dirname: ${__dirname}`));
+      
+      // Try absolute paths
+      const distPublicPathAbs = path.resolve(distPublicPath);
+      const publicPathAbs = path.resolve(publicPath);
+      
+      if (fs.existsSync(distPublicPathAbs)) {
+        console.log(chalk.green(`   ✅ Found index.html at: ${distPublicPathAbs}`));
+        return res.sendFile(distPublicPathAbs);
+      } else if (fs.existsSync(publicPathAbs)) {
+        console.log(chalk.green(`   ✅ Found index.html at: ${publicPathAbs}`));
+        return res.sendFile(publicPathAbs);
+      } else if (fs.existsSync(distPublicPath)) {
+        console.log(chalk.green(`   ✅ Found index.html at: ${distPublicPath}`));
         return res.sendFile(path.resolve(distPublicPath));
       } else if (fs.existsSync(publicPath)) {
+        console.log(chalk.green(`   ✅ Found index.html at: ${publicPath}`));
         return res.sendFile(path.resolve(publicPath));
       } else {
+        console.log(chalk.yellow(`   ⚠️  index.html not found, serving JSON fallback`));
+        console.log(chalk.yellow(`   Tried paths:`));
+        console.log(chalk.yellow(`     - ${distPublicPathAbs}`));
+        console.log(chalk.yellow(`     - ${publicPathAbs}`));
+        console.log(chalk.yellow(`     - ${distPublicPath}`));
+        console.log(chalk.yellow(`     - ${publicPath}`));
         // Fallback to JSON response if HTML not found
         res.json({ 
           status: 'ok', 
@@ -512,7 +569,12 @@ class GloriaFoodWebhookServer {
             stats: '/stats'
           },
           timestamp: new Date().toISOString(),
-          uptime: process.uptime()
+          uptime: process.uptime(),
+          note: 'Dashboard UI not found. Check if public folder was copied to dist/public during build.',
+          debug: {
+            __dirname,
+            checkedPaths: [distPublicPathAbs, publicPathAbs, distPublicPath, publicPath]
+          }
         });
       }
     });
