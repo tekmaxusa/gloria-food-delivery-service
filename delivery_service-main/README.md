@@ -64,6 +64,14 @@ MERCHANT_EMAIL=merchant@restaurant.com
 
 > The webhook server sends an email for every new order and whenever an existing order's status changes (including cancellations).
 
+**Testing your SMTP setup**
+
+1. Set the variables above in your `.env` (local) or Render/Railway dashboard.
+2. Run `npm run email:test` – this uses `src/tools/test-email.ts` to send a sample order email.
+3. Check the merchant inbox/logs for `📧 Merchant email sent...` to confirm.
+
+> Gmail users: enable 2FA and create an App Password, then use that App Password for `SMTP_PASS`.
+
 ## Usage
 
 ### Webhook Mode (Recommended for Production):

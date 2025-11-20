@@ -14,6 +14,7 @@
     "view-orders": "ts-node view-orders.ts",
     "view-orders-status": "ts-node view-orders-status.ts",
     "create-dd": "ts-node create-dd-order.ts",
+    "email:test": "ts-node src/tools/test-email.ts",
     "postinstall": "npm run build"
   },
   "engines": {
@@ -35,14 +36,12 @@
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "mysql2": "^3.15.3",
-    "nodemailer": "^6.9.7",
     "@types/node": "^20.10.0",
     "typescript": "^5.3.3"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.8",
     "@types/express": "^4.17.21",
-    "@types/nodemailer": "^6.4.14",
     "ts-node": "^10.9.2"
   }
 }
