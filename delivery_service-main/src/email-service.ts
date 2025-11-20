@@ -52,10 +52,20 @@ export class EmailService {
             user: this.config.user,
             pass: this.config.pass,
           },
-          // Add connection timeout
-          connectionTimeout: 10000,
-          greetingTimeout: 10000,
-          socketTimeout: 10000,
+          // Increased timeouts for Render/cloud environments
+          connectionTimeout: 30000, // 30 seconds
+          greetingTimeout: 30000,   // 30 seconds
+          socketTimeout: 30000,     // 30 seconds
+          // Additional options for better reliability
+          requireTLS: !this.config.secure && (this.config.port === 587 || !this.config.port),
+          tls: {
+            rejectUnauthorized: false, // Allow self-signed certificates if needed
+            ciphers: 'SSLv3'
+          },
+          // Pool connections for better performance
+          pool: true,
+          maxConnections: 1,
+          maxMessages: 3,
         });
         
         // Merchant emails enabled if merchant email is set (checks MERCHANT_EMAIL, API_VENDOR_CONTACT_EMAIL, VENDOR_CONTACT_EMAIL, or VENDOR_EMAIL)
@@ -137,14 +147,23 @@ export class EmailService {
       console.log(chalk.blue(`📧 Attempting to send merchant email for order ${orderId}...`));
       console.log(chalk.gray(`   To: ${this.config.to}`));
       console.log(chalk.gray(`   Subject: ${subject}`));
+      console.log(chalk.gray(`   SMTP Host: ${this.config.host}:${this.config.port || 587}`));
       
-      const result = await this.transporter.sendMail({
+      // Add timeout wrapper for the sendMail operation
+      const sendMailPromise = this.transporter.sendMail({
         from: this.config.from || this.config.user,
         to: this.config.to,
         subject,
         text,
         html,
       });
+
+      // Wrap with timeout
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Email send operation timed out after 60 seconds')), 60000);
+      });
+
+      const result = await Promise.race([sendMailPromise, timeoutPromise]) as any;
       
       console.log(
         chalk.green(
@@ -155,6 +174,11 @@ export class EmailService {
     } catch (error: any) {
       console.error(chalk.red(`❌ Failed to send merchant email for order ${orderId}`));
       console.error(chalk.red(`   Error: ${error.message}`));
+      
+      // More detailed error logging
+      if (error.code) {
+        console.error(chalk.red(`   Error Code: ${error.code}`));
+      }
       if (error.response) {
         console.error(chalk.red(`   SMTP Response: ${error.response}`));
       }
@@ -162,10 +186,23 @@ export class EmailService {
         console.error(chalk.red(`   Response Code: ${error.responseCode}`));
       }
       if (error.command) {
-        console.error(chalk.red(`   Command: ${error.command}`));
+        console.error(chalk.red(`   Failed Command: ${error.command}`));
       }
-      // Re-throw to allow caller to handle if needed
-      throw error;
+      if (error.errno) {
+        console.error(chalk.red(`   System Error: ${error.errno}`));
+      }
+      
+      // Check if it's a connection timeout issue
+      if (error.message && (error.message.includes('timeout') || error.message.includes('ETIMEDOUT') || error.code === 'ETIMEDOUT')) {
+        console.error(chalk.yellow(`   ⚠️  Connection timeout detected. This might be due to:`));
+        console.error(chalk.yellow(`      - Network restrictions on Render (free tier may block SMTP)`));
+        console.error(chalk.yellow(`      - Firewall blocking outbound SMTP connections`));
+        console.error(chalk.yellow(`      - Gmail blocking connections from Render's IP`));
+        console.error(chalk.yellow(`      - Try using a different SMTP service (SendGrid, Mailgun, etc.)`));
+      }
+      
+      // Don't re-throw - allow the webhook to continue processing
+      // The order is still saved even if email fails
     }
   }
 
