@@ -11,6 +11,7 @@ A TypeScript script that automatically fetches orders from the GloriaFood API, s
 - 🔍 Filter and search orders by status, date, etc.
 - ⚡ Handles duplicate orders automatically
 - 🛡️ Error handling and retry logic
+- 📧 Automatic merchant email notifications for new orders & status changes
 
 ## Prerequisites
 
@@ -46,6 +47,22 @@ A TypeScript script that automatically fetches orders from the GloriaFood API, s
 - `GLORIAFOOD_MASTER_KEY` (optional): Master key for authentication
 - `DATABASE_PATH` (optional): Path to SQLite database file (default: `./orders.db`)
 - `POLL_INTERVAL_MS` (optional): Polling interval in milliseconds (default: `30000` = 30 seconds)
+
+#### Merchant Email Notifications
+
+Set these variables to enable automatic merchant updates via SMTP:
+
+```env
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your-email@example.com
+SMTP_PASS=app-specific-password
+SMTP_FROM="Your Restaurant <orders@restaurant.com>"   # optional
+SMTP_SECURE=false                                      # set true for port 465
+MERCHANT_EMAIL=merchant@restaurant.com
+```
+
+> The webhook server sends an email for every new order and whenever an existing order's status changes (including cancellations).
 
 ## Usage
 

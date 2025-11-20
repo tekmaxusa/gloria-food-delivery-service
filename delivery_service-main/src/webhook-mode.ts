@@ -4,6 +4,8 @@ import * as path from 'path';
 import { IDatabase, DatabaseFactory, Order } from './database-factory';
 import { GloriaFoodOrder } from './gloriafood-client';
 import { DoorDashClient } from './doordash-client';
+import { DeliveryScheduler, ScheduleResult, DispatchPayload } from './delivery-scheduler';
+import { EmailService, MerchantEmailContext } from './email-service';
 import chalk from 'chalk';
 
 // Load environment variables
@@ -19,11 +21,21 @@ interface WebhookConfig {
   databasePath: string;
 }
 
+interface DispatchContext {
+  trigger: 'scheduled' | 'immediate';
+  source?: string;
+  reason?: string;
+  scheduledTime?: Date;
+  deliveryTime?: Date;
+}
+
 class GloriaFoodWebhookServer {
   private app: express.Application;
   private database: IDatabase;
   private config: WebhookConfig;
   private doorDashClient?: DoorDashClient;
+  private deliveryScheduler?: DeliveryScheduler;
+  private emailService?: EmailService;
 
   constructor(config: WebhookConfig) {
     console.log(chalk.blue.bold('\n🔵 Starting GloriaFood Webhook Server...'));
@@ -36,6 +48,7 @@ class GloriaFoodWebhookServer {
     // Initialize DoorDash client if configured
     console.log(chalk.blue('🔵 Initializing DoorDash client...'));
     this.initializeDoorDash();
+    this.initializeEmailService();
     
     // Log which database is being used
     const dbType = process.env.DB_TYPE?.toLowerCase() || 'sqlite';
@@ -50,6 +63,7 @@ class GloriaFoodWebhookServer {
     try {
       this.database = DatabaseFactory.createDatabase();
       console.log(chalk.green('✅ Database connection created'));
+      this.initializeDeliveryScheduler();
     } catch (error: any) {
       console.error(chalk.red(`❌ Failed to create database: ${error.message}`));
       throw error;
@@ -112,6 +126,49 @@ class GloriaFoodWebhookServer {
   }
 
   /**
+   * Initialize merchant email notifications
+   */
+  private initializeEmailService(): void {
+    try {
+      this.emailService = new EmailService();
+    } catch (error: any) {
+      console.error(chalk.red(`❌ Failed to initialize email service: ${error.message}`));
+    }
+  }
+
+  /**
+   * Initialize scheduler that triggers DoorDash calls before delivery time
+   */
+  private initializeDeliveryScheduler(): void {
+    if (!this.doorDashClient) {
+      console.log(chalk.yellow('⚠️  DoorDash scheduler disabled (client not initialized)'));
+      return;
+    }
+
+    const bufferEnv = process.env.DOORDASH_DELIVERY_BUFFER_MINUTES;
+    const parsedBuffer = bufferEnv ? parseInt(bufferEnv, 10) : NaN;
+    const bufferMinutes = Number.isFinite(parsedBuffer) ? parsedBuffer : 30;
+
+    this.deliveryScheduler = new DeliveryScheduler({
+      bufferMinutes,
+      onDispatch: async (payload: DispatchPayload) => {
+        await this.dispatchDoorDash(payload.orderData, {
+          trigger: payload.trigger,
+          source: payload.metadata?.source,
+          reason: payload.metadata?.reason,
+          scheduledTime: payload.scheduledTime,
+          deliveryTime: payload.deliveryTime || undefined,
+        });
+      },
+      logger: console,
+    });
+
+    this.restorePendingSchedules().catch((error: any) => {
+      console.error(chalk.red(`⚠️  Failed to restore pending DoorDash schedules: ${error.message}`));
+    });
+  }
+
+  /**
    * Send order to DoorDash (if enabled)
    */
   private async sendOrderToDoorDash(orderData: any): Promise<{ id?: string; external_delivery_id?: string; status?: string; tracking_url?: string } | null> {
@@ -155,6 +212,229 @@ class GloriaFoodWebhookServer {
       console.error(chalk.red(`   Error details: ${error.stack || 'No stack trace'}`));
       // Continue processing - don't throw
       return null;
+    }
+  }
+
+  private async dispatchDoorDash(orderData: any, context: DispatchContext): Promise<void> {
+    const orderId = this.getOrderIdentifier(orderData) || 'unknown';
+    const parts = [
+      `trigger=${context.trigger}`,
+      context.source ? `source=${context.source}` : null,
+      context.reason ? `reason=${context.reason}` : null,
+    ].filter(Boolean).join(' | ');
+
+    console.log(chalk.cyan(`\n🚚 Dispatching order ${orderId} to DoorDash (${parts || 'no-context'})`));
+    if (context.deliveryTime) {
+      console.log(chalk.gray(`   Delivery time: ${context.deliveryTime.toISOString()}`));
+    }
+    if (context.scheduledTime) {
+      console.log(chalk.gray(`   Scheduled send: ${context.scheduledTime.toISOString()}`));
+    }
+
+    try {
+      const response = await this.sendOrderToDoorDash(orderData);
+      if (!response) {
+        console.log(chalk.yellow(`⚠️  DoorDash dispatch skipped or failed for order ${orderId}`));
+        return;
+      }
+      await this.handleDoorDashDispatchSuccess(orderId, response);
+    } catch (error: any) {
+      console.error(chalk.red(`❌ Failed to dispatch order ${orderId} to DoorDash: ${error.message}`));
+    }
+  }
+
+  private async notifyMerchant(orderData: any, context: MerchantEmailContext): Promise<void> {
+    if (!this.emailService?.isEnabled()) {
+      return;
+    }
+    try {
+      await this.emailService.sendOrderUpdate(orderData, context);
+    } catch (error: any) {
+      console.error(chalk.red(`❌ Failed to send merchant notification: ${error.message}`));
+    }
+  }
+
+  private async handleDoorDashDispatchSuccess(
+    orderId: string,
+    resp: { id?: string; external_delivery_id?: string; status?: string; tracking_url?: string }
+  ): Promise<void> {
+    if (!resp || !resp.id) {
+      console.log(chalk.yellow(`⚠️  DoorDash response missing delivery ID for order ${orderId}`));
+      return;
+    }
+
+    console.log(chalk.green(`✅ Order ${orderId} sent to DoorDash successfully`));
+    console.log(chalk.gray(`   DoorDash Delivery ID: ${resp.id}`));
+
+    if (resp.external_delivery_id) {
+      console.log(chalk.gray(`   External Delivery ID: ${resp.external_delivery_id}`));
+    }
+    if (resp.status) {
+      console.log(chalk.gray(`   Status: ${resp.status}`));
+    }
+
+    let trackingUrl = resp.tracking_url;
+    console.log(chalk.blue(`🔍 Initial tracking URL: ${trackingUrl || 'NOT IN RESPONSE'}`));
+
+    if (!trackingUrl && resp.id && this.doorDashClient) {
+      console.log(chalk.yellow('   ⏳ Tracking URL not in response, fetching from DoorDash API...'));
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      try {
+        const statusResp = await this.doorDashClient.getOrderStatus(resp.id);
+        trackingUrl = statusResp.tracking_url;
+        console.log(chalk.blue(`🔍 Status API response tracking_url: ${trackingUrl || 'NONE'}`));
+      } catch (error: any) {
+        console.log(chalk.yellow(`   ⚠️  First tracking fetch failed: ${error.message}`));
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        try {
+          const retryResp = await this.doorDashClient.getOrderStatus(resp.id);
+          trackingUrl = retryResp.tracking_url;
+          console.log(chalk.blue(`🔍 Retry tracking_url: ${trackingUrl || 'NONE'}`));
+        } catch (error2: any) {
+          console.log(chalk.yellow(`   ⚠️  Retry tracking fetch failed: ${error2.message}`));
+        }
+      }
+    }
+
+    if (trackingUrl) {
+      console.log(chalk.cyan(`   Tracking URL: ${trackingUrl}`));
+    } else {
+      console.log(chalk.yellow('   ⚠️  Tracking URL not available yet (may be generated later by DoorDash)'));
+    }
+
+    if ((this.database as any).markOrderSentToDoorDash) {
+      try {
+        await this.handleAsync((this.database as any).markOrderSentToDoorDash(orderId, resp.id, trackingUrl));
+      } catch {
+        // Ignore database errors for marking as sent
+      }
+    }
+
+    this.deliveryScheduler?.clear(orderId);
+  }
+
+  private async scheduleDoorDashDelivery(orderData: any, source: string): Promise<void> {
+    const orderId = this.getOrderIdentifier(orderData);
+
+    if (!orderId) {
+      console.log(chalk.yellow('⚠️  Cannot schedule DoorDash dispatch without order ID, dispatching immediately'));
+      await this.dispatchDoorDash(orderData, { trigger: 'immediate', source, reason: 'missing-order-id' });
+      return;
+    }
+
+    if (!this.deliveryScheduler) {
+      console.log(chalk.yellow('⚠️  Delivery scheduler not initialized, dispatching immediately'));
+      await this.dispatchDoorDash(orderData, { trigger: 'immediate', source, reason: 'scheduler-disabled' });
+      return;
+    }
+
+    try {
+      const result = await this.deliveryScheduler.schedule(orderData, { source });
+      this.logScheduleResult(result);
+    } catch (error: any) {
+      console.error(chalk.red(`❌ Failed to schedule DoorDash delivery for order ${orderId}: ${error.message}`));
+      await this.dispatchDoorDash(orderData, { trigger: 'immediate', source, reason: 'scheduler-error' });
+    }
+  }
+
+  private logScheduleResult(result?: ScheduleResult): void {
+    if (!result) {
+      return;
+    }
+
+    const orderId = result.orderId || 'unknown';
+    switch (result.status) {
+      case 'scheduled':
+        console.log(
+          chalk.cyan(
+            `🕒 DoorDash call scheduled for order ${orderId} at ${result.scheduledTime?.toISOString()} (delivery: ${result.deliveryTime?.toISOString()})`
+          )
+        );
+        break;
+      case 'dispatched':
+        console.log(
+          chalk.green(
+            `⚡ DoorDash call executed immediately for order ${orderId}${result.reason ? ` (${result.reason})` : ''}`
+          )
+        );
+        break;
+      case 'skipped':
+        console.log(
+          chalk.yellow(
+            `⚠️  DoorDash scheduling skipped for order ${orderId}${result.reason ? ` (${result.reason})` : ''}`
+          )
+        );
+        break;
+    }
+  }
+
+  private getOrderIdentifier(orderData: any): string | null {
+    if (!orderData) {
+      return null;
+    }
+
+    const candidates = [
+      orderData.id,
+      orderData.order_id,
+      orderData.orderId,
+      orderData.order_number,
+      orderData.orderNumber,
+      orderData.external_delivery_id,
+    ];
+
+    for (const candidate of candidates) {
+      if (candidate === undefined || candidate === null) continue;
+      const value = String(candidate).trim();
+      if (value) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  private isCancelledStatus(status: string): boolean {
+    const normalized = (status || '').toLowerCase();
+    return ['cancelled', 'canceled', 'rejected', 'voided'].includes(normalized);
+  }
+
+  private async restorePendingSchedules(): Promise<void> {
+    if (!this.deliveryScheduler) {
+      return;
+    }
+
+    try {
+      const limitEnv = process.env.SCHEDULER_RESTORE_LIMIT;
+      const parsedLimit = limitEnv ? parseInt(limitEnv, 10) : NaN;
+      const limit = Number.isFinite(parsedLimit) ? parsedLimit : 500;
+
+      const orders = await this.handleAsync(this.database.getAllOrders(limit));
+      let scheduledCount = 0;
+
+      for (const order of orders) {
+        if (!order || (order as any).sent_to_doordash) {
+          continue;
+        }
+        if ((order.order_type || '').toLowerCase() !== 'delivery') {
+          continue;
+        }
+        if (!order.raw_data) {
+          continue;
+        }
+        try {
+          const rawData = JSON.parse(order.raw_data);
+          const result = await this.deliveryScheduler.schedule(rawData, { source: 'restore' });
+          this.logScheduleResult(result);
+          if (result.status === 'scheduled') {
+            scheduledCount++;
+          }
+        } catch (error: any) {
+          console.error(chalk.yellow(`⚠️  Failed to restore order ${order.gloriafood_order_id}: ${error.message}`));
+        }
+      }
+
+      console.log(chalk.cyan(`🔁 Restored ${scheduledCount} pending DoorDash schedule(s)`));
+    } catch (error: any) {
+      console.error(chalk.red(`⚠️  Unable to restore pending schedules: ${error.message}`));
     }
   }
 
@@ -338,7 +618,8 @@ class GloriaFoodWebhookServer {
           const isNew = !existingBefore;
           const newStatus = (orderData.status || orderData.order_status || '').toString().toLowerCase();
           const prevStatus = (existingBefore?.status || '').toString().toLowerCase();
-          const becameAccepted = prevStatus !== 'accepted' && newStatus === 'accepted';
+          const isCancelled = this.isCancelledStatus(newStatus);
+          const statusChanged = newStatus !== prevStatus;
           const wasNotSent = !(existingBefore as any)?.sent_to_doordash;
           
           // Check if this is a delivery order
@@ -347,147 +628,38 @@ class GloriaFoodWebhookServer {
           
           if (isNew) {
             await this.displayOrder(savedOrder, true, orderData);
-
-            // AUTOMATICALLY send to DoorDash for ALL new delivery orders (regardless of status)
-            if (isDeliveryOrder) {
-              console.log(chalk.cyan('\n🚚 Sending order to DoorDash...'));
-              await this.sendOrderToDoorDash(orderData).then(async (resp)=>{
-                console.log(chalk.blue(`🔍 DoorDash Response received: ${resp ? 'YES' : 'NO'}`));
-                if (resp) {
-                  console.log(chalk.blue(`🔍 Response ID: ${resp.id || 'NONE'}`));
-                  console.log(chalk.blue(`🔍 Response tracking_url: ${resp.tracking_url || 'NONE'}`));
-                  console.log(chalk.blue(`🔍 Response status: ${resp.status || 'NONE'}`));
-                }
-                
-                if (resp && resp.id) {
-                  console.log(chalk.green(`✅ Order sent to DoorDash successfully`));
-                  console.log(chalk.gray(`   DoorDash Delivery ID: ${resp.id}`));
-                  if (resp.external_delivery_id) {
-                    console.log(chalk.gray(`   External Delivery ID: ${resp.external_delivery_id}`));
-                  }
-                  if (resp.status) {
-                    console.log(chalk.gray(`   Status: ${resp.status}`));
-                  }
-                  // Always try to get tracking URL - fetch from DoorDash if not in response
-                  let trackingUrl = resp.tracking_url;
-                  console.log(chalk.blue(`🔍 Initial tracking URL: ${trackingUrl || 'NOT IN RESPONSE'}`));
-                  
-                  if (!trackingUrl && resp.id && this.doorDashClient) {
-                    console.log(chalk.yellow(`   ⏳ Tracking URL not in response, fetching from DoorDash API...`));
-                    // Wait a bit for DoorDash to generate the tracking URL
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    try {
-                      console.log(chalk.blue(`🔍 Attempting to fetch status for ID: ${resp.id}`));
-                      const statusResp = await this.doorDashClient.getOrderStatus(resp.id);
-                      trackingUrl = statusResp.tracking_url;
-                      console.log(chalk.blue(`🔍 Status API response tracking_url: ${trackingUrl || 'NONE'}`));
-                    } catch (e: any) {
-                      console.log(chalk.yellow(`   ⚠️  First fetch attempt failed: ${e.message}`));
-                      // If first attempt fails, try once more after another delay
-                      await new Promise(resolve => setTimeout(resolve, 2000));
-                      try {
-                        console.log(chalk.blue(`🔍 Retrying status fetch for ID: ${resp.id}`));
-                        const statusResp = await this.doorDashClient.getOrderStatus(resp.id);
-                        trackingUrl = statusResp.tracking_url;
-                        console.log(chalk.blue(`🔍 Retry response tracking_url: ${trackingUrl || 'NONE'}`));
-                      } catch (e2: any) {
-                        console.log(chalk.yellow(`   ⚠️  Retry also failed: ${e2.message}`));
-                      }
-                    }
-                  }
-                  if (trackingUrl) {
-                    console.log(chalk.cyan(`   Tracking URL: ${trackingUrl}`));
-                  } else {
-                    console.log(chalk.yellow(`   ⚠️  Tracking URL not available yet (may be generated later by DoorDash)`));
-                  }
-                  
-                  // Mark as sent and store tracking URL if call succeeded
-                  if ((this.database as any).markOrderSentToDoorDash) {
-                    try { 
-                      await this.handleAsync((this.database as any).markOrderSentToDoorDash(orderId.toString(), resp.id, trackingUrl)); 
-                    } catch {}
-                  }
-                } else {
-                  console.log(chalk.yellow(`   ⚠️  DoorDash response missing ID: ${JSON.stringify(resp)}`));
-                }
-              }).catch((error: any)=>{
-                console.error(chalk.red(`❌ Failed to send order to DoorDash: ${error.message || 'Unknown error'}`));
-                console.error(chalk.red(`   Error stack: ${error.stack}`));
-              });
-            }
           } else {
             console.log(chalk.blue(`🔄 Order updated in database: #${orderId}`));
-            // Display updated order information
             await this.displayOrder(savedOrder, false, orderData);
+          }
 
-            // If it's a delivery order and not yet sent, send to DoorDash
-            // This handles cases where order type changes to delivery or status changes
-            if (isDeliveryOrder && wasNotSent) {
-              console.log(chalk.cyan('\n🚚 Sending order to DoorDash...'));
-              await this.sendOrderToDoorDash(orderData).then(async (resp)=>{
-                console.log(chalk.blue(`🔍 DoorDash Response received: ${resp ? 'YES' : 'NO'}`));
-                if (resp) {
-                  console.log(chalk.blue(`🔍 Response ID: ${resp.id || 'NONE'}`));
-                  console.log(chalk.blue(`🔍 Response tracking_url: ${resp.tracking_url || 'NONE'}`));
-                  console.log(chalk.blue(`🔍 Response status: ${resp.status || 'NONE'}`));
-                }
-                
-                if (resp && resp.id) {
-                  console.log(chalk.green(`✅ Order sent to DoorDash successfully`));
-                  console.log(chalk.gray(`   DoorDash Delivery ID: ${resp.id}`));
-                  if (resp.external_delivery_id) {
-                    console.log(chalk.gray(`   External Delivery ID: ${resp.external_delivery_id}`));
-                  }
-                  if (resp.status) {
-                    console.log(chalk.gray(`   Status: ${resp.status}`));
-                  }
-                  // Always try to get tracking URL - fetch from DoorDash if not in response
-                  let trackingUrl = resp.tracking_url;
-                  console.log(chalk.blue(`🔍 Initial tracking URL: ${trackingUrl || 'NOT IN RESPONSE'}`));
-                  
-                  if (!trackingUrl && resp.id && this.doorDashClient) {
-                    console.log(chalk.yellow(`   ⏳ Tracking URL not in response, fetching from DoorDash API...`));
-                    // Wait a bit for DoorDash to generate the tracking URL
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    try {
-                      console.log(chalk.blue(`🔍 Attempting to fetch status for ID: ${resp.id}`));
-                      const statusResp = await this.doorDashClient.getOrderStatus(resp.id);
-                      trackingUrl = statusResp.tracking_url;
-                      console.log(chalk.blue(`🔍 Status API response tracking_url: ${trackingUrl || 'NONE'}`));
-                    } catch (e: any) {
-                      console.log(chalk.yellow(`   ⚠️  First fetch attempt failed: ${e.message}`));
-                      // If first attempt fails, try once more after another delay
-                      await new Promise(resolve => setTimeout(resolve, 2000));
-                      try {
-                        console.log(chalk.blue(`🔍 Retrying status fetch for ID: ${resp.id}`));
-                        const statusResp = await this.doorDashClient.getOrderStatus(resp.id);
-                        trackingUrl = statusResp.tracking_url;
-                        console.log(chalk.blue(`🔍 Retry response tracking_url: ${trackingUrl || 'NONE'}`));
-                      } catch (e2: any) {
-                        console.log(chalk.yellow(`   ⚠️  Retry also failed: ${e2.message}`));
-                      }
-                    }
-                  }
-                  if (trackingUrl) {
-                    console.log(chalk.cyan(`   Tracking URL: ${trackingUrl}`));
-                  } else {
-                    console.log(chalk.yellow(`   ⚠️  Tracking URL not available yet (may be generated later by DoorDash)`));
-                  }
-                  
-                  // Mark as sent and store tracking URL if call succeeded
-                  if ((this.database as any).markOrderSentToDoorDash) {
-                    try { 
-                      await this.handleAsync((this.database as any).markOrderSentToDoorDash(orderId.toString(), resp.id, trackingUrl)); 
-                    } catch {}
-                  }
-                } else {
-                  console.log(chalk.yellow(`   ⚠️  DoorDash response missing ID: ${JSON.stringify(resp)}`));
-                }
-              }).catch((error: any)=>{
-                console.error(chalk.red(`❌ Failed to send order to DoorDash: ${error.message || 'Unknown error'}`));
-                console.error(chalk.red(`   Error stack: ${error.stack}`));
+          const orderIdStr = orderId.toString();
+          const currentStatusLabel = newStatus || orderData.status || 'pending';
+          const previousStatusLabel = prevStatus || existingBefore?.status || 'unknown';
+
+          if (this.emailService?.isEnabled()) {
+            if (isNew) {
+              await this.notifyMerchant(orderData, {
+                event: 'new-order',
+                currentStatus: currentStatusLabel,
+              });
+            } else if (statusChanged) {
+              await this.notifyMerchant(orderData, {
+                event: isCancelled ? 'cancelled' : 'status-update',
+                previousStatus: previousStatusLabel,
+                currentStatus: currentStatusLabel,
               });
             }
+          }
+
+          if (isCancelled) {
+            this.deliveryScheduler?.cancel(orderIdStr, 'order-cancelled');
+          } else if (!isDeliveryOrder) {
+            this.deliveryScheduler?.cancel(orderIdStr, 'non-delivery');
+          } else if (isNew || wasNotSent) {
+            await this.scheduleDoorDashDelivery(orderData, isNew ? 'new-order' : 'update-order');
+          } else {
+            this.deliveryScheduler?.cancel(orderIdStr, 'already-sent');
           }
         } else {
           console.error(chalk.red(`❌ Failed to store order: #${orderId}`));
@@ -1117,6 +1289,7 @@ class GloriaFoodWebhookServer {
   }
 
   public async stop(): Promise<void> {
+    this.deliveryScheduler?.stop();
     const closeResult = this.database.close();
     if (closeResult instanceof Promise) {
       await closeResult;
