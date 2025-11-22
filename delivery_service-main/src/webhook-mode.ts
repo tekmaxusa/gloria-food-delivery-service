@@ -1427,25 +1427,47 @@ class GloriaFoodWebhookServer {
   private extractOrderData(body: any): GloriaFoodOrder | null {
     // Handle null/undefined body
     if (!body) {
+      console.log(chalk.gray('   extractOrderData: Body is null/undefined'));
       return null;
     }
     
+    console.log(chalk.gray(`   extractOrderData: Checking body structure...`));
+    console.log(chalk.gray(`   Body type: ${typeof body}`));
+    console.log(chalk.gray(`   Body keys: ${Object.keys(body).join(', ')}`));
+    
     // Handle different possible webhook payload structures
     if (body.order) {
+      console.log(chalk.green('   ✅ Found order in body.order'));
       return body.order;
     }
     if (body.data && body.data.order) {
+      console.log(chalk.green('   ✅ Found order in body.data.order'));
       return body.data.order;
     }
-    if (body.id || body.order_id) {
+    if (body.id || body.order_id || body.gloriafood_order_id) {
+      console.log(chalk.green(`   ✅ Found order with ID: ${body.id || body.order_id || body.gloriafood_order_id}`));
       return body;
     }
     if (Array.isArray(body) && body.length > 0) {
+      console.log(chalk.green(`   ✅ Found array with ${body.length} items, using first item`));
       return body[0];
     }
     if (body.orders && Array.isArray(body.orders) && body.orders.length > 0) {
+      console.log(chalk.green(`   ✅ Found orders array with ${body.orders.length} items, using first item`));
       return body.orders[0];
     }
+    
+    // Try to find any object that looks like an order
+    if (typeof body === 'object' && !Array.isArray(body)) {
+      // Check if body itself might be an order (has common order fields)
+      const hasOrderFields = body.customer_name || body.client_name || body.total_price || body.total;
+      if (hasOrderFields) {
+        console.log(chalk.green('   ✅ Body itself appears to be an order'));
+        return body;
+      }
+    }
+    
+    console.log(chalk.yellow('   ⚠️  Could not extract order data from body'));
     return null;
   }
 
