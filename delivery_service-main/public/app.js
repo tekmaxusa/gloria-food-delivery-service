@@ -243,13 +243,14 @@ function navigateToPage(page) {
 // Load dashboard data
 async function loadDashboardData() {
     try {
+        const headers = {};
+        if (sessionId) {
+            headers['x-session-id'] = sessionId;
+        }
+        
         const [statsRes, ordersRes] = await Promise.all([
-            fetch(`${API_BASE}/api/dashboard/stats`, {
-                headers: { 'x-session-id': sessionId || '' }
-            }),
-            fetch(`${API_BASE}/orders?limit=100`, {
-                headers: { 'x-session-id': sessionId || '' }
-            })
+            fetch(`${API_BASE}/api/dashboard/stats`, { headers }),
+            fetch(`${API_BASE}/orders?limit=100`, { headers })
         ]);
         
         if (statsRes.ok) {
@@ -257,14 +258,19 @@ async function loadDashboardData() {
             if (statsData.success) {
                 updateDashboardStats(statsData.stats);
             }
+        } else {
+            console.warn('Failed to load dashboard stats:', statsRes.status);
         }
         
         if (ordersRes.ok) {
             const ordersData = await ordersRes.json();
             if (ordersData.success !== false && (ordersData.orders || Array.isArray(ordersData))) {
                 allOrders = ordersData.orders || ordersData || [];
+                console.log(`Dashboard: Loaded ${allOrders.length} orders`);
                 checkForNewOrders(allOrders);
             }
+        } else {
+            console.warn('Failed to load orders for dashboard:', ordersRes.status);
         }
     } catch (error) {
         console.error('Error loading dashboard data:', error);
@@ -349,14 +355,20 @@ function showDashboardPage() {
 // Load recent orders for dashboard
 async function loadRecentOrders() {
     try {
-        const response = await fetch(`${API_BASE}/orders?limit=10`, {
-            headers: { 'x-session-id': sessionId || '' }
-        });
+        const headers = {};
+        if (sessionId) {
+            headers['x-session-id'] = sessionId;
+        }
+        
+        const response = await fetch(`${API_BASE}/orders?limit=10`, { headers });
         
         if (response.ok) {
             const data = await response.json();
             const orders = data.orders || data || [];
+            console.log(`Loaded ${orders.length} recent orders for dashboard`);
             displayRecentOrders(orders);
+        } else {
+            console.error('Failed to load recent orders:', response.status);
         }
     } catch (error) {
         console.error('Error loading recent orders:', error);
@@ -956,22 +968,33 @@ async function loadOrders() {
     try {
         const url = `${API_BASE}/orders?limit=100`;
         
-        const response = await fetch(url, {
-            headers: { 'x-session-id': sessionId || '' }
-        });
+        // Build headers - sessionId is optional for /orders endpoint
+        const headers = {};
+        if (sessionId) {
+            headers['x-session-id'] = sessionId;
+        }
+        
+        const response = await fetch(url, { headers });
         
         if (!response.ok) {
+            console.error('Orders API error:', response.status, response.statusText);
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         
         const data = await response.json();
+        console.log('Orders API response:', { 
+            success: data.success, 
+            count: data.count || data.orders?.length || 0,
+            hasOrders: !!(data.orders || Array.isArray(data))
+        });
         
         if (data.success !== false && (data.orders || Array.isArray(data))) {
             allOrders = data.orders || data || [];
+            console.log(`Loaded ${allOrders.length} orders`);
             checkForNewOrders(allOrders);
             filterAndDisplayOrders();
         } else {
-            showError('Failed to load orders: ' + (data.error || 'Unknown error'));
+            console.warn('No orders in response:', data);
             allOrders = [];
             filterAndDisplayOrders();
         }
@@ -1245,3 +1268,36 @@ if (notificationsBtn) {
         showNotification('Notifications', 'You have no new notifications');
     });
 }
+
+// Debug function - check database status
+window.checkDatabaseStatus = async function() {
+    console.log('=== Database Status Check ===');
+    console.log('API Base:', API_BASE);
+    console.log('Session ID:', sessionId || 'Not logged in');
+    
+    try {
+        // Check orders endpoint
+        const ordersRes = await fetch(`${API_BASE}/orders?limit=5`);
+        const ordersData = await ordersRes.json();
+        console.log('Orders API Response:', ordersData);
+        console.log('Orders Count:', ordersData.count || ordersData.orders?.length || 0);
+        
+        // Check stats endpoint
+        const statsRes = await fetch(`${API_BASE}/stats`);
+        const statsData = await statsRes.json();
+        console.log('Stats API Response:', statsData);
+        
+        // Check health
+        const healthRes = await fetch(`${API_BASE}/health`);
+        const healthData = await healthRes.json();
+        console.log('Health Check:', healthData);
+        
+        alert(`Database Status:\nOrders: ${ordersData.count || 0}\nTotal: ${statsData.total_orders || 0}\nCheck console for details`);
+    } catch (error) {
+        console.error('Database check error:', error);
+        alert('Error checking database. See console for details.');
+    }
+};
+
+// Make it available globally
+console.log('💡 Tip: Run checkDatabaseStatus() in console to debug database connection');
