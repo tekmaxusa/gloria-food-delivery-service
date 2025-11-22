@@ -1213,12 +1213,21 @@ function createOrderRow(order) {
             <td><span class="status-badge status-${status}">${escapeHtml(status)}</span></td>
             <td>${tracking}</td>
             <td>
-                <button class="btn-icon btn-delete" onclick="deleteOrder('${escapeHtml(String(orderId))}')" title="Delete order">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="3 6 5 6 21 6"></polyline>
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                    </svg>
-                </button>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <button class="btn-icon btn-details" onclick="showOrderDetails('${escapeHtml(String(orderId))}')" title="View order details">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="16" x2="12" y2="12"></line>
+                            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                        </svg>
+                    </button>
+                    <button class="btn-icon btn-delete" onclick="deleteOrder('${escapeHtml(String(orderId))}')" title="Delete order">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        </svg>
+                    </button>
+                </div>
             </td>
         </tr>
     `;
@@ -1405,6 +1414,203 @@ function updateDeleteSelectedButton() {
         deleteSelectedBtn.style.display = 'none';
     }
 }
+
+// Show order details modal
+window.showOrderDetails = function(orderId) {
+    // Find the order in allOrders
+    const order = allOrders.find(o => (o.gloriafood_order_id || o.id) === orderId);
+    
+    if (!order) {
+        showNotification('Error', 'Order not found', true);
+        return;
+    }
+    
+    // Parse raw_data if available
+    let rawData = null;
+    try {
+        if (order.raw_data) {
+            rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+        }
+    } catch (e) {
+        console.warn('Error parsing raw_data:', e);
+    }
+    
+    // Parse items if available
+    let items = [];
+    try {
+        if (order.items) {
+            items = typeof order.items === 'string' ? JSON.parse(order.items) : order.items;
+        } else if (rawData?.items) {
+            items = rawData.items;
+        } else if (rawData?.order_items) {
+            items = rawData.order_items;
+        }
+    } catch (e) {
+        console.warn('Error parsing items:', e);
+    }
+    
+    // Extract customer information
+    const customerName = extractCustomerName(order);
+    const customerPhone = order.customer_phone || rawData?.client_phone || rawData?.client?.phone || rawData?.customer?.phone || 'N/A';
+    const customerEmail = order.customer_email || rawData?.client_email || rawData?.client?.email || rawData?.customer?.email || 'N/A';
+    
+    // Build items HTML
+    let itemsHtml = '<div class="order-items-list">';
+    if (items && items.length > 0) {
+        items.forEach((item, index) => {
+            const itemName = item.name || item.title || item.product_name || 'Unknown Item';
+            const quantity = item.quantity || item.qty || 1;
+            const price = item.price || item.unit_price || item.total_price || 0;
+            const total = (quantity * price).toFixed(2);
+            itemsHtml += `
+                <div class="order-item">
+                    <div class="order-item-name">${index + 1}. ${escapeHtml(itemName)}</div>
+                    <div class="order-item-details">
+                        <span>Qty: ${quantity}</span>
+                        <span>Price: ${formatCurrency(price, order.currency || 'USD')}</span>
+                        <span class="order-item-total">Total: ${formatCurrency(quantity * price, order.currency || 'USD')}</span>
+                    </div>
+                    ${item.special_instructions || item.notes || item.note ? `<div class="order-item-note">Note: ${escapeHtml(item.special_instructions || item.notes || item.note)}</div>` : ''}
+                </div>
+            `;
+        });
+    } else {
+        itemsHtml += '<div class="order-item">No items found</div>';
+    }
+    itemsHtml += '</div>';
+    
+    // Build modal HTML
+    const modalHtml = `
+        <div class="modal-overlay" id="orderDetailsModal">
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h2>Order Details #${escapeHtml(String(orderId))}</h2>
+                    <button class="modal-close" onclick="closeOrderDetails()">&times;</button>
+                </div>
+                <div class="modal-body order-details-body">
+                    <div class="order-details-section">
+                        <h3>📋 Order Information</h3>
+                        <div class="order-details-grid">
+                            <div class="detail-item">
+                                <label>Order ID:</label>
+                                <span>${escapeHtml(String(orderId))}</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Status:</label>
+                                <span><span class="status-badge status-${(order.status || 'UNKNOWN').toUpperCase()}">${escapeHtml(order.status || 'UNKNOWN')}</span></span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Type:</label>
+                                <span>${escapeHtml(order.order_type || 'N/A')}</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Store ID:</label>
+                                <span>${escapeHtml(order.store_id || 'N/A')}</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Total Amount:</label>
+                                <span class="order-total-amount">${formatCurrency(order.total_price || 0, order.currency || 'USD')}</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Currency:</label>
+                                <span>${escapeHtml(order.currency || 'USD')}</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Order Placed:</label>
+                                <span>${formatDate(order.fetched_at || order.created_at || order.updated_at)}</span>
+                            </div>
+                            ${order.pickup_time ? `<div class="detail-item"><label>Pickup Time:</label><span>${formatDate(order.pickup_time)}</span></div>` : ''}
+                            ${order.delivery_time ? `<div class="detail-item"><label>Delivery Time:</label><span>${formatDate(order.delivery_time)}</span></div>` : ''}
+                            ${order.ready_for_pickup ? `<div class="detail-item"><label>Ready for Pickup:</label><span>${formatDate(order.ready_for_pickup)}</span></div>` : ''}
+                            ${rawData?.order_number ? `<div class="detail-item"><label>Order Number:</label><span>${escapeHtml(rawData.order_number)}</span></div>` : ''}
+                            ${rawData?.payment_method ? `<div class="detail-item"><label>Payment Method:</label><span>${escapeHtml(rawData.payment_method)}</span></div>` : ''}
+                        </div>
+                    </div>
+                    
+                    <div class="order-details-section">
+                        <h3>👤 Customer Information</h3>
+                        <div class="order-details-grid">
+                            <div class="detail-item">
+                                <label>Name:</label>
+                                <span>${escapeHtml(customerName)}</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Phone:</label>
+                                <span>${escapeHtml(customerPhone)}</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Email:</label>
+                                <span>${escapeHtml(customerEmail)}</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="order-details-section">
+                        <h3>📍 Delivery Information</h3>
+                        <div class="order-details-grid">
+                            <div class="detail-item full-width">
+                                <label>Address:</label>
+                                <span>${escapeHtml(order.delivery_address || 'N/A')}</span>
+                            </div>
+                            ${order.driver_name ? `<div class="detail-item"><label>Driver:</label><span>${escapeHtml(order.driver_name)}</span></div>` : ''}
+                            ${order.doordash_tracking_url ? `<div class="detail-item full-width"><label>Tracking:</label><span><a href="${escapeHtml(order.doordash_tracking_url)}" target="_blank" style="color: #22c55e; text-decoration: underline;">View Tracking</a></span></div>` : ''}
+                        </div>
+                    </div>
+                    
+                    <div class="order-details-section">
+                        <h3>🛒 Order Items</h3>
+                        ${itemsHtml}
+                    </div>
+                    
+                    ${rawData?.note || rawData?.notes || rawData?.customer_note ? `
+                    <div class="order-details-section">
+                        <h3>📝 Notes</h3>
+                        <div class="order-notes">${escapeHtml(rawData.note || rawData.notes || rawData.customer_note)}</div>
+                    </div>
+                    ` : ''}
+                </div>
+                <div class="modal-actions">
+                    <button class="btn-secondary" onclick="closeOrderDetails()">Close</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove existing modal if any
+    const existingModal = document.getElementById('orderDetailsModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Add modal to body
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    // Close on overlay click
+    const modal = document.getElementById('orderDetailsModal');
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeOrderDetails();
+            }
+        });
+    }
+    
+    // Close on Escape key
+    document.addEventListener('keydown', function escapeHandler(e) {
+        if (e.key === 'Escape' && document.getElementById('orderDetailsModal')) {
+            closeOrderDetails();
+            document.removeEventListener('keydown', escapeHandler);
+        }
+    });
+};
+
+// Close order details modal
+window.closeOrderDetails = function() {
+    const modal = document.getElementById('orderDetailsModal');
+    if (modal) {
+        modal.remove();
+    }
+};
 
 // Delete single order
 window.deleteOrder = async function(orderId) {
