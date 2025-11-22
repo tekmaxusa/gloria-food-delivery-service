@@ -1118,6 +1118,208 @@ function displayOrders(orders) {
     }
 }
 
+// Extract delivery address from order data (including raw_data fallback)
+function extractDeliveryAddress(order) {
+    // If delivery_address exists and is not empty, use it
+    if (order.delivery_address && order.delivery_address.trim() && order.delivery_address !== 'N/A') {
+        return order.delivery_address;
+    }
+    
+    // Try to extract from raw_data if available
+    if (order.raw_data) {
+        try {
+            const rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+            
+            // Try root level client_address first (GloriaFood format)
+            if (rawData.client_address && String(rawData.client_address).trim()) {
+                return String(rawData.client_address).trim();
+            }
+            
+            // Try client_address_parts (GloriaFood structured format)
+            if (rawData.client_address_parts) {
+                const parts = rawData.client_address_parts;
+                const addressParts = [
+                    parts.street || parts.address_line_1 || parts.address,
+                    parts.more_address || parts.address_line_2 || parts.apt || parts.apartment,
+                    parts.city || parts.locality || parts.town,
+                    parts.state || parts.province || parts.region,
+                    parts.zip || parts.postal_code || parts.postcode,
+                    parts.country || parts.country_code
+                ].filter(Boolean).map(s => String(s).trim());
+                if (addressParts.length > 0) {
+                    return addressParts.join(', ');
+                }
+            }
+            
+            // Try delivery.address object
+            if (rawData.delivery?.address) {
+                const addr = rawData.delivery.address;
+                const addressParts = [
+                    addr.street || addr.address_line_1 || addr.address || addr.line1 || addr.line_1 || addr.street_address,
+                    addr.address_line_2 || addr.line2 || addr.line_2 || addr.apt || addr.apartment || addr.unit,
+                    addr.city || addr.locality || addr.town,
+                    addr.state || addr.province || addr.region || addr.state_province,
+                    addr.zip || addr.postal_code || addr.postcode || addr.zip_code || addr.postal,
+                    addr.country || addr.country_code
+                ].filter(Boolean).map(s => String(s).trim());
+                if (addressParts.length > 0) {
+                    return addressParts.join(', ');
+                }
+                // Try full_address field
+                if (addr.full_address && String(addr.full_address).trim()) return String(addr.full_address).trim();
+                if (addr.formatted_address && String(addr.formatted_address).trim()) return String(addr.formatted_address).trim();
+            }
+            
+            // Try delivery object with direct fields
+            if (rawData.delivery) {
+                const addr = rawData.delivery;
+                if (addr.street || addr.city || addr.address || addr.address_line_1) {
+                    const addressParts = [
+                        addr.street || addr.address || addr.address_line_1 || addr.street_address,
+                        addr.address_line_2 || addr.line2 || addr.apt || addr.apartment,
+                        addr.city || addr.town || addr.locality,
+                        addr.state || addr.province || addr.region,
+                        addr.zip || addr.postal_code || addr.postcode || addr.zip_code,
+                        addr.country || addr.country_code
+                    ].filter(Boolean).map(s => String(s).trim());
+                    if (addressParts.length > 0) {
+                        return addressParts.join(', ');
+                    }
+                }
+                if (addr.full_address && String(addr.full_address).trim()) return String(addr.full_address).trim();
+                if (addr.formatted_address && String(addr.formatted_address).trim()) return String(addr.formatted_address).trim();
+            }
+            
+            // Try root level fields
+            if (rawData.delivery_address && String(rawData.delivery_address).trim()) return String(rawData.delivery_address).trim();
+            if (rawData.address && String(rawData.address).trim()) return String(rawData.address).trim();
+            if (rawData.shipping_address && String(rawData.shipping_address).trim()) return String(rawData.shipping_address).trim();
+            
+            // Try nested in order object
+            if (rawData.order?.delivery?.address) {
+                const addr = rawData.order.delivery.address;
+                const addressParts = [
+                    addr.street || addr.address_line_1 || addr.address || addr.line1,
+                    addr.city || addr.locality,
+                    addr.state || addr.province,
+                    addr.zip || addr.postal_code || addr.postcode,
+                    addr.country
+                ].filter(Boolean).map(s => String(s).trim());
+                if (addressParts.length > 0) {
+                    return addressParts.join(', ');
+                }
+            }
+            if (rawData.order?.delivery_address && String(rawData.order.delivery_address).trim()) return String(rawData.order.delivery_address).trim();
+        } catch (e) {
+            console.warn('Error parsing raw_data for delivery address:', e);
+        }
+    }
+    
+    return order.delivery_address || 'N/A';
+}
+
+// Extract time information from order data
+function extractTime(order, fieldName) {
+    // Try direct field first
+    if (order[fieldName]) {
+        return order[fieldName];
+    }
+    
+    // Try to extract from raw_data
+    if (order.raw_data) {
+        try {
+            const rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+            
+            // Try various field name variations
+            const candidates = [
+                rawData[fieldName],
+                rawData[fieldName.replace(/_/g, '')],
+                rawData[fieldName.replace(/_/g, '-')],
+                rawData[fieldName.charAt(0).toUpperCase() + fieldName.slice(1)],
+                rawData.delivery?.[fieldName],
+                rawData.delivery?.[fieldName.replace(/_/g, '')],
+                rawData.order?.[fieldName],
+                rawData.order?.delivery?.[fieldName]
+            ];
+            
+            for (const candidate of candidates) {
+                if (candidate) {
+                    return candidate;
+                }
+            }
+        } catch (e) {
+            console.warn(`Error parsing raw_data for ${fieldName}:`, e);
+        }
+    }
+    
+    return null;
+}
+
+// Extract distance from order data
+function extractDistance(order) {
+    if (order.distance) {
+        return order.distance;
+    }
+    
+    if (order.raw_data) {
+        try {
+            const rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+            
+            const candidates = [
+                rawData.distance,
+                rawData.delivery?.distance,
+                rawData.delivery?.distance_km,
+                rawData.delivery?.distance_miles,
+                rawData.order?.distance,
+                rawData.order?.delivery?.distance
+            ];
+            
+            for (const candidate of candidates) {
+                if (candidate !== null && candidate !== undefined) {
+                    return candidate;
+                }
+            }
+        } catch (e) {
+            console.warn('Error parsing raw_data for distance:', e);
+        }
+    }
+    
+    return null;
+}
+
+// Extract driver name from order data
+function extractDriverName(order) {
+    if (order.driver_name) {
+        return order.driver_name;
+    }
+    
+    if (order.raw_data) {
+        try {
+            const rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+            
+            const candidates = [
+                rawData.driver_name,
+                rawData.driver?.name,
+                rawData.driver?.full_name,
+                rawData.delivery?.driver_name,
+                rawData.delivery?.driver?.name,
+                rawData.order?.driver_name,
+                rawData.order?.driver?.name
+            ];
+            
+            for (const candidate of candidates) {
+                if (candidate && String(candidate).trim()) {
+                    return String(candidate).trim();
+                }
+            }
+        } catch (e) {
+            console.warn('Error parsing raw_data for driver name:', e);
+        }
+    }
+    
+    return null;
+}
+
 // Extract customer name from order data (including raw_data fallback)
 function extractCustomerName(order) {
     // If customer_name exists and is not "Unknown", use it
@@ -1184,16 +1386,43 @@ function createOrderRow(order) {
     const orderId = order.gloriafood_order_id || order.id || 'N/A';
     const status = (order.status || 'UNKNOWN').toUpperCase();
     const customerName = escapeHtml(extractCustomerName(order));
-    const customerAddress = escapeHtml(order.delivery_address || 'N/A');
+    const customerAddress = escapeHtml(extractDeliveryAddress(order));
     const amount = formatCurrency(order.total_price || 0, order.currency || 'USD');
     const orderPlaced = formatDate(order.fetched_at || order.created_at || order.updated_at);
-    const pickupTime = order.pickup_time ? formatDate(order.pickup_time) : 'N/A';
-    const deliveryTime = order.delivery_time ? formatDate(order.delivery_time) : 'N/A';
-    const readyForPickup = order.ready_for_pickup ? formatDate(order.ready_for_pickup) : 'N/A';
-    const driver = order.driver_name || 'N/A';
-    const tracking = order.doordash_tracking_url 
-        ? `<a href="${escapeHtml(order.doordash_tracking_url)}" target="_blank" style="color: #22c55e; text-decoration: underline;">Track</a>`
-        : 'N/A';
+    
+    // Extract times from raw_data if not in main order object
+    const pickupTimeValue = extractTime(order, 'pickup_time') || order.pickup_time;
+    const pickupTime = pickupTimeValue ? formatDate(pickupTimeValue) : 'N/A';
+    
+    const deliveryTimeValue = extractTime(order, 'delivery_time') || order.delivery_time;
+    const deliveryTime = deliveryTimeValue ? formatDate(deliveryTimeValue) : 'N/A';
+    
+    const readyForPickupValue = extractTime(order, 'ready_for_pickup') || order.ready_for_pickup;
+    const readyForPickup = readyForPickupValue ? formatDate(readyForPickupValue) : 'N/A';
+    
+    // Extract distance
+    const distanceValue = extractDistance(order);
+    const distance = distanceValue ? `${distanceValue} km` : 'N/A';
+    
+    // Extract driver
+    const driverValue = extractDriverName(order);
+    const driver = driverValue ? escapeHtml(driverValue) : 'N/A';
+    
+    // Extract tracking URL
+    let tracking = 'N/A';
+    if (order.doordash_tracking_url) {
+        tracking = `<a href="${escapeHtml(order.doordash_tracking_url)}" target="_blank" style="color: #22c55e; text-decoration: underline;">Track</a>`;
+    } else if (order.raw_data) {
+        try {
+            const rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+            const trackingUrl = rawData.tracking_url || rawData.tracking_link || rawData.delivery?.tracking_url || rawData.order?.tracking_url;
+            if (trackingUrl) {
+                tracking = `<a href="${escapeHtml(trackingUrl)}" target="_blank" style="color: #22c55e; text-decoration: underline;">Track</a>`;
+            }
+        } catch (e) {
+            console.warn('Error parsing raw_data for tracking URL:', e);
+        }
+    }
     
     return `
         <tr data-order-id="${escapeHtml(String(orderId))}">
@@ -1204,7 +1433,7 @@ function createOrderRow(order) {
             <td>${customerName}</td>
             <td>${customerAddress}</td>
             <td>${amount}</td>
-            <td>${order.distance ? order.distance + ' km' : 'N/A'}</td>
+            <td>${distance}</td>
             <td>${orderPlaced}</td>
             <td>${pickupTime}</td>
             <td>${deliveryTime}</td>
@@ -1454,6 +1683,33 @@ window.showOrderDetails = function(orderId) {
     const customerPhone = order.customer_phone || rawData?.client_phone || rawData?.client?.phone || rawData?.customer?.phone || 'N/A';
     const customerEmail = order.customer_email || rawData?.client_email || rawData?.client?.email || rawData?.customer?.email || 'N/A';
     
+    // Extract delivery address
+    const deliveryAddress = extractDeliveryAddress(order);
+    
+    // Extract times
+    const pickupTimeValue = extractTime(order, 'pickup_time') || order.pickup_time;
+    const pickupTime = pickupTimeValue ? formatDate(pickupTimeValue) : 'N/A';
+    
+    const deliveryTimeValue = extractTime(order, 'delivery_time') || order.delivery_time;
+    const deliveryTime = deliveryTimeValue ? formatDate(deliveryTimeValue) : 'N/A';
+    
+    const readyForPickupValue = extractTime(order, 'ready_for_pickup') || order.ready_for_pickup;
+    const readyForPickup = readyForPickupValue ? formatDate(readyForPickupValue) : 'N/A';
+    
+    // Extract distance
+    const distanceValue = extractDistance(order);
+    const distance = distanceValue ? `${distanceValue} km` : 'N/A';
+    
+    // Extract driver
+    const driverValue = extractDriverName(order);
+    const driver = driverValue || 'N/A';
+    
+    // Extract tracking URL
+    let trackingUrl = order.doordash_tracking_url;
+    if (!trackingUrl && rawData) {
+        trackingUrl = rawData.tracking_url || rawData.tracking_link || rawData.delivery?.tracking_url || rawData.order?.tracking_url;
+    }
+    
     // Build items HTML
     let itemsHtml = '<div class="order-items-list">';
     if (items && items.length > 0) {
@@ -1519,9 +1775,22 @@ window.showOrderDetails = function(orderId) {
                                 <label>Order Placed:</label>
                                 <span>${formatDate(order.fetched_at || order.created_at || order.updated_at)}</span>
                             </div>
-                            ${order.pickup_time ? `<div class="detail-item"><label>Pickup Time:</label><span>${formatDate(order.pickup_time)}</span></div>` : ''}
-                            ${order.delivery_time ? `<div class="detail-item"><label>Delivery Time:</label><span>${formatDate(order.delivery_time)}</span></div>` : ''}
-                            ${order.ready_for_pickup ? `<div class="detail-item"><label>Ready for Pickup:</label><span>${formatDate(order.ready_for_pickup)}</span></div>` : ''}
+                            <div class="detail-item">
+                                <label>Pickup Time:</label>
+                                <span>${pickupTime}</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Delivery Time:</label>
+                                <span>${deliveryTime}</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Ready for Pickup:</label>
+                                <span>${readyForPickup}</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Distance:</label>
+                                <span>${distance}</span>
+                            </div>
                             ${rawData?.order_number ? `<div class="detail-item"><label>Order Number:</label><span>${escapeHtml(rawData.order_number)}</span></div>` : ''}
                             ${rawData?.payment_method ? `<div class="detail-item"><label>Payment Method:</label><span>${escapeHtml(rawData.payment_method)}</span></div>` : ''}
                         </div>
@@ -1550,10 +1819,17 @@ window.showOrderDetails = function(orderId) {
                         <div class="order-details-grid">
                             <div class="detail-item full-width">
                                 <label>Address:</label>
-                                <span>${escapeHtml(order.delivery_address || 'N/A')}</span>
+                                <span>${escapeHtml(deliveryAddress)}</span>
                             </div>
-                            ${order.driver_name ? `<div class="detail-item"><label>Driver:</label><span>${escapeHtml(order.driver_name)}</span></div>` : ''}
-                            ${order.doordash_tracking_url ? `<div class="detail-item full-width"><label>Tracking:</label><span><a href="${escapeHtml(order.doordash_tracking_url)}" target="_blank" style="color: #22c55e; text-decoration: underline;">View Tracking</a></span></div>` : ''}
+                            <div class="detail-item">
+                                <label>Driver:</label>
+                                <span>${escapeHtml(driver)}</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Distance:</label>
+                                <span>${distance}</span>
+                            </div>
+                            ${trackingUrl ? `<div class="detail-item full-width"><label>Tracking:</label><span><a href="${escapeHtml(trackingUrl)}" target="_blank" style="color: #22c55e; text-decoration: underline;">View Tracking</a></span></div>` : ''}
                         </div>
                     </div>
                     
