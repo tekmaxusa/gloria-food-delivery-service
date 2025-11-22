@@ -1206,12 +1206,17 @@ function startAutoRefresh() {
         clearInterval(autoRefreshInterval);
     }
     
+    console.log('🔄 Starting auto-refresh (every', REFRESH_INTERVAL / 1000, 'seconds)');
+    
     autoRefreshInterval = setInterval(() => {
-        if (sessionId) {
+        if (sessionId || window.location.pathname === '/') {
+            // Load orders even if not logged in (for public access)
             loadOrders();
-            loadDashboardData();
-            loadDrivers();
-            loadReviews();
+            if (sessionId) {
+                loadDashboardData();
+                loadDrivers();
+                loadReviews();
+            }
         }
     }, REFRESH_INTERVAL);
 }

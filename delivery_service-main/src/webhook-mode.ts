@@ -702,6 +702,11 @@ class GloriaFoodWebhookServer {
       console.log(chalk.gray(`   Body Keys: ${req.body ? Object.keys(req.body).join(', ') : 'N/A'}`));
       console.log(chalk.gray(`   Query Params: ${Object.keys(req.query).length > 0 ? Object.keys(req.query).join(', ') : 'None'}`));
       
+      // ALWAYS log the full body for debugging
+      console.log(chalk.yellow('\n📦 FULL WEBHOOK BODY:'));
+      console.log(chalk.gray(JSON.stringify(req.body, null, 2)));
+      console.log(chalk.yellow('📦 END OF BODY\n'));
+      
       try {
         // Validate authentication if master key is provided
         // Note: Some webhook providers may not send authentication, so we make it optional
@@ -781,9 +786,20 @@ class GloriaFoodWebhookServer {
         const existingBefore = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId.toString()));
 
         // Store order in database (handle both sync SQLite and async MySQL)
-        console.log(chalk.blue(`💾 Saving order to database...`));
+        console.log(chalk.blue(`\n💾 Saving order to database...`));
+        console.log(chalk.gray(`   Order ID: ${orderId}`));
+        console.log(chalk.gray(`   Customer: ${orderData.customer_name || orderData.client_name || 'N/A'}`));
+        console.log(chalk.gray(`   Amount: ${orderData.total_price || orderData.total || 'N/A'}`));
+        
         const savedOrder = await this.handleAsync(this.database.insertOrUpdateOrder(orderData));
-        console.log(chalk.blue(`💾 Database save result: ${savedOrder ? 'SUCCESS' : 'FAILED'}`));
+        
+        if (savedOrder) {
+          console.log(chalk.green(`✅ Database save result: SUCCESS`));
+          console.log(chalk.green(`   Saved Order ID: ${savedOrder.gloriafood_order_id || savedOrder.id}`));
+        } else {
+          console.error(chalk.red(`❌ Database save result: FAILED`));
+          console.error(chalk.red(`   Order was NOT saved to database!`));
+        }
 
         if (savedOrder) {
           const isNew = !existingBefore;
