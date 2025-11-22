@@ -275,7 +275,8 @@ class GloriaFoodWebhookServer {
         console.error(chalk.yellow(`   2. Verify DOORDASH_KEY_ID was created by the same Developer ID`));
         console.error(chalk.yellow(`   3. Verify DOORDASH_SIGNING_SECRET matches the secret for the Key ID`));
         console.error(chalk.yellow(`   4. Check DoorDash Developer Portal: https://developer.doordash.com/`));
-        console.error(chalk.yellow(`   5. Ensure you're using the correct environment (sandbox vs production)\n`));
+        console.error(chalk.yellow(`   5. Ensure you're using the correct environment (sandbox vs production)`));
+        console.error(chalk.yellow(`   6. See DOORDASH_TROUBLESHOOTING.md for detailed step-by-step instructions\n`));
       }
       
       if (error.stack) {

@@ -55,6 +55,12 @@ DOORDASH_MERCHANT_ID=your_merchant_id
 DOORDASH_SANDBOX=true
 ```
 
+**⚠️ IMPORTANT for DoorDash:**
+- The `DOORDASH_KEY_ID` MUST be created by the same Developer ID account
+- Copy the COMPLETE Developer ID (no truncation)
+- Each Key ID has its own unique Signing Secret
+- See [DOORDASH_TROUBLESHOOTING.md](./DOORDASH_TROUBLESHOOTING.md) for detailed setup instructions
+
 **OPTIONAL (kung may Email):**
 ```
 SMTP_HOST=smtp.gmail.com

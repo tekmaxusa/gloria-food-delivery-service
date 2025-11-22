@@ -336,16 +336,30 @@ export class DoorDashClient {
         // Provide helpful error messages for common authentication issues
         if (status === 401) {
           if (errorCode === 'authentication_error' || errorMessage.includes('kid') || errorMessage.includes('iss')) {
-            const devIdPreview = this.config.developerId ? `${this.config.developerId.substring(0, 8)}...` : 'NOT SET';
-            const keyIdPreview = this.config.keyId ? `${this.config.keyId.substring(0, 8)}...` : 'NOT SET';
+            const devId = this.config.developerId || 'NOT SET';
+            const keyId = this.config.keyId || 'NOT SET';
+            // Show more of the Developer ID to help detect truncation issues
+            const devIdPreview = devId !== 'NOT SET' ? (devId.length > 20 ? `${devId.substring(0, 20)}...` : devId) : 'NOT SET';
+            const keyIdPreview = keyId !== 'NOT SET' ? (keyId.length > 20 ? `${keyId.substring(0, 20)}...` : keyId) : 'NOT SET';
+            
             throw new Error(
               `DoorDash Authentication Error (401): ${errorMessage}\n` +
+              `\n` +
               `  This usually means the Key ID (kid) doesn't belong to the Developer ID (iss).\n` +
-              `  Verify in DoorDash Developer Portal:\n` +
-              `  - Developer ID: ${devIdPreview}\n` +
-              `  - Key ID: ${keyIdPreview}\n` +
-              `  - Ensure the Key ID was created by the Developer ID account\n` +
-              `  - Check that DOORDASH_SIGNING_SECRET matches the secret for this Key ID\n` +
+              `\n` +
+              `  Current Configuration:\n` +
+              `  - Developer ID: ${devIdPreview} (length: ${devId !== 'NOT SET' ? devId.length : 0} chars)\n` +
+              `  - Key ID: ${keyIdPreview} (length: ${keyId !== 'NOT SET' ? keyId.length : 0} chars)\n` +
+              `\n` +
+              `  Steps to Fix:\n` +
+              `  1. Go to https://developer.doordash.com/\n` +
+              `  2. Verify your Developer ID matches exactly (check for truncation)\n` +
+              `  3. Ensure the Key ID was created by the Developer ID account\n` +
+              `  4. Verify DOORDASH_SIGNING_SECRET matches the secret for this Key ID\n` +
+              `  5. Update environment variables in Render and redeploy\n` +
+              `\n` +
+              `  See DOORDASH_TROUBLESHOOTING.md for detailed instructions.\n` +
+              `\n` +
               `  Raw API response: ${JSON.stringify(errorData)}`
             );
           }
