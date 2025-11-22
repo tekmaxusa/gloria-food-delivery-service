@@ -427,6 +427,7 @@ function showOrdersPage() {
                         </svg>
                         <input type="text" id="searchInput" placeholder="Search" class="search-input">
                     </div>
+                    <button class="btn-danger" id="deleteSelectedBtn" style="display: none;">🗑️ Delete Selected</button>
                     <button class="btn-primary" id="newOrderBtn">+ New order</button>
                 </div>
             </div>
@@ -451,10 +452,11 @@ function showOrdersPage() {
                         <th>Driver</th>
                         <th>Status</th>
                         <th>Tracking</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody id="ordersTableBody">
-                    <tr><td colspan="13" class="empty-state-cell"><div class="empty-state"><div class="empty-state-text">Loading...</div></div></td></tr>
+                    <tr><td colspan="14" class="empty-state-cell"><div class="empty-state"><div class="empty-state-text">Loading...</div></div></td></tr>
                 </tbody>
             </table>
         </div>
@@ -492,7 +494,21 @@ function initializeOrdersPage() {
         selectAllCheckbox.addEventListener('change', (e) => {
             const checkboxes = document.querySelectorAll('.order-checkbox');
             checkboxes.forEach(cb => cb.checked = e.target.checked);
+            updateDeleteSelectedButton();
         });
+    }
+    
+    // Setup individual checkboxes to update delete button visibility
+    document.addEventListener('change', (e) => {
+        if (e.target.classList.contains('order-checkbox')) {
+            updateDeleteSelectedButton();
+        }
+    });
+    
+    // Delete selected button
+    const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
+    if (deleteSelectedBtn) {
+        deleteSelectedBtn.addEventListener('click', handleDeleteSelected);
     }
     
     // New order button
@@ -1062,7 +1078,7 @@ function displayOrders(orders) {
     if (!orders || orders.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="13" class="empty-state-cell">
+                <td colspan="14" class="empty-state-cell">
                     <div class="empty-state">
                         <div class="empty-state-icon">
                             <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -1079,23 +1095,26 @@ function displayOrders(orders) {
                 </td>
             </tr>
         `;
+        updateDeleteSelectedButton();
         return;
     }
     
     try {
         const rows = orders.map(order => createOrderRow(order)).join('');
         tbody.innerHTML = rows;
+        updateDeleteSelectedButton();
     } catch (error) {
         console.error('Error displaying orders:', error);
         tbody.innerHTML = `
             <tr>
-                <td colspan="13" class="empty-state-cell">
+                <td colspan="14" class="empty-state-cell">
                     <div class="empty-state">
                         <div class="empty-state-text">Error displaying orders: ${error.message}</div>
                     </div>
                 </td>
             </tr>
         `;
+        updateDeleteSelectedButton();
     }
 }
 
@@ -1193,6 +1212,14 @@ function createOrderRow(order) {
             <td>${escapeHtml(driver)}</td>
             <td><span class="status-badge status-${status}">${escapeHtml(status)}</span></td>
             <td>${tracking}</td>
+            <td>
+                <button class="btn-icon btn-delete" onclick="deleteOrder('${escapeHtml(String(orderId))}')" title="Delete order">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                </button>
+            </td>
         </tr>
     `;
 }
@@ -1364,6 +1391,120 @@ window.checkDatabaseStatus = async function() {
         alert('Error checking database. See console for details.');
     }
 };
+
+// Update delete selected button visibility
+function updateDeleteSelectedButton() {
+    const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
+    if (!deleteSelectedBtn) return;
+    
+    const checkedBoxes = document.querySelectorAll('.order-checkbox:checked');
+    if (checkedBoxes.length > 0) {
+        deleteSelectedBtn.style.display = 'inline-block';
+        deleteSelectedBtn.textContent = `🗑️ Delete Selected (${checkedBoxes.length})`;
+    } else {
+        deleteSelectedBtn.style.display = 'none';
+    }
+}
+
+// Delete single order
+window.deleteOrder = async function(orderId) {
+    if (!confirm(`Are you sure you want to delete order #${orderId}?`)) {
+        return;
+    }
+    
+    try {
+        const headers = {};
+        if (sessionId) {
+            headers['x-session-id'] = sessionId;
+        }
+        
+        const response = await fetch(`${API_BASE}/orders/${orderId}`, {
+            method: 'DELETE',
+            headers
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            showNotification('Success', `Order #${orderId} deleted successfully`);
+            // Remove the row from the table
+            const row = document.querySelector(`tr[data-order-id="${orderId}"]`);
+            if (row) {
+                row.remove();
+            }
+            // Remove from allOrders array
+            allOrders = allOrders.filter(o => (o.gloriafood_order_id || o.id) !== orderId);
+            updateDeleteSelectedButton();
+            // Reload orders to refresh the list
+            loadOrders();
+        } else {
+            showNotification('Error', data.error || 'Failed to delete order', true);
+        }
+    } catch (error) {
+        console.error('Error deleting order:', error);
+        showNotification('Error', 'Failed to delete order: ' + error.message, true);
+    }
+};
+
+// Delete selected orders
+async function handleDeleteSelected() {
+    const checkedBoxes = document.querySelectorAll('.order-checkbox:checked');
+    if (checkedBoxes.length === 0) {
+        showNotification('Info', 'Please select at least one order to delete');
+        return;
+    }
+    
+    const orderIds = Array.from(checkedBoxes).map(cb => cb.value);
+    const count = orderIds.length;
+    
+    if (!confirm(`Are you sure you want to delete ${count} order(s)? This action cannot be undone.`)) {
+        return;
+    }
+    
+    try {
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+        if (sessionId) {
+            headers['x-session-id'] = sessionId;
+        }
+        
+        const response = await fetch(`${API_BASE}/orders`, {
+            method: 'DELETE',
+            headers,
+            body: JSON.stringify({ orderIds })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            showNotification('Success', `Deleted ${data.deletedCount || count} order(s) successfully`);
+            // Remove selected rows from the table
+            checkedBoxes.forEach(cb => {
+                const orderId = cb.value;
+                const row = document.querySelector(`tr[data-order-id="${orderId}"]`);
+                if (row) {
+                    row.remove();
+                }
+                // Remove from allOrders array
+                allOrders = allOrders.filter(o => (o.gloriafood_order_id || o.id) !== orderId);
+            });
+            // Uncheck select all
+            const selectAllCheckbox = document.querySelector('.select-all-checkbox');
+            if (selectAllCheckbox) {
+                selectAllCheckbox.checked = false;
+            }
+            updateDeleteSelectedButton();
+            // Reload orders to refresh the list
+            loadOrders();
+        } else {
+            showNotification('Error', data.error || 'Failed to delete orders', true);
+        }
+    } catch (error) {
+        console.error('Error deleting orders:', error);
+        showNotification('Error', 'Failed to delete orders: ' + error.message, true);
+    }
+}
 
 // Make it available globally
 console.log('💡 Tip: Run checkDatabaseStatus() in console to debug database connection');

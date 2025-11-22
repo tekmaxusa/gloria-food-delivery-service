@@ -384,6 +384,41 @@ export class OrderDatabasePostgreSQL {
     }
   }
 
+  async deleteOrder(gloriafoodOrderId: string): Promise<boolean> {
+    try {
+      const client = await this.pool.connect();
+      const result = await client.query(
+        'DELETE FROM orders WHERE gloriafood_order_id = $1',
+        [gloriafoodOrderId]
+      );
+      client.release();
+      return (result.rowCount || 0) > 0;
+    } catch (error) {
+      console.error('Error deleting order:', error);
+      return false;
+    }
+  }
+
+  async deleteOrders(gloriafoodOrderIds: string[]): Promise<number> {
+    try {
+      if (!gloriafoodOrderIds || gloriafoodOrderIds.length === 0) {
+        return 0;
+      }
+      
+      const client = await this.pool.connect();
+      const placeholders = gloriafoodOrderIds.map((_, i) => `$${i + 1}`).join(',');
+      const result = await client.query(
+        `DELETE FROM orders WHERE gloriafood_order_id IN (${placeholders})`,
+        gloriafoodOrderIds
+      );
+      client.release();
+      return result.rowCount || 0;
+    } catch (error) {
+      console.error('Error deleting orders:', error);
+      return 0;
+    }
+  }
+
   async getAllOrders(limit: number = 50): Promise<Order[]> {
     try {
       const client = await this.pool.connect();

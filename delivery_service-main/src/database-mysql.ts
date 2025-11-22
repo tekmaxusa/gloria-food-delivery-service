@@ -444,6 +444,43 @@ export class OrderDatabaseMySQL {
     }
   }
 
+  async deleteOrder(gloriafoodOrderId: string): Promise<boolean> {
+    try {
+      const connection = await this.pool.getConnection();
+      const [result] = await connection.query(
+        'DELETE FROM orders WHERE gloriafood_order_id = ?',
+        [gloriafoodOrderId]
+      ) as [any, any];
+      
+      connection.release();
+      return (result.affectedRows || 0) > 0;
+    } catch (error) {
+      console.error('Error deleting order:', error);
+      return false;
+    }
+  }
+
+  async deleteOrders(gloriafoodOrderIds: string[]): Promise<number> {
+    try {
+      if (!gloriafoodOrderIds || gloriafoodOrderIds.length === 0) {
+        return 0;
+      }
+      
+      const connection = await this.pool.getConnection();
+      const placeholders = gloriafoodOrderIds.map(() => '?').join(',');
+      const [result] = await connection.query(
+        `DELETE FROM orders WHERE gloriafood_order_id IN (${placeholders})`,
+        gloriafoodOrderIds
+      ) as [any, any];
+      
+      connection.release();
+      return result.affectedRows || 0;
+    } catch (error) {
+      console.error('Error deleting orders:', error);
+      return 0;
+    }
+  }
+
   async getAllOrders(limit: number = 50): Promise<Order[]> {
     try {
       const connection = await this.pool.getConnection();

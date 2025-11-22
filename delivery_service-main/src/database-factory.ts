@@ -24,6 +24,8 @@ export interface IDatabase {
   getRecentOrders(minutes: number): Promise<Order[]> | Order[];
   getOrdersByStatus(status: string): Promise<Order[]> | Order[];
   getOrderCount(): Promise<number> | number;
+  deleteOrder(gloriafoodOrderId: string): Promise<boolean> | boolean;
+  deleteOrders(gloriafoodOrderIds: string[]): Promise<number> | number;
   // User authentication methods
   createUser(email: string, password: string, fullName: string): Promise<User | null> | User | null;
  getUserByEmail(email: string): Promise<User | null> | User | null;

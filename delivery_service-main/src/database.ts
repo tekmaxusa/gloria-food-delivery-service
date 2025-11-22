@@ -280,6 +280,33 @@ export class OrderDatabase {
     return stmt.get(orderId) as Order | null;
   }
 
+  deleteOrder(gloriafoodOrderId: string): boolean {
+    try {
+      const stmt = this.db.prepare('DELETE FROM orders WHERE gloriafood_order_id = ?');
+      const result = stmt.run(gloriafoodOrderId);
+      return (result.changes || 0) > 0;
+    } catch (error) {
+      console.error('Error deleting order:', error);
+      return false;
+    }
+  }
+
+  deleteOrders(gloriafoodOrderIds: string[]): number {
+    try {
+      if (!gloriafoodOrderIds || gloriafoodOrderIds.length === 0) {
+        return 0;
+      }
+      
+      const placeholders = gloriafoodOrderIds.map(() => '?').join(',');
+      const stmt = this.db.prepare(`DELETE FROM orders WHERE gloriafood_order_id IN (${placeholders})`);
+      const result = stmt.run(...gloriafoodOrderIds);
+      return result.changes || 0;
+    } catch (error) {
+      console.error('Error deleting orders:', error);
+      return 0;
+    }
+  }
+
   getAllOrders(limit: number = 50): Order[] {
     const stmt = this.db.prepare('SELECT * FROM orders ORDER BY fetched_at DESC LIMIT ?');
     return stmt.all(limit) as Order[];

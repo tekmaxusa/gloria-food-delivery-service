@@ -82,6 +82,8 @@ class GloriaFoodWebhookServer {
         getRecentOrders: () => [],
         getOrdersByStatus: () => [],
         getOrderCount: () => 0,
+        deleteOrder: () => false,
+        deleteOrders: () => 0,
         createUser: () => null,
         getUserByEmail: () => null,
         verifyPassword: () => null,
@@ -1031,6 +1033,42 @@ class GloriaFoodWebhookServer {
         });
       } catch (error: any) {
         res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Delete single order endpoint
+    this.app.delete('/orders/:orderId', async (req: Request, res: Response) => {
+      try {
+        const orderId = req.params.orderId;
+        const deleted = await this.handleAsync(this.database.deleteOrder(orderId));
+        
+        if (deleted) {
+          res.json({ success: true, message: `Order ${orderId} deleted successfully` });
+        } else {
+          res.status(404).json({ success: false, error: 'Order not found' });
+        }
+      } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    // Delete multiple orders endpoint
+    this.app.delete('/orders', async (req: Request, res: Response) => {
+      try {
+        const { orderIds } = req.body;
+        
+        if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
+          return res.status(400).json({ success: false, error: 'orderIds array is required' });
+        }
+        
+        const deletedCount = await this.handleAsync(this.database.deleteOrders(orderIds));
+        res.json({ 
+          success: true, 
+          message: `Deleted ${deletedCount} order(s)`,
+          deletedCount 
+        });
+      } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
       }
     });
 
