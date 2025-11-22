@@ -396,7 +396,7 @@ function displayRecentOrders(orders) {
     tbody.innerHTML = orders.map(order => `
         <tr>
             <td><strong>#${order.gloriafood_order_id || order.id || 'N/A'}</strong></td>
-            <td>${escapeHtml(order.customer_name || 'N/A')}</td>
+            <td>${escapeHtml(extractCustomerName(order))}</td>
             <td>${escapeHtml(order.delivery_address || 'N/A')}</td>
             <td>${formatCurrency(order.total_price || 0, order.currency || 'USD')}</td>
             <td><span class="status-badge status-${(order.status || 'UNKNOWN').toUpperCase()}">${escapeHtml(order.status || 'UNKNOWN')}</span></td>
@@ -1099,13 +1099,72 @@ function displayOrders(orders) {
     }
 }
 
+// Extract customer name from order data (including raw_data fallback)
+function extractCustomerName(order) {
+    // If customer_name exists and is not "Unknown", use it
+    if (order.customer_name && order.customer_name !== 'Unknown' && order.customer_name.trim()) {
+        return order.customer_name;
+    }
+    
+    // Try to extract from raw_data if available
+    if (order.raw_data) {
+        try {
+            const rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+            
+            // Try root level client_* fields first (GloriaFood format)
+            if (rawData.client_first_name || rawData.client_last_name) {
+                const name = `${rawData.client_first_name || ''} ${rawData.client_last_name || ''}`.trim();
+                if (name) return name;
+            }
+            if (rawData.client_name && String(rawData.client_name).trim()) return String(rawData.client_name).trim();
+            
+            // Try client object
+            if (rawData.client) {
+                if (rawData.client.first_name || rawData.client.last_name) {
+                    const name = `${rawData.client.first_name || ''} ${rawData.client.last_name || ''}`.trim();
+                    if (name) return name;
+                }
+                if (rawData.client.name) return String(rawData.client.name);
+                if (rawData.client.full_name) return String(rawData.client.full_name);
+            }
+            
+            // Try customer object
+            if (rawData.customer) {
+                if (rawData.customer.name) return String(rawData.customer.name);
+                if (rawData.customer.first_name || rawData.customer.last_name) {
+                    const name = `${rawData.customer.first_name || ''} ${rawData.customer.last_name || ''}`.trim();
+                    if (name) return name;
+                }
+                if (rawData.customer.full_name) return String(rawData.customer.full_name);
+            }
+            
+            // Try root level fields
+            if (rawData.customer_name && String(rawData.customer_name).trim()) return String(rawData.customer_name).trim();
+            if (rawData.name && String(rawData.name).trim()) return String(rawData.name).trim();
+            
+            // Try nested in order object
+            if (rawData.order?.client?.first_name || rawData.order?.client?.last_name) {
+                const name = `${rawData.order.client.first_name || ''} ${rawData.order.client.last_name || ''}`.trim();
+                if (name) return name;
+            }
+            if (rawData.order?.customer?.name) return String(rawData.order.customer.name);
+            if (rawData.order?.customer_name) return String(rawData.order.customer_name);
+        } catch (e) {
+            console.warn('Error parsing raw_data for customer name:', e);
+        }
+    }
+    
+    // Fallback to stored value or N/A
+    return order.customer_name && order.customer_name !== 'Unknown' ? order.customer_name : 'N/A';
+}
+
 // Create order table row
 function createOrderRow(order) {
     if (!order) return '';
     
     const orderId = order.gloriafood_order_id || order.id || 'N/A';
     const status = (order.status || 'UNKNOWN').toUpperCase();
-    const customerName = escapeHtml(order.customer_name || 'N/A');
+    const customerName = escapeHtml(extractCustomerName(order));
     const customerAddress = escapeHtml(order.delivery_address || 'N/A');
     const amount = formatCurrency(order.total_price || 0, order.currency || 'USD');
     const orderPlaced = formatDate(order.fetched_at || order.created_at || order.updated_at);
@@ -1151,8 +1210,9 @@ function checkForNewOrders(orders) {
     if (newOrders.length > 0) {
         newOrders.forEach(order => {
             const orderId = order.gloriafood_order_id || order.id;
+            const customerName = extractCustomerName(order);
             showNotification(`New Order #${orderId}`, 
-                `${order.customer_name || 'Customer'} - ${formatCurrency(order.total_price || 0, order.currency || 'USD')}`);
+                `${customerName !== 'N/A' ? customerName : 'Customer'} - ${formatCurrency(order.total_price || 0, order.currency || 'USD')}`);
             
             showBrowserNotification(order);
         });
@@ -1185,8 +1245,9 @@ function showNotification(title, message, isError = false) {
 function showBrowserNotification(order) {
     if ('Notification' in window && Notification.permission === 'granted') {
         const orderId = order.gloriafood_order_id || order.id;
+        const customerName = extractCustomerName(order);
         new Notification(`New Order #${orderId}`, {
-            body: `${order.customer_name || 'Customer'} - ${formatCurrency(order.total_price || 0, order.currency || 'USD')}`,
+            body: `${customerName !== 'N/A' ? customerName : 'Customer'} - ${formatCurrency(order.total_price || 0, order.currency || 'USD')}`,
             icon: '🍽️',
             badge: '🍽️',
             tag: `order-${orderId}`,

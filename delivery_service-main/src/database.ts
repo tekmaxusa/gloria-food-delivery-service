@@ -149,28 +149,115 @@ export class OrderDatabase {
   }
 
   private extractCustomerName(orderData: any): string {
-    if (orderData.client?.first_name || orderData.client?.last_name) {
-      return `${orderData.client.first_name || ''} ${orderData.client.last_name || ''}`.trim();
+    // Try root level client_* fields first (GloriaFood format)
+    if (orderData.client_first_name || orderData.client_last_name) {
+      const name = `${orderData.client_first_name || ''} ${orderData.client_last_name || ''}`.trim();
+      if (name) return name;
     }
-    if (orderData.customer?.name) return orderData.customer.name;
-    if (orderData.customer_name) return orderData.customer_name;
+    if (orderData.client_name && String(orderData.client_name).trim()) return String(orderData.client_name).trim();
+    
+    // Try client object (nested format)
+    if (orderData.client) {
+      if (orderData.client.first_name || orderData.client.last_name) {
+        const name = `${orderData.client.first_name || ''} ${orderData.client.last_name || ''}`.trim();
+        if (name) return name;
+      }
+      if (orderData.client.name) return String(orderData.client.name);
+      if (orderData.client.full_name) return String(orderData.client.full_name);
+      if (orderData.client.firstName) return String(orderData.client.firstName);
+      if (orderData.client.lastName) return String(orderData.client.lastName);
+    }
+    
+    // Try customer object
+    if (orderData.customer) {
+      if (orderData.customer.name) return String(orderData.customer.name);
+      if (orderData.customer.first_name || orderData.customer.last_name) {
+        const name = `${orderData.customer.first_name || ''} ${orderData.customer.last_name || ''}`.trim();
+        if (name) return name;
+      }
+      if (orderData.customer.full_name) return String(orderData.customer.full_name);
+      if (orderData.customer.firstName || orderData.customer.lastName) {
+        const name = `${orderData.customer.firstName || ''} ${orderData.customer.lastName || ''}`.trim();
+        if (name) return name;
+      }
+    }
+    
+    // Try root level fields (check for string and not empty)
+    if (orderData.customer_name && String(orderData.customer_name).trim()) return String(orderData.customer_name).trim();
+    if (orderData.name && String(orderData.name).trim()) return String(orderData.name).trim();
+    if (orderData.first_name || orderData.last_name) {
+      const name = `${orderData.first_name || ''} ${orderData.last_name || ''}`.trim();
+      if (name) return name;
+    }
+    
+    // Try nested in order object (if webhook structure wraps it)
+    if (orderData.order?.client?.first_name || orderData.order?.client?.last_name) {
+      const name = `${orderData.order.client.first_name || ''} ${orderData.order.client.last_name || ''}`.trim();
+      if (name) return name;
+    }
+    if (orderData.order?.customer?.name) return String(orderData.order.customer.name);
+    if (orderData.order?.customer_name) return String(orderData.order.customer_name);
+    if (orderData.order?.client?.name) return String(orderData.order.client.name);
+    
     return 'Unknown';
   }
 
   private extractCustomerPhone(orderData: any): string {
-    return orderData.client?.phone ||
-           orderData.customer?.phone ||
-           orderData.customer_phone ||
-           orderData.phone ||
-           '';
+    // Try root level client_* fields first (GloriaFood format)
+    if (orderData.client_phone && String(orderData.client_phone).trim()) return String(orderData.client_phone).trim();
+    if (orderData.client_phone_number && String(orderData.client_phone_number).trim()) return String(orderData.client_phone_number).trim();
+    
+    // Try client object (nested format)
+    if (orderData.client?.phone && String(orderData.client.phone).trim()) return String(orderData.client.phone).trim();
+    if (orderData.client?.phone_number && String(orderData.client.phone_number).trim()) return String(orderData.client.phone_number).trim();
+    if (orderData.client?.mobile && String(orderData.client.mobile).trim()) return String(orderData.client.mobile).trim();
+    if (orderData.client?.tel && String(orderData.client.tel).trim()) return String(orderData.client.tel).trim();
+    if (orderData.client?.telephone && String(orderData.client.telephone).trim()) return String(orderData.client.telephone).trim();
+    
+    // Try customer object
+    if (orderData.customer?.phone && String(orderData.customer.phone).trim()) return String(orderData.customer.phone).trim();
+    if (orderData.customer?.phone_number && String(orderData.customer.phone_number).trim()) return String(orderData.customer.phone_number).trim();
+    if (orderData.customer?.mobile && String(orderData.customer.mobile).trim()) return String(orderData.customer.mobile).trim();
+    if (orderData.customer?.tel && String(orderData.customer.tel).trim()) return String(orderData.customer.tel).trim();
+    
+    // Try root level fields
+    if (orderData.customer_phone && String(orderData.customer_phone).trim()) return String(orderData.customer_phone).trim();
+    if (orderData.phone && String(orderData.phone).trim()) return String(orderData.phone).trim();
+    if (orderData.phone_number && String(orderData.phone_number).trim()) return String(orderData.phone_number).trim();
+    if (orderData.mobile && String(orderData.mobile).trim()) return String(orderData.mobile).trim();
+    if (orderData.tel && String(orderData.tel).trim()) return String(orderData.tel).trim();
+    
+    // Try nested in order object
+    if (orderData.order?.client?.phone && String(orderData.order.client.phone).trim()) return String(orderData.order.client.phone).trim();
+    if (orderData.order?.customer?.phone && String(orderData.order.customer.phone).trim()) return String(orderData.order.customer.phone).trim();
+    if (orderData.order?.phone && String(orderData.order.phone).trim()) return String(orderData.order.phone).trim();
+    
+    return '';
   }
 
   private extractCustomerEmail(orderData: any): string {
-    return orderData.client?.email ||
-           orderData.customer?.email ||
-           orderData.customer_email ||
-           orderData.email ||
-           '';
+    // Try root level client_* fields first (GloriaFood format)
+    if (orderData.client_email && String(orderData.client_email).trim()) return String(orderData.client_email).trim();
+    
+    // Try client object (nested format)
+    if (orderData.client?.email && String(orderData.client.email).trim()) return String(orderData.client.email).trim();
+    if (orderData.client?.email_address && String(orderData.client.email_address).trim()) return String(orderData.client.email_address).trim();
+    
+    // Try customer object
+    if (orderData.customer?.email && String(orderData.customer.email).trim()) return String(orderData.customer.email).trim();
+    if (orderData.customer?.email_address && String(orderData.customer.email_address).trim()) return String(orderData.customer.email_address).trim();
+    
+    // Try root level fields
+    if (orderData.customer_email && String(orderData.customer_email).trim()) return String(orderData.customer_email).trim();
+    if (orderData.email && String(orderData.email).trim()) return String(orderData.email).trim();
+    if (orderData.email_address && String(orderData.email_address).trim()) return String(orderData.email_address).trim();
+    
+    // Try nested in order object
+    if (orderData.order?.client?.email && String(orderData.order.client.email).trim()) return String(orderData.order.client.email).trim();
+    if (orderData.order?.customer?.email && String(orderData.order.customer.email).trim()) return String(orderData.order.customer.email).trim();
+    if (orderData.order?.email && String(orderData.order.email).trim()) return String(orderData.order.email).trim();
+    
+    return '';
   }
 
   private extractDeliveryAddress(orderData: any): string {
