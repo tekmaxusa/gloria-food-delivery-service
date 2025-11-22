@@ -103,6 +103,22 @@ export class DoorDashClient {
 
   // Build a short-lived JWT required by DoorDash
   private getJwt(): string {
+    // Validate credentials before building JWT
+    if (!this.config.developerId || !this.config.keyId || !this.config.signingSecret) {
+      throw new Error('Missing DoorDash credentials: developerId, keyId, and signingSecret are required');
+    }
+
+    // Validate credential formats
+    if (this.config.developerId.trim().length === 0) {
+      throw new Error('DOORDASH_DEVELOPER_ID is empty or invalid');
+    }
+    if (this.config.keyId.trim().length === 0) {
+      throw new Error('DOORDASH_KEY_ID is empty or invalid');
+    }
+    if (this.config.signingSecret.trim().length === 0) {
+      throw new Error('DOORDASH_SIGNING_SECRET is empty or invalid');
+    }
+
     const now = Math.floor(Date.now() / 1000);
     if (this.cachedJwt && this.jwtExpiry && now < this.jwtExpiry - 15) {
       return this.cachedJwt;
@@ -111,13 +127,13 @@ export class DoorDashClient {
     const header = {
       alg: 'HS256',
       typ: 'JWT',
-      kid: this.config.keyId,
+      kid: this.config.keyId.trim(),
       'dd-ver': 'DD-JWT-V1',
     } as const;
 
     const payload = {
-      iss: this.config.developerId,
-      kid: this.config.keyId, // DoorDash requires kid in payload too
+      iss: this.config.developerId.trim(),
+      kid: this.config.keyId.trim(), // DoorDash requires kid in payload too
       aud: 'doordash',
       iat: now,
       exp: now + 5 * 60, // 5 minutes
@@ -312,8 +328,31 @@ export class DoorDashClient {
       };
     } catch (error: any) {
       if (error.response) {
+        const status = error.response.status;
+        const errorData = error.response.data || {};
+        const errorCode = errorData.code || '';
+        const errorMessage = errorData.message || JSON.stringify(errorData);
+
+        // Provide helpful error messages for common authentication issues
+        if (status === 401) {
+          if (errorCode === 'authentication_error' || errorMessage.includes('kid') || errorMessage.includes('iss')) {
+            const devIdPreview = this.config.developerId ? `${this.config.developerId.substring(0, 8)}...` : 'NOT SET';
+            const keyIdPreview = this.config.keyId ? `${this.config.keyId.substring(0, 8)}...` : 'NOT SET';
+            throw new Error(
+              `DoorDash Authentication Error (401): ${errorMessage}\n` +
+              `  This usually means the Key ID (kid) doesn't belong to the Developer ID (iss).\n` +
+              `  Verify in DoorDash Developer Portal:\n` +
+              `  - Developer ID: ${devIdPreview}\n` +
+              `  - Key ID: ${keyIdPreview}\n` +
+              `  - Ensure the Key ID was created by the Developer ID account\n` +
+              `  - Check that DOORDASH_SIGNING_SECRET matches the secret for this Key ID\n` +
+              `  Raw API response: ${JSON.stringify(errorData)}`
+            );
+          }
+        }
+
         throw new Error(
-          `DoorDash API Error: ${error.response.status} - ${JSON.stringify(error.response.data)}`
+          `DoorDash API Error: ${status} - ${JSON.stringify(errorData)}`
         );
       }
       throw new Error(`DoorDash API Error: ${error.message}`);

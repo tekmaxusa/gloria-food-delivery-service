@@ -133,20 +133,36 @@ class GloriaFoodWebhookServer {
     console.log(chalk.gray(`   DOORDASH_SANDBOX: ${sandbox || 'NOT SET'}`));
 
     if (developerId && keyId && signingSecret) {
+      // Validate that credentials are not just whitespace
+      const trimmedDevId = developerId.trim();
+      const trimmedKeyId = keyId.trim();
+      const trimmedSecret = signingSecret.trim();
+
+      if (!trimmedDevId || !trimmedKeyId || !trimmedSecret) {
+        console.warn(chalk.yellow('⚠️  DoorDash credentials contain only whitespace'));
+        console.warn(chalk.yellow('   Please check your environment variables'));
+        return;
+      }
+
       try {
         this.doorDashClient = new DoorDashClient({
-          developerId,
-          keyId,
-          signingSecret,
+          developerId: trimmedDevId,
+          keyId: trimmedKeyId,
+          signingSecret: trimmedSecret,
           merchantId: merchantId,
           apiUrl: process.env.DOORDASH_API_URL,
           isSandbox: sandbox === 'true',
         });
         console.log(chalk.green('✅ DoorDash API client initialized successfully'));
         console.log(chalk.gray(`   Mode: ${sandbox === 'true' ? 'SANDBOX' : 'PRODUCTION'}`));
+        console.log(chalk.gray(`   Developer ID: ${trimmedDevId.substring(0, 8)}...`));
+        console.log(chalk.gray(`   Key ID: ${trimmedKeyId.substring(0, 8)}...`));
+        console.log(chalk.gray(`   ⚠️  Ensure Key ID belongs to Developer ID in DoorDash Developer Portal`));
       } catch (error: any) {
         console.warn(chalk.yellow(`⚠️  Failed to initialize DoorDash client: ${error.message}`));
-        console.warn(chalk.yellow(`   Error stack: ${error.stack}`));
+        if (error.stack) {
+          console.warn(chalk.yellow(`   Error stack: ${error.stack}`));
+        }
       }
     } else {
       console.log(chalk.yellow('⚠️  DoorDash integration disabled (missing required credentials)'));
@@ -238,7 +254,20 @@ class GloriaFoodWebhookServer {
     } catch (error: any) {
       // Log error but don't fail the webhook
       console.error(chalk.red(`❌ Failed to send order to DoorDash: ${error.message}`));
-      console.error(chalk.red(`   Error details: ${error.stack || 'No stack trace'}`));
+      
+      // If it's an authentication error, provide additional guidance
+      if (error.message && (error.message.includes('401') || error.message.includes('authentication_error'))) {
+        console.error(chalk.yellow(`\n   🔧 Troubleshooting Steps:`));
+        console.error(chalk.yellow(`   1. Verify DOORDASH_DEVELOPER_ID matches your DoorDash Developer Portal account`));
+        console.error(chalk.yellow(`   2. Verify DOORDASH_KEY_ID was created by the same Developer ID`));
+        console.error(chalk.yellow(`   3. Verify DOORDASH_SIGNING_SECRET matches the secret for the Key ID`));
+        console.error(chalk.yellow(`   4. Check DoorDash Developer Portal: https://developer.doordash.com/`));
+        console.error(chalk.yellow(`   5. Ensure you're using the correct environment (sandbox vs production)\n`));
+      }
+      
+      if (error.stack) {
+        console.error(chalk.red(`   Error details: ${error.stack}`));
+      }
       // Continue processing - don't throw
       return null;
     }
