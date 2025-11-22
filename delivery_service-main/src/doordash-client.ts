@@ -429,14 +429,60 @@ export class DoorDashClient {
   }
 
   /**
-   * Test connection to DoorDash API
+   * Test connection to DoorDash API by making a lightweight request
    */
   async testConnection(): Promise<boolean> {
     try {
-      // Will throw if signingSecret/developerId/keyId invalid when first request is made
+      // First validate JWT can be created
       this.getJwt();
-      return true;
+      
+      // Make a lightweight API call to validate credentials
+      // Try a simple GET request that will validate authentication
+      // If credentials are invalid, this will throw with 401
+      try {
+        // Try to get deliveries list (lightweight call that validates auth)
+        // Use validateStatus to accept 200, 401, 403, 404 as valid responses
+        const response = await this.axiosInstance.get('/deliveries', {
+          params: { limit: 1 },
+          validateStatus: (status) => status === 200 || status === 401 || status === 403 || status === 404
+        });
+        
+        // If we get 401, it's definitely an authentication issue
+        if (response.status === 401) {
+          const errorData = response.data || {};
+          const errorMessage = errorData.message || JSON.stringify(errorData);
+          throw new Error(
+            `DoorDash Authentication Failed: ${errorMessage}\n` +
+            `  Your Key ID (${this.config.keyId.substring(0, 8)}...) does not belong to Developer ID (${this.config.developerId.substring(0, 8)}...)\n` +
+            `  Please verify in DoorDash Developer Portal: https://developer.doordash.com/`
+          );
+        }
+        
+        // 200, 403, or 404 means credentials are valid (403/404 are API permission/not found, not auth issues)
+        return true;
+      } catch (apiError: any) {
+        // If we get 401 in the catch block, it's an authentication issue
+        if (apiError.response?.status === 401) {
+          const errorData = apiError.response.data || {};
+          const errorMessage = errorData.message || JSON.stringify(errorData);
+          throw new Error(
+            `DoorDash Authentication Failed: ${errorMessage}\n` +
+            `  Your Key ID (${this.config.keyId.substring(0, 8)}...) does not belong to Developer ID (${this.config.developerId.substring(0, 8)}...)\n` +
+            `  Please verify in DoorDash Developer Portal: https://developer.doordash.com/`
+          );
+        }
+        // For network errors or other issues, re-throw
+        if (!apiError.response) {
+          throw apiError;
+        }
+        // For other HTTP errors, credentials might be valid but API call failed
+        // This is acceptable for a connection test
+        return true;
+      }
     } catch (error: any) {
+      if (error.message && error.message.includes('DoorDash Authentication Failed')) {
+        throw error;
+      }
       throw new Error(`DoorDash Connection Test Failed: ${error.message}`);
     }
   }

@@ -158,6 +158,19 @@ class GloriaFoodWebhookServer {
         console.log(chalk.gray(`   Developer ID: ${trimmedDevId.substring(0, 8)}...`));
         console.log(chalk.gray(`   Key ID: ${trimmedKeyId.substring(0, 8)}...`));
         console.log(chalk.gray(`   ⚠️  Ensure Key ID belongs to Developer ID in DoorDash Developer Portal`));
+        
+        // Optionally test connection (async, don't block initialization)
+        // This will catch credential mismatches early
+        this.doorDashClient.testConnection().catch((error: any) => {
+          console.error(chalk.red(`\n❌ DoorDash Credential Validation Failed:`));
+          console.error(chalk.red(`   ${error.message}`));
+          console.error(chalk.yellow(`\n   🔧 Action Required:`));
+          console.error(chalk.yellow(`   1. Go to https://developer.doordash.com/`));
+          console.error(chalk.yellow(`   2. Verify your Developer ID matches: ${trimmedDevId.substring(0, 12)}...`));
+          console.error(chalk.yellow(`   3. Ensure Key ID ${trimmedKeyId.substring(0, 12)}... was created by this Developer ID`));
+          console.error(chalk.yellow(`   4. Verify DOORDASH_SIGNING_SECRET matches the secret for this Key ID`));
+          console.error(chalk.yellow(`   5. Update your environment variables and restart the service\n`));
+        });
       } catch (error: any) {
         console.warn(chalk.yellow(`⚠️  Failed to initialize DoorDash client: ${error.message}`));
         if (error.stack) {
@@ -644,6 +657,60 @@ class GloriaFoodWebhookServer {
         uptime: process.uptime(),
         port: this.config.port
       });
+    });
+
+    // DoorDash credentials test endpoint
+    this.app.get('/api/doordash/test', async (req: Request, res: Response) => {
+      console.log(chalk.blue(`🔍 DoorDash credentials test requested at ${new Date().toISOString()}`));
+      
+      if (!this.doorDashClient) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'DoorDash client not initialized',
+          reason: 'Missing required environment variables',
+          required: ['DOORDASH_DEVELOPER_ID', 'DOORDASH_KEY_ID', 'DOORDASH_SIGNING_SECRET'],
+          help: 'Set these environment variables in your Render dashboard or .env file'
+        });
+      }
+
+      try {
+        const isValid = await this.doorDashClient.testConnection();
+        const developerId = process.env.DOORDASH_DEVELOPER_ID || '';
+        const keyId = process.env.DOORDASH_KEY_ID || '';
+        
+        res.json({
+          status: 'success',
+          message: 'DoorDash credentials are valid',
+          credentials: {
+            developerId: developerId ? `${developerId.substring(0, 8)}...` : 'NOT SET',
+            keyId: keyId ? `${keyId.substring(0, 8)}...` : 'NOT SET',
+            mode: process.env.DOORDASH_SANDBOX === 'true' ? 'SANDBOX' : 'PRODUCTION'
+          },
+          timestamp: new Date().toISOString()
+        });
+      } catch (error: any) {
+        const developerId = process.env.DOORDASH_DEVELOPER_ID || '';
+        const keyId = process.env.DOORDASH_KEY_ID || '';
+        
+        res.status(401).json({
+          status: 'error',
+          message: 'DoorDash credentials validation failed',
+          error: error.message,
+          credentials: {
+            developerId: developerId ? `${developerId.substring(0, 12)}...` : 'NOT SET',
+            keyId: keyId ? `${keyId.substring(0, 12)}...` : 'NOT SET',
+            mode: process.env.DOORDASH_SANDBOX === 'true' ? 'SANDBOX' : 'PRODUCTION'
+          },
+          troubleshooting: {
+            step1: 'Go to https://developer.doordash.com/',
+            step2: `Verify your Developer ID matches: ${developerId ? developerId.substring(0, 12) + '...' : 'YOUR_DEVELOPER_ID'}`,
+            step3: `Ensure Key ID ${keyId ? keyId.substring(0, 12) + '...' : 'YOUR_KEY_ID'} was created by this Developer ID`,
+            step4: 'Verify DOORDASH_SIGNING_SECRET matches the secret for this Key ID',
+            step5: 'Update your environment variables in Render dashboard and restart the service'
+          },
+          timestamp: new Date().toISOString()
+        });
+      }
     });
 
     // GET handler for webhook endpoint (for testing/debugging)
