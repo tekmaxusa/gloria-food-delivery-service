@@ -1255,6 +1255,123 @@ function extractTime(order, fieldName) {
     return null;
 }
 
+// Extract required pickup time from order data
+function extractRequiredPickupTime(order) {
+    // Try direct fields first
+    if (order.required_pickup_time) return order.required_pickup_time;
+    if (order.req_pickup_time) return order.req_pickup_time;
+    if (order.requested_pickup_time) return order.requested_pickup_time;
+    
+    // Try to extract from raw_data
+    if (order.raw_data) {
+        try {
+            const rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+            
+            const candidates = [
+                rawData.required_pickup_time,
+                rawData.req_pickup_time,
+                rawData.requested_pickup_time,
+                rawData.pickup_time_required,
+                rawData.delivery?.required_pickup_time,
+                rawData.delivery?.req_pickup_time,
+                rawData.order?.required_pickup_time,
+                rawData.order?.req_pickup_time,
+                rawData.order?.delivery?.required_pickup_time
+            ];
+            
+            for (const candidate of candidates) {
+                if (candidate) {
+                    return candidate;
+                }
+            }
+        } catch (e) {
+            console.warn('Error parsing raw_data for required pickup time:', e);
+        }
+    }
+    
+    return null;
+}
+
+// Extract required delivery time from order data
+function extractRequiredDeliveryTime(order) {
+    // Try direct fields first
+    if (order.required_delivery_time) return order.required_delivery_time;
+    if (order.req_delivery_time) return order.req_delivery_time;
+    if (order.requested_delivery_time) return order.requested_delivery_time;
+    
+    // Try to extract from raw_data
+    if (order.raw_data) {
+        try {
+            const rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+            
+            const candidates = [
+                rawData.required_delivery_time,
+                rawData.req_delivery_time,
+                rawData.requested_delivery_time,
+                rawData.delivery_time_required,
+                rawData.delivery?.required_delivery_time,
+                rawData.delivery?.req_delivery_time,
+                rawData.order?.required_delivery_time,
+                rawData.order?.req_delivery_time,
+                rawData.order?.delivery?.required_delivery_time
+            ];
+            
+            for (const candidate of candidates) {
+                if (candidate) {
+                    return candidate;
+                }
+            }
+        } catch (e) {
+            console.warn('Error parsing raw_data for required delivery time:', e);
+        }
+    }
+    
+    return null;
+}
+
+// Extract DoorDash tracking URL
+function extractDoorDashTrackingUrl(order) {
+    // Try direct field first
+    if (order.doordash_tracking_url) {
+        return order.doordash_tracking_url;
+    }
+    
+    // Try to extract from raw_data
+    if (order.raw_data) {
+        try {
+            const rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+            
+            const candidates = [
+                rawData.doordash_tracking_url,
+                rawData.tracking_url,
+                rawData.tracking_link,
+                rawData.delivery?.doordash_tracking_url,
+                rawData.delivery?.tracking_url,
+                rawData.delivery?.tracking_link,
+                rawData.order?.doordash_tracking_url,
+                rawData.order?.tracking_url
+            ];
+            
+            for (const candidate of candidates) {
+                if (candidate && String(candidate).includes('doordash')) {
+                    return candidate;
+                }
+            }
+            
+            // If no doordash-specific URL, try any tracking URL
+            for (const candidate of candidates) {
+                if (candidate) {
+                    return candidate;
+                }
+            }
+        } catch (e) {
+            console.warn('Error parsing raw_data for tracking URL:', e);
+        }
+    }
+    
+    return null;
+}
+
 // Extract distance from order data
 function extractDistance(order) {
     if (order.distance) {
@@ -1390,15 +1507,18 @@ function createOrderRow(order) {
     const amount = formatCurrency(order.total_price || 0, order.currency || 'USD');
     const orderPlaced = formatDate(order.fetched_at || order.created_at || order.updated_at);
     
-    // Extract times from raw_data if not in main order object
-    const pickupTimeValue = extractTime(order, 'pickup_time') || order.pickup_time;
-    const pickupTime = pickupTimeValue ? formatDate(pickupTimeValue) : 'N/A';
+    // Extract required pickup time
+    const reqPickupTimeValue = extractRequiredPickupTime(order);
+    const reqPickupTime = reqPickupTimeValue ? formatDate(reqPickupTimeValue) : 'N/A';
     
-    const deliveryTimeValue = extractTime(order, 'delivery_time') || order.delivery_time;
-    const deliveryTime = deliveryTimeValue ? formatDate(deliveryTimeValue) : 'N/A';
+    // Extract required delivery time
+    const reqDeliveryTimeValue = extractRequiredDeliveryTime(order);
+    const reqDeliveryTime = reqDeliveryTimeValue ? formatDate(reqDeliveryTimeValue) : 'N/A';
     
+    // Extract ready for pickup status (check if order is ready)
     const readyForPickupValue = extractTime(order, 'ready_for_pickup') || order.ready_for_pickup;
-    const readyForPickup = readyForPickupValue ? formatDate(readyForPickupValue) : 'N/A';
+    const isReadyForPickup = readyForPickupValue ? true : false;
+    const readyForPickupDate = readyForPickupValue ? formatDate(readyForPickupValue) : null;
     
     // Extract distance
     const distanceValue = extractDistance(order);
@@ -1407,22 +1527,41 @@ function createOrderRow(order) {
     // Extract driver
     const driverValue = extractDriverName(order);
     const driver = driverValue ? escapeHtml(driverValue) : 'N/A';
+    const hasDriver = driverValue ? true : false;
     
-    // Extract tracking URL
+    // Extract DoorDash tracking URL
+    const trackingUrl = extractDoorDashTrackingUrl(order);
     let tracking = 'N/A';
-    if (order.doordash_tracking_url) {
-        tracking = `<a href="${escapeHtml(order.doordash_tracking_url)}" target="_blank" style="color: #22c55e; text-decoration: underline;">Track</a>`;
-    } else if (order.raw_data) {
-        try {
-            const rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
-            const trackingUrl = rawData.tracking_url || rawData.tracking_link || rawData.delivery?.tracking_url || rawData.order?.tracking_url;
-            if (trackingUrl) {
-                tracking = `<a href="${escapeHtml(trackingUrl)}" target="_blank" style="color: #22c55e; text-decoration: underline;">Track</a>`;
-            }
-        } catch (e) {
-            console.warn('Error parsing raw_data for tracking URL:', e);
-        }
+    if (trackingUrl) {
+        tracking = `<a href="${escapeHtml(trackingUrl)}" target="_blank" style="color: #22c55e; text-decoration: underline;">Track</a>`;
     }
+    
+    // Create ready for pickup toggle switch
+    const readyForPickupToggle = `
+        <label class="toggle-switch">
+            <input type="checkbox" class="ready-pickup-toggle" 
+                   data-order-id="${escapeHtml(String(orderId))}" 
+                   ${isReadyForPickup ? 'checked' : ''}
+                   onchange="toggleReadyForPickup('${escapeHtml(String(orderId))}', this.checked)">
+            <span class="toggle-slider"></span>
+        </label>
+        ${readyForPickupDate ? `<div style="font-size: 11px; color: #64748b; margin-top: 4px;">${readyForPickupDate}</div>` : ''}
+    `;
+    
+    // Create driver cell with auto assign button
+    const driverCell = `
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+            <div>${driver}</div>
+            ${!hasDriver ? `
+                <button class="btn-auto-assign" 
+                        onclick="autoAssignDriver('${escapeHtml(String(orderId))}')" 
+                        title="Auto Assign Driver"
+                        style="padding: 4px 8px; font-size: 11px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                    Auto Assign
+                </button>
+            ` : ''}
+        </div>
+    `;
     
     return `
         <tr data-order-id="${escapeHtml(String(orderId))}">
@@ -1435,10 +1574,10 @@ function createOrderRow(order) {
             <td>${amount}</td>
             <td>${distance}</td>
             <td>${orderPlaced}</td>
-            <td>${pickupTime}</td>
-            <td>${deliveryTime}</td>
-            <td>${readyForPickup}</td>
-            <td>${escapeHtml(driver)}</td>
+            <td>${reqPickupTime}</td>
+            <td>${reqDeliveryTime}</td>
+            <td>${readyForPickupToggle}</td>
+            <td>${driverCell}</td>
             <td><span class="status-badge status-${status}">${escapeHtml(status)}</span></td>
             <td>${tracking}</td>
             <td>
@@ -1686,6 +1825,14 @@ window.showOrderDetails = function(orderId) {
     // Extract delivery address
     const deliveryAddress = extractDeliveryAddress(order);
     
+    // Extract required pickup time
+    const reqPickupTimeValue = extractRequiredPickupTime(order);
+    const reqPickupTime = reqPickupTimeValue ? formatDate(reqPickupTimeValue) : 'N/A';
+    
+    // Extract required delivery time
+    const reqDeliveryTimeValue = extractRequiredDeliveryTime(order);
+    const reqDeliveryTime = reqDeliveryTimeValue ? formatDate(reqDeliveryTimeValue) : 'N/A';
+    
     // Extract times
     const pickupTimeValue = extractTime(order, 'pickup_time') || order.pickup_time;
     const pickupTime = pickupTimeValue ? formatDate(pickupTimeValue) : 'N/A';
@@ -1695,6 +1842,7 @@ window.showOrderDetails = function(orderId) {
     
     const readyForPickupValue = extractTime(order, 'ready_for_pickup') || order.ready_for_pickup;
     const readyForPickup = readyForPickupValue ? formatDate(readyForPickupValue) : 'N/A';
+    const isReadyForPickup = readyForPickupValue ? true : false;
     
     // Extract distance
     const distanceValue = extractDistance(order);
@@ -1704,11 +1852,8 @@ window.showOrderDetails = function(orderId) {
     const driverValue = extractDriverName(order);
     const driver = driverValue || 'N/A';
     
-    // Extract tracking URL
-    let trackingUrl = order.doordash_tracking_url;
-    if (!trackingUrl && rawData) {
-        trackingUrl = rawData.tracking_url || rawData.tracking_link || rawData.delivery?.tracking_url || rawData.order?.tracking_url;
-    }
+    // Extract DoorDash tracking URL
+    const trackingUrl = extractDoorDashTrackingUrl(order);
     
     // Build items HTML
     let itemsHtml = '<div class="order-items-list">';
@@ -1776,6 +1921,14 @@ window.showOrderDetails = function(orderId) {
                                 <span>${formatDate(order.fetched_at || order.created_at || order.updated_at)}</span>
                             </div>
                             <div class="detail-item">
+                                <label>Req. Pickup Time:</label>
+                                <span>${reqPickupTime}</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Req. Delivery Time:</label>
+                                <span>${reqDeliveryTime}</span>
+                            </div>
+                            <div class="detail-item">
                                 <label>Pickup Time:</label>
                                 <span>${pickupTime}</span>
                             </div>
@@ -1785,7 +1938,16 @@ window.showOrderDetails = function(orderId) {
                             </div>
                             <div class="detail-item">
                                 <label>Ready for Pickup:</label>
-                                <span>${readyForPickup}</span>
+                                <span>
+                                    <label class="toggle-switch" style="display: inline-flex; align-items: center; gap: 8px;">
+                                        <input type="checkbox" class="ready-pickup-toggle" 
+                                               data-order-id="${escapeHtml(String(orderId))}" 
+                                               ${isReadyForPickup ? 'checked' : ''}
+                                               onchange="toggleReadyForPickup('${escapeHtml(String(orderId))}', this.checked)">
+                                        <span class="toggle-slider"></span>
+                                        ${readyForPickup !== 'N/A' ? `<span style="font-size: 12px; color: #64748b;">${readyForPickup}</span>` : ''}
+                                    </label>
+                                </span>
                             </div>
                             <div class="detail-item">
                                 <label>Distance:</label>
@@ -1925,6 +2087,77 @@ window.deleteOrder = async function(orderId) {
     } catch (error) {
         console.error('Error deleting order:', error);
         showNotification('Error', 'Failed to delete order: ' + error.message, true);
+    }
+};
+
+// Toggle ready for pickup status
+window.toggleReadyForPickup = async function(orderId, isReady) {
+    try {
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+        if (sessionId) {
+            headers['x-session-id'] = sessionId;
+        }
+        
+        const response = await fetch(`${API_BASE}/orders/${orderId}/ready-for-pickup`, {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify({ ready: isReady })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            showNotification('Success', `Order #${orderId} ${isReady ? 'marked as ready' : 'unmarked'} for pickup`);
+            // Reload orders to refresh the display
+            loadOrders();
+        } else {
+            showNotification('Error', data.error || 'Failed to update ready for pickup status', true);
+            // Revert the toggle
+            const toggle = document.querySelector(`.ready-pickup-toggle[data-order-id="${orderId}"]`);
+            if (toggle) {
+                toggle.checked = !isReady;
+            }
+        }
+    } catch (error) {
+        console.error('Error toggling ready for pickup:', error);
+        showNotification('Error', 'Failed to update ready for pickup: ' + error.message, true);
+        // Revert the toggle
+        const toggle = document.querySelector(`.ready-pickup-toggle[data-order-id="${orderId}"]`);
+        if (toggle) {
+            toggle.checked = !isReady;
+        }
+    }
+};
+
+// Auto assign driver to order
+window.autoAssignDriver = async function(orderId) {
+    try {
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+        if (sessionId) {
+            headers['x-session-id'] = sessionId;
+        }
+        
+        const response = await fetch(`${API_BASE}/orders/${orderId}/assign-driver`, {
+            method: 'POST',
+            headers
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            showNotification('Success', `Driver assigned to order #${orderId}`);
+            // Reload orders to refresh the display
+            loadOrders();
+        } else {
+            showNotification('Error', data.error || 'Failed to assign driver', true);
+        }
+    } catch (error) {
+        console.error('Error assigning driver:', error);
+        showNotification('Error', 'Failed to assign driver: ' + error.message, true);
     }
 };
 
