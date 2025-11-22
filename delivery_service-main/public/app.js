@@ -1507,22 +1507,22 @@ function createOrderRow(order) {
     const amount = formatCurrency(order.total_price || 0, order.currency || 'USD');
     const orderPlaced = formatDate(order.fetched_at || order.created_at || order.updated_at);
     
-    // Extract required pickup time
+    // Extract required pickup time (only show if available)
     const reqPickupTimeValue = extractRequiredPickupTime(order);
-    const reqPickupTime = reqPickupTimeValue ? formatDate(reqPickupTimeValue) : 'N/A';
+    const reqPickupTime = reqPickupTimeValue ? formatDate(reqPickupTimeValue) : '';
     
-    // Extract required delivery time
+    // Extract required delivery time (only show if available)
     const reqDeliveryTimeValue = extractRequiredDeliveryTime(order);
-    const reqDeliveryTime = reqDeliveryTimeValue ? formatDate(reqDeliveryTimeValue) : 'N/A';
+    const reqDeliveryTime = reqDeliveryTimeValue ? formatDate(reqDeliveryTimeValue) : '';
     
     // Extract ready for pickup status (check if order is ready)
     const readyForPickupValue = extractTime(order, 'ready_for_pickup') || order.ready_for_pickup;
     const isReadyForPickup = readyForPickupValue ? true : false;
     const readyForPickupDate = readyForPickupValue ? formatDate(readyForPickupValue) : null;
     
-    // Extract distance
+    // Extract distance (only show if available)
     const distanceValue = extractDistance(order);
-    const distance = distanceValue ? `${distanceValue} km` : 'N/A';
+    const distance = distanceValue ? `${distanceValue} km` : '';
     
     // Extract driver
     const driverValue = extractDriverName(order);
@@ -1536,16 +1536,19 @@ function createOrderRow(order) {
         tracking = `<a href="${escapeHtml(trackingUrl)}" target="_blank" style="color: #22c55e; text-decoration: underline;">Track</a>`;
     }
     
-    // Create ready for pickup toggle switch
+    // Create ready for pickup toggle switch (always clickable)
     const readyForPickupToggle = `
-        <label class="toggle-switch">
-            <input type="checkbox" class="ready-pickup-toggle" 
-                   data-order-id="${escapeHtml(String(orderId))}" 
-                   ${isReadyForPickup ? 'checked' : ''}
-                   onchange="toggleReadyForPickup('${escapeHtml(String(orderId))}', this.checked)">
-            <span class="toggle-slider"></span>
-        </label>
-        ${readyForPickupDate ? `<div style="font-size: 11px; color: #64748b; margin-top: 4px;">${readyForPickupDate}</div>` : ''}
+        <div style="display: flex; flex-direction: column; gap: 4px; align-items: flex-start;">
+            <label class="toggle-switch" style="cursor: pointer;">
+                <input type="checkbox" class="ready-pickup-toggle" 
+                       data-order-id="${escapeHtml(String(orderId))}" 
+                       ${isReadyForPickup ? 'checked' : ''}
+                       onchange="toggleReadyForPickup('${escapeHtml(String(orderId))}', this.checked)"
+                       style="cursor: pointer;">
+                <span class="toggle-slider" style="cursor: pointer;"></span>
+            </label>
+            ${readyForPickupDate ? `<div style="font-size: 11px; color: #64748b;">${readyForPickupDate}</div>` : ''}
+        </div>
     `;
     
     // Create driver cell with auto assign button
@@ -1825,13 +1828,13 @@ window.showOrderDetails = function(orderId) {
     // Extract delivery address
     const deliveryAddress = extractDeliveryAddress(order);
     
-    // Extract required pickup time
+    // Extract required pickup time (only show if available)
     const reqPickupTimeValue = extractRequiredPickupTime(order);
-    const reqPickupTime = reqPickupTimeValue ? formatDate(reqPickupTimeValue) : 'N/A';
+    const reqPickupTime = reqPickupTimeValue ? formatDate(reqPickupTimeValue) : '';
     
-    // Extract required delivery time
+    // Extract required delivery time (only show if available)
     const reqDeliveryTimeValue = extractRequiredDeliveryTime(order);
-    const reqDeliveryTime = reqDeliveryTimeValue ? formatDate(reqDeliveryTimeValue) : 'N/A';
+    const reqDeliveryTime = reqDeliveryTimeValue ? formatDate(reqDeliveryTimeValue) : '';
     
     // Extract times
     const pickupTimeValue = extractTime(order, 'pickup_time') || order.pickup_time;
@@ -1844,9 +1847,9 @@ window.showOrderDetails = function(orderId) {
     const readyForPickup = readyForPickupValue ? formatDate(readyForPickupValue) : 'N/A';
     const isReadyForPickup = readyForPickupValue ? true : false;
     
-    // Extract distance
+    // Extract distance (only show if available)
     const distanceValue = extractDistance(order);
-    const distance = distanceValue ? `${distanceValue} km` : 'N/A';
+    const distance = distanceValue ? `${distanceValue} km` : '';
     
     // Extract driver
     const driverValue = extractDriverName(order);
@@ -1920,14 +1923,18 @@ window.showOrderDetails = function(orderId) {
                                 <label>Order Placed:</label>
                                 <span>${formatDate(order.fetched_at || order.created_at || order.updated_at)}</span>
                             </div>
+                            ${reqPickupTime ? `
                             <div class="detail-item">
                                 <label>Req. Pickup Time:</label>
                                 <span>${reqPickupTime}</span>
                             </div>
+                            ` : ''}
+                            ${reqDeliveryTime ? `
                             <div class="detail-item">
                                 <label>Req. Delivery Time:</label>
                                 <span>${reqDeliveryTime}</span>
                             </div>
+                            ` : ''}
                             <div class="detail-item">
                                 <label>Pickup Time:</label>
                                 <span>${pickupTime}</span>
@@ -1939,20 +1946,23 @@ window.showOrderDetails = function(orderId) {
                             <div class="detail-item">
                                 <label>Ready for Pickup:</label>
                                 <span>
-                                    <label class="toggle-switch" style="display: inline-flex; align-items: center; gap: 8px;">
+                                    <label class="toggle-switch" style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer;">
                                         <input type="checkbox" class="ready-pickup-toggle" 
                                                data-order-id="${escapeHtml(String(orderId))}" 
                                                ${isReadyForPickup ? 'checked' : ''}
-                                               onchange="toggleReadyForPickup('${escapeHtml(String(orderId))}', this.checked)">
-                                        <span class="toggle-slider"></span>
+                                               onchange="toggleReadyForPickup('${escapeHtml(String(orderId))}', this.checked)"
+                                               style="cursor: pointer;">
+                                        <span class="toggle-slider" style="cursor: pointer;"></span>
                                         ${readyForPickup !== 'N/A' ? `<span style="font-size: 12px; color: #64748b;">${readyForPickup}</span>` : ''}
                                     </label>
                                 </span>
                             </div>
+                            ${distance ? `
                             <div class="detail-item">
                                 <label>Distance:</label>
                                 <span>${distance}</span>
                             </div>
+                            ` : ''}
                             ${rawData?.order_number ? `<div class="detail-item"><label>Order Number:</label><span>${escapeHtml(rawData.order_number)}</span></div>` : ''}
                             ${rawData?.payment_method ? `<div class="detail-item"><label>Payment Method:</label><span>${escapeHtml(rawData.payment_method)}</span></div>` : ''}
                         </div>
