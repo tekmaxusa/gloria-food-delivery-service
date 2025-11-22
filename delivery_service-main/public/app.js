@@ -1542,28 +1542,101 @@ async function loadOrders() {
 }
 
 // Filter and display orders
+// Check if order is ASAP (as soon as possible)
+function isOrderASAP(order) {
+    if (!order.raw_data) return false;
+    
+    try {
+        const rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+        
+        // Check ASAP field
+        if (rawData.asap === true || rawData.asap === 'true' || rawData.asap === 1) {
+            return true;
+        }
+        if (rawData.delivery?.asap === true || rawData.delivery?.asap === 'true') {
+            return true;
+        }
+        if (rawData.order?.asap === true || rawData.order?.asap === 'true') {
+            return true;
+        }
+        
+        // Check if delivery time is very soon (within 30 minutes) - likely ASAP
+        const deliveryTime = extractRequiredDeliveryTime(order) || extractTime(order, 'delivery_time') || order.delivery_time;
+        if (deliveryTime) {
+            const deliveryDate = new Date(deliveryTime);
+            const now = new Date();
+            const diffMinutes = (deliveryDate.getTime() - now.getTime()) / (1000 * 60);
+            if (diffMinutes <= 30 && diffMinutes >= -30) {
+                return true; // Likely ASAP if within 30 minutes
+            }
+        }
+        
+        return false;
+    } catch (e) {
+        return false;
+    }
+}
+
+// Check if order is scheduled (has future delivery time and not ASAP)
+function isOrderScheduled(order) {
+    // If it's completed, cancelled, or failed, it's not scheduled
+    const status = (order.status || '').toUpperCase();
+    if (['DELIVERED', 'CANCELLED', 'FAILED', 'COMPLETED'].includes(status)) {
+        return false;
+    }
+    
+    // Check if order has a delivery time in the future
+    const deliveryTime = extractRequiredDeliveryTime(order) || extractTime(order, 'delivery_time') || order.delivery_time;
+    if (!deliveryTime) {
+        return false;
+    }
+    
+    try {
+        const deliveryDate = new Date(deliveryTime);
+        const now = new Date();
+        
+        // Must be in the future (more than 30 minutes from now)
+        const diffMinutes = (deliveryDate.getTime() - now.getTime()) / (1000 * 60);
+        if (diffMinutes > 30) {
+            // Check if it's not ASAP
+            return !isOrderASAP(order);
+        }
+    } catch (e) {
+        return false;
+    }
+    
+    return false;
+}
+
 function filterAndDisplayOrders() {
     let filtered = [...allOrders];
     
     // Apply status filter
-    if (currentStatusFilter && currentStatusFilter !== 'current') {
-        const statusMap = {
-            'scheduled': ['SCHEDULED'],
-            'completed': ['DELIVERED'],
-            'incomplete': ['CANCELLED', 'FAILED'],
-            'history': ['DELIVERED', 'CANCELLED']
-        };
-        
-        if (statusMap[currentStatusFilter]) {
-            filtered = filtered.filter(order => 
-                statusMap[currentStatusFilter].includes(order.status?.toUpperCase())
-            );
-        }
-    } else if (currentStatusFilter === 'current') {
+    if (currentStatusFilter === 'current') {
+        // Current: All active orders (not completed, not cancelled, not failed)
         filtered = filtered.filter(order => {
-            const status = order.status?.toUpperCase();
-            return status && !['DELIVERED', 'CANCELLED'].includes(status);
+            const status = (order.status || '').toUpperCase();
+            return status && !['DELIVERED', 'CANCELLED', 'FAILED', 'COMPLETED'].includes(status);
         });
+    } else if (currentStatusFilter === 'scheduled') {
+        // Scheduled: Orders with future delivery time that are not ASAP
+        filtered = filtered.filter(order => isOrderScheduled(order));
+    } else if (currentStatusFilter === 'completed') {
+        // Completed: Orders with DELIVERED or COMPLETED status
+        filtered = filtered.filter(order => {
+            const status = (order.status || '').toUpperCase();
+            return ['DELIVERED', 'COMPLETED'].includes(status);
+        });
+    } else if (currentStatusFilter === 'incomplete') {
+        // Incomplete: Cancelled, failed, or other incomplete statuses
+        filtered = filtered.filter(order => {
+            const status = (order.status || '').toUpperCase();
+            return ['CANCELLED', 'FAILED'].includes(status) || 
+                   (status && !['DELIVERED', 'COMPLETED', 'ACCEPTED', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY'].includes(status));
+        });
+    } else if (currentStatusFilter === 'history') {
+        // History: All orders (no filter)
+        filtered = filtered;
     }
     
     // Apply search filter
@@ -1571,10 +1644,10 @@ function filterAndDisplayOrders() {
         filtered = filtered.filter(order => {
             const searchableText = [
                 order.gloriafood_order_id || order.id,
-                order.customer_name,
+                extractCustomerName(order),
                 order.customer_phone,
                 order.customer_email,
-                order.delivery_address,
+                extractDeliveryAddress(order),
                 order.status
             ].join(' ').toLowerCase();
             
@@ -1837,9 +1910,19 @@ function extractRequiredPickupTime(order) {
             ];
             
             for (const candidate of candidates) {
-                if (candidate) {
+                if (candidate && candidate !== null && candidate !== undefined && candidate !== '') {
+                    console.log('Found required pickup time:', candidate, 'from order:', order.gloriafood_order_id || order.id);
                     return candidate;
                 }
+            }
+            
+            // Debug: log raw_data structure if no candidate found
+            if (order.gloriafood_order_id || order.id) {
+                console.log('No pickup time found for order:', order.gloriafood_order_id || order.id);
+                console.log('Raw data keys:', Object.keys(rawData));
+                if (rawData.pickup) console.log('Pickup object keys:', Object.keys(rawData.pickup));
+                if (rawData.delivery) console.log('Delivery object keys:', Object.keys(rawData.delivery));
+                if (rawData.order) console.log('Order object keys:', Object.keys(rawData.order));
             }
         } catch (e) {
             console.warn('Error parsing raw_data for required pickup time:', e);
@@ -1918,10 +2001,27 @@ function extractRequiredDeliveryTime(order) {
             ];
             
             for (const candidate of candidates) {
-                if (candidate) {
+                if (candidate && candidate !== null && candidate !== undefined && candidate !== '') {
                     // Debug: log what we found
                     console.log('Found delivery time:', candidate, 'from order:', order.gloriafood_order_id || order.id);
                     return candidate;
+                }
+            }
+            
+            // Try to extract from time fields that might be in different formats
+            // Check for time strings that might need parsing
+            const timeFields = [
+                rawData.time,
+                rawData.delivery?.time,
+                rawData.order?.time,
+                rawData.scheduled_time,
+                rawData.order?.scheduled_time
+            ];
+            
+            for (const timeField of timeFields) {
+                if (timeField && timeField !== null && timeField !== undefined && timeField !== '') {
+                    console.log('Found time field (potential delivery time):', timeField, 'from order:', order.gloriafood_order_id || order.id);
+                    return timeField;
                 }
             }
             
@@ -1931,10 +2031,13 @@ function extractRequiredDeliveryTime(order) {
                 console.log('Raw data keys:', Object.keys(rawData));
                 if (rawData.delivery) {
                     console.log('Delivery object keys:', Object.keys(rawData.delivery));
+                    console.log('Delivery object:', JSON.stringify(rawData.delivery, null, 2));
                 }
                 if (rawData.order) {
                     console.log('Order object keys:', Object.keys(rawData.order));
                 }
+                // Log full raw_data for debugging (first 500 chars)
+                console.log('Raw data sample:', JSON.stringify(rawData).substring(0, 500));
             }
         } catch (e) {
             console.warn('Error parsing raw_data for required delivery time:', e);
@@ -1989,8 +2092,9 @@ function extractDoorDashTrackingUrl(order) {
 
 // Extract distance from order data
 function extractDistance(order) {
-    if (order.distance) {
-        return order.distance;
+    // Try direct fields first
+    if (order.distance !== null && order.distance !== undefined && order.distance !== '') {
+        return parseFloat(order.distance) || order.distance;
     }
     
     if (order.raw_data) {
@@ -1999,16 +2103,57 @@ function extractDistance(order) {
             
             const candidates = [
                 rawData.distance,
+                rawData.distance_km,
+                rawData.distance_miles,
                 rawData.delivery?.distance,
                 rawData.delivery?.distance_km,
                 rawData.delivery?.distance_miles,
+                rawData.delivery?.delivery_distance,
                 rawData.order?.distance,
-                rawData.order?.delivery?.distance
+                rawData.order?.distance_km,
+                rawData.order?.delivery?.distance,
+                rawData.order?.delivery?.distance_km,
+                rawData.order?.delivery?.delivery_distance,
+                rawData.client?.distance,
+                rawData.client?.distance_km,
+                rawData.restaurant?.distance,
+                rawData.restaurant?.distance_km,
+                // DoorDash fields
+                rawData.doordash?.distance,
+                rawData.doordash?.distance_km,
+                rawData.delivery?.doordash?.distance,
+                // Calculate from coordinates if available
+                rawData.delivery?.lat && rawData.delivery?.lng ? null : null, // Will calculate below
+                rawData.order?.delivery?.lat && rawData.order?.delivery?.lng ? null : null
             ];
             
             for (const candidate of candidates) {
-                if (candidate !== null && candidate !== undefined) {
-                    return candidate;
+                if (candidate !== null && candidate !== undefined && candidate !== '') {
+                    const numValue = parseFloat(candidate);
+                    if (!isNaN(numValue)) {
+                        console.log('Found distance:', numValue, 'from order:', order.gloriafood_order_id || order.id);
+                        return numValue;
+                    }
+                }
+            }
+            
+            // Try to calculate distance from coordinates if available
+            const deliveryLat = rawData.delivery?.lat || rawData.order?.delivery?.lat || rawData.lat;
+            const deliveryLng = rawData.delivery?.lng || rawData.order?.delivery?.lng || rawData.lng;
+            const restaurantLat = rawData.restaurant?.lat || rawData.store?.lat;
+            const restaurantLng = rawData.restaurant?.lng || rawData.store?.lng;
+            
+            if (deliveryLat && deliveryLng && restaurantLat && restaurantLng) {
+                // Calculate distance using Haversine formula
+                const distance = calculateDistance(
+                    parseFloat(restaurantLat),
+                    parseFloat(restaurantLng),
+                    parseFloat(deliveryLat),
+                    parseFloat(deliveryLng)
+                );
+                if (distance > 0) {
+                    console.log('Calculated distance:', distance, 'from coordinates for order:', order.gloriafood_order_id || order.id);
+                    return distance;
                 }
             }
         } catch (e) {
@@ -2017,6 +2162,20 @@ function extractDistance(order) {
     }
     
     return null;
+}
+
+// Calculate distance between two coordinates using Haversine formula
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Radius of the Earth in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const distance = R * c;
+    return Math.round(distance * 10) / 10; // Round to 1 decimal place
 }
 
 // Extract driver name from order data
@@ -2122,32 +2281,48 @@ function createOrderRow(order) {
     const amount = formatCurrency(order.total_price || 0, order.currency || 'USD');
     const orderPlaced = formatDate(order.fetched_at || order.created_at || order.updated_at);
     
-    // Extract required pickup time (only show if available)
+    // Extract required pickup time (always show if available)
     // Try required pickup time first, then fallback to any pickup time
     let reqPickupTimeValue = extractRequiredPickupTime(order);
     if (!reqPickupTimeValue) {
         // Fallback to regular pickup_time if required is not available
         reqPickupTimeValue = extractTime(order, 'pickup_time') || order.pickup_time;
     }
-    const reqPickupTime = reqPickupTimeValue ? formatDate(reqPickupTimeValue) : '';
+    // Also try created_at or order_date as last resort
+    if (!reqPickupTimeValue) {
+        reqPickupTimeValue = order.created_at || order.order_date || order.fetched_at;
+    }
+    const reqPickupTime = reqPickupTimeValue ? formatDate(reqPickupTimeValue) : 'N/A';
     
-    // Extract required delivery time (only show if available)
+    // Extract required delivery time (always show if available)
     // Try required delivery time first, then fallback to any delivery time
     let reqDeliveryTimeValue = extractRequiredDeliveryTime(order);
     if (!reqDeliveryTimeValue) {
         // Fallback to regular delivery_time if required is not available
         reqDeliveryTimeValue = extractTime(order, 'delivery_time') || order.delivery_time;
     }
-    const reqDeliveryTime = reqDeliveryTimeValue ? formatDate(reqDeliveryTimeValue) : '';
+    // Also try pickup_time as fallback for delivery time if still not found
+    if (!reqDeliveryTimeValue) {
+        reqDeliveryTimeValue = extractTime(order, 'pickup_time') || order.pickup_time;
+    }
+    // Last resort: use created_at + estimated delivery time
+    if (!reqDeliveryTimeValue && order.created_at) {
+        const createdDate = new Date(order.created_at);
+        createdDate.setMinutes(createdDate.getMinutes() + 45); // Default 45 min delivery
+        reqDeliveryTimeValue = createdDate.toISOString();
+    }
+    const reqDeliveryTime = reqDeliveryTimeValue ? formatDate(reqDeliveryTimeValue) : 'N/A';
     
     // Extract ready for pickup status (check if order is ready)
     const readyForPickupValue = extractTime(order, 'ready_for_pickup') || order.ready_for_pickup;
     const isReadyForPickup = readyForPickupValue ? true : false;
     const readyForPickupDate = readyForPickupValue ? formatDate(readyForPickupValue) : null;
     
-    // Extract distance (only show if available)
+    // Extract distance (always show if available)
     const distanceValue = extractDistance(order);
-    const distance = distanceValue ? `${distanceValue} km` : '';
+    const distance = distanceValue !== null && distanceValue !== undefined && distanceValue !== '' 
+        ? `${distanceValue} km` 
+        : 'N/A';
     
     // Extract driver
     const driverValue = extractDriverName(order);
@@ -2514,23 +2689,37 @@ window.showOrderDetails = function(orderId) {
     // Extract delivery address
     const deliveryAddress = extractDeliveryAddress(order);
     
-    // Extract required pickup time (only show if available)
+    // Extract required pickup time (always show if available)
     // Try required pickup time first, then fallback to any pickup time
     let reqPickupTimeValue = extractRequiredPickupTime(order);
     if (!reqPickupTimeValue) {
         // Fallback to regular pickup_time if required is not available
         reqPickupTimeValue = extractTime(order, 'pickup_time') || order.pickup_time;
     }
-    const reqPickupTime = reqPickupTimeValue ? formatDate(reqPickupTimeValue) : '';
+    // Also try created_at or order_date as last resort
+    if (!reqPickupTimeValue) {
+        reqPickupTimeValue = order.created_at || order.order_date || order.fetched_at;
+    }
+    const reqPickupTime = reqPickupTimeValue ? formatDate(reqPickupTimeValue) : 'N/A';
     
-    // Extract required delivery time (only show if available)
+    // Extract required delivery time (always show if available)
     // Try required delivery time first, then fallback to any delivery time
     let reqDeliveryTimeValue = extractRequiredDeliveryTime(order);
     if (!reqDeliveryTimeValue) {
         // Fallback to regular delivery_time if required is not available
         reqDeliveryTimeValue = extractTime(order, 'delivery_time') || order.delivery_time;
     }
-    const reqDeliveryTime = reqDeliveryTimeValue ? formatDate(reqDeliveryTimeValue) : '';
+    // Also try pickup_time as fallback for delivery time if still not found
+    if (!reqDeliveryTimeValue) {
+        reqDeliveryTimeValue = extractTime(order, 'pickup_time') || order.pickup_time;
+    }
+    // Last resort: use created_at + estimated delivery time
+    if (!reqDeliveryTimeValue && order.created_at) {
+        const createdDate = new Date(order.created_at);
+        createdDate.setMinutes(createdDate.getMinutes() + 45); // Default 45 min delivery
+        reqDeliveryTimeValue = createdDate.toISOString();
+    }
+    const reqDeliveryTime = reqDeliveryTimeValue ? formatDate(reqDeliveryTimeValue) : 'N/A';
     
     // Extract times
     const pickupTimeValue = extractTime(order, 'pickup_time') || order.pickup_time;
@@ -2543,9 +2732,11 @@ window.showOrderDetails = function(orderId) {
     const readyForPickup = readyForPickupValue ? formatDate(readyForPickupValue) : 'N/A';
     const isReadyForPickup = readyForPickupValue ? true : false;
     
-    // Extract distance (only show if available)
+    // Extract distance (always show if available)
     const distanceValue = extractDistance(order);
-    const distance = distanceValue ? `${distanceValue} km` : '';
+    const distance = distanceValue !== null && distanceValue !== undefined && distanceValue !== '' 
+        ? `${distanceValue} km` 
+        : 'N/A';
     
     // Extract driver
     const driverValue = extractDriverName(order);
@@ -2619,18 +2810,14 @@ window.showOrderDetails = function(orderId) {
                                 <label>Order Placed:</label>
                                 <span>${formatDate(order.fetched_at || order.created_at || order.updated_at)}</span>
                             </div>
-                            ${reqPickupTime ? `
                             <div class="detail-item">
                                 <label>Req. Pickup Time:</label>
                                 <span>${reqPickupTime}</span>
                             </div>
-                            ` : ''}
-                            ${reqDeliveryTime ? `
                             <div class="detail-item">
                                 <label>Req. Delivery Time:</label>
                                 <span>${reqDeliveryTime}</span>
                             </div>
-                            ` : ''}
                             <div class="detail-item">
                                 <label>Pickup Time:</label>
                                 <span>${pickupTime}</span>
@@ -2653,12 +2840,10 @@ window.showOrderDetails = function(orderId) {
                                     </label>
                                 </span>
                             </div>
-                            ${distance ? `
                             <div class="detail-item">
                                 <label>Distance:</label>
                                 <span>${distance}</span>
                             </div>
-                            ` : ''}
                             ${rawData?.order_number ? `<div class="detail-item"><label>Order Number:</label><span>${escapeHtml(rawData.order_number)}</span></div>` : ''}
                             ${rawData?.payment_method ? `<div class="detail-item"><label>Payment Method:</label><span>${escapeHtml(rawData.payment_method)}</span></div>` : ''}
                         </div>
