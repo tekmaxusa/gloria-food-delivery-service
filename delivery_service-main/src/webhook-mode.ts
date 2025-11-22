@@ -82,6 +82,18 @@ class GloriaFoodWebhookServer {
         getRecentOrders: () => [],
         getOrdersByStatus: () => [],
         getOrderCount: () => 0,
+        createUser: () => null,
+        getUserByEmail: () => null,
+        verifyPassword: () => null,
+        getAllDrivers: () => [],
+        getDriverById: () => null,
+        getAllReviews: () => [],
+        getReviewsByOrderId: () => [],
+        getDashboardStats: () => ({
+          orders: { total: 0, completed: 0, active: 0, cancelled: 0, recent_24h: 0 },
+          revenue: { total: 0 },
+          drivers: { total: 0, active: 0 }
+        }),
         close: () => {}
       } as IDatabase;
     }
@@ -883,11 +895,15 @@ class GloriaFoodWebhookServer {
           return res.status(400).json({ success: false, error: 'Email and password are required' });
         }
         
-        const user = await this.handleAsync(this.database.verifyPassword(email, password));
+        const userResult = await this.handleAsync(this.database.verifyPassword(email, password));
         
-        if (!user) {
+        // verifyPassword can return boolean | User | null
+        if (!userResult || typeof userResult === 'boolean') {
           return res.status(401).json({ success: false, error: 'Invalid email or password' });
         }
+        
+        // At this point, userResult is User
+        const user = userResult as any;
         
         // Create session
         const sessionId = crypto.randomBytes(32).toString('hex');
@@ -1183,10 +1199,15 @@ class GloriaFoodWebhookServer {
           });
         } else {
           // SQLite - use database method
-          const dbUser = await this.handleAsync(this.database.verifyPassword(email, password));
-          if (!dbUser) {
+          const dbUserResult = await this.handleAsync(this.database.verifyPassword(email, password));
+          
+          // verifyPassword can return boolean | User | null
+          if (!dbUserResult || typeof dbUserResult === 'boolean') {
             return res.status(401).json({ success: false, error: 'Invalid email or password' });
           }
+          
+          // At this point, dbUserResult is User
+          const dbUser = dbUserResult as any;
           
           const sessionToken = this.createSession(dbUser.id, dbUser.email);
           res.json({ 

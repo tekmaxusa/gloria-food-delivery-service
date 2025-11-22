@@ -76,7 +76,7 @@ export class OrderDatabasePostgreSQL {
     });
 
     // Handle pool errors
-    this.pool.on('error', (err) => {
+    this.pool.on('error', (err: Error) => {
       console.error('Unexpected error on idle PostgreSQL client', err);
     });
 
