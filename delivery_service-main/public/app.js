@@ -764,35 +764,489 @@ async function loadReportsData() {
     }
 }
 
-// Generate report
-window.generateReport = function(type) {
+// Generate report with actual data
+window.generateReport = async function(type) {
     const reportContent = document.getElementById('reportContent');
     if (!reportContent) return;
     
+    // Show loading state
     reportContent.innerHTML = `
         <div class="table-container">
-            <div style="padding: 24px;">
-                <h2 style="margin-bottom: 16px;">${type.charAt(0).toUpperCase() + type.slice(1)} Report</h2>
-                <p style="color: #64748b; margin-bottom: 24px;">Report generated at ${new Date().toLocaleString()}</p>
-                <div class="dashboard-grid">
-                    <div class="dashboard-card">
-                        <h3>Total ${type}</h3>
-                        <div class="value">-</div>
-                    </div>
-                    <div class="dashboard-card">
-                        <h3>This Month</h3>
-                        <div class="value">-</div>
-                    </div>
-                    <div class="dashboard-card">
-                        <h3>Growth</h3>
-                        <div class="value">-</div>
-                    </div>
-                </div>
-                <p style="margin-top: 24px; color: #94a3b8; font-size: 14px;">Detailed ${type} report data will be displayed here.</p>
+            <div style="padding: 24px; text-align: center;">
+                <div class="empty-state-text">Loading report data...</div>
             </div>
         </div>
     `;
+    
+    try {
+        const headers = {};
+        if (sessionId) {
+            headers['x-session-id'] = sessionId;
+        }
+        
+        // Fetch data based on report type
+        let reportData = null;
+        
+        if (type === 'orders' || type === 'revenue') {
+            const [statsRes, ordersRes] = await Promise.all([
+                fetch(`${API_BASE}/api/dashboard/stats`, { headers }),
+                fetch(`${API_BASE}/orders?limit=1000`, { headers })
+            ]);
+            
+            if (statsRes.ok && ordersRes.ok) {
+                const statsData = await statsRes.json();
+                const ordersData = await ordersRes.json();
+                const orders = ordersData.orders || ordersData || [];
+                
+                reportData = {
+                    stats: statsData.success ? statsData.stats : null,
+                    orders: orders
+                };
+            }
+        } else if (type === 'drivers') {
+            const [driversRes, statsRes] = await Promise.all([
+                fetch(`${API_BASE}/api/drivers`, { headers }),
+                fetch(`${API_BASE}/api/dashboard/stats`, { headers })
+            ]);
+            
+            if (driversRes.ok && statsRes.ok) {
+                const driversData = await driversRes.json();
+                const statsData = await statsRes.json();
+                
+                reportData = {
+                    drivers: driversData.success ? driversData.drivers : [],
+                    stats: statsData.success ? statsData.stats : null
+                };
+            }
+        } else if (type === 'customers') {
+            const ordersRes = await fetch(`${API_BASE}/orders?limit=1000`, { headers });
+            
+            if (ordersRes.ok) {
+                const ordersData = await ordersRes.json();
+                const orders = ordersData.orders || ordersData || [];
+                
+                reportData = {
+                    orders: orders
+                };
+            }
+        }
+        
+        // Generate report HTML based on type
+        const reportHtml = generateReportHTML(type, reportData);
+        reportContent.innerHTML = reportHtml;
+        
+    } catch (error) {
+        console.error('Error generating report:', error);
+        reportContent.innerHTML = `
+            <div class="table-container">
+                <div style="padding: 24px;">
+                    <h2 style="margin-bottom: 16px;">${type.charAt(0).toUpperCase() + type.slice(1)} Report</h2>
+                    <div class="empty-state">
+                        <div class="empty-state-text">Error loading report: ${error.message}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
 };
+
+// Generate report HTML based on type and data
+function generateReportHTML(type, data) {
+    const reportDate = new Date();
+    const currentMonth = reportDate.getMonth();
+    const currentYear = reportDate.getFullYear();
+    const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+    const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+    
+    switch(type) {
+        case 'orders':
+            return generateOrdersReport(data, currentMonth, currentYear, lastMonth, lastMonthYear);
+        case 'revenue':
+            return generateRevenueReport(data, currentMonth, currentYear, lastMonth, lastMonthYear);
+        case 'drivers':
+            return generateDriversReport(data);
+        case 'customers':
+            return generateCustomersReport(data);
+        default:
+            return '<div>Unknown report type</div>';
+    }
+}
+
+// Generate Orders Report
+function generateOrdersReport(data, currentMonth, currentYear, lastMonth, lastMonthYear) {
+    if (!data || !data.orders) {
+        return '<div>No order data available</div>';
+    }
+    
+    const orders = data.orders;
+    const stats = data.stats;
+    
+    // Calculate monthly orders
+    const currentMonthOrders = orders.filter(order => {
+        const orderDate = new Date(order.fetched_at || order.created_at || order.updated_at);
+        return orderDate.getMonth() === currentMonth && orderDate.getFullYear() === currentYear;
+    });
+    
+    const lastMonthOrders = orders.filter(order => {
+        const orderDate = new Date(order.fetched_at || order.created_at || order.updated_at);
+        return orderDate.getMonth() === lastMonth && orderDate.getFullYear() === lastMonthYear;
+    });
+    
+    // Calculate orders by status
+    const statusCounts = {};
+    orders.forEach(order => {
+        const status = (order.status || 'UNKNOWN').toUpperCase();
+        statusCounts[status] = (statusCounts[status] || 0) + 1;
+    });
+    
+    // Calculate growth
+    const growth = lastMonthOrders.length > 0 
+        ? (((currentMonthOrders.length - lastMonthOrders.length) / lastMonthOrders.length) * 100).toFixed(1)
+        : currentMonthOrders.length > 0 ? '100' : '0';
+    
+    const statusRows = Object.entries(statusCounts)
+        .sort((a, b) => b[1] - a[1])
+        .map(([status, count]) => `
+            <tr>
+                <td><span class="status-badge status-${status}">${escapeHtml(status)}</span></td>
+                <td>${count}</td>
+                <td>${((count / orders.length) * 100).toFixed(1)}%</td>
+            </tr>
+        `).join('');
+    
+    return `
+        <div class="table-container">
+            <div style="padding: 24px;">
+                <h2 style="margin-bottom: 16px;">Orders Report</h2>
+                <p style="color: #64748b; margin-bottom: 24px;">Report generated at ${new Date().toLocaleString()}</p>
+                
+                <div class="dashboard-grid" style="margin-bottom: 32px;">
+                    <div class="dashboard-card">
+                        <h3>Total Orders</h3>
+                        <div class="value">${orders.length}</div>
+                        <div class="change">All time</div>
+                    </div>
+                    <div class="dashboard-card">
+                        <h3>This Month</h3>
+                        <div class="value">${currentMonthOrders.length}</div>
+                        <div class="change">${new Date(currentYear, currentMonth, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</div>
+                    </div>
+                    <div class="dashboard-card">
+                        <h3>Growth</h3>
+                        <div class="value ${parseFloat(growth) >= 0 ? '' : 'negative'}">${growth}%</div>
+                        <div class="change">vs last month</div>
+                    </div>
+                    <div class="dashboard-card">
+                        <h3>Active Orders</h3>
+                        <div class="value">${stats?.orders?.active || 0}</div>
+                        <div class="change">In progress</div>
+                    </div>
+                    <div class="dashboard-card">
+                        <h3>Completed</h3>
+                        <div class="value">${stats?.orders?.completed || 0}</div>
+                        <div class="change">Delivered</div>
+                    </div>
+                    <div class="dashboard-card">
+                        <h3>Cancelled</h3>
+                        <div class="value">${stats?.orders?.cancelled || 0}</div>
+                        <div class="change">Cancelled orders</div>
+                    </div>
+                </div>
+                
+                <h3 style="margin-top: 32px; margin-bottom: 16px;">Orders by Status</h3>
+                <table class="orders-table" style="margin-top: 16px;">
+                    <thead>
+                        <tr>
+                            <th>Status</th>
+                            <th>Count</th>
+                            <th>Percentage</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${statusRows || '<tr><td colspan="3" class="empty-state-cell"><div class="empty-state-text">No data</div></td></tr>'}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+}
+
+// Generate Revenue Report
+function generateRevenueReport(data, currentMonth, currentYear, lastMonth, lastMonthYear) {
+    if (!data || !data.orders) {
+        return '<div>No order data available</div>';
+    }
+    
+    const orders = data.orders;
+    const stats = data.stats;
+    
+    // Calculate revenue
+    const totalRevenue = orders.reduce((sum, order) => sum + (parseFloat(order.total_price) || 0), 0);
+    
+    const currentMonthOrders = orders.filter(order => {
+        const orderDate = new Date(order.fetched_at || order.created_at || order.updated_at);
+        return orderDate.getMonth() === currentMonth && orderDate.getFullYear() === currentYear;
+    });
+    
+    const lastMonthOrders = orders.filter(order => {
+        const orderDate = new Date(order.fetched_at || order.created_at || order.updated_at);
+        return orderDate.getMonth() === lastMonth && orderDate.getFullYear() === lastMonthYear;
+    });
+    
+    const currentMonthRevenue = currentMonthOrders.reduce((sum, order) => sum + (parseFloat(order.total_price) || 0), 0);
+    const lastMonthRevenue = lastMonthOrders.reduce((sum, order) => sum + (parseFloat(order.total_price) || 0), 0);
+    
+    const revenueGrowth = lastMonthRevenue > 0 
+        ? (((currentMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100).toFixed(1)
+        : currentMonthRevenue > 0 ? '100' : '0';
+    
+    // Calculate average order value
+    const avgOrderValue = orders.length > 0 ? (totalRevenue / orders.length) : 0;
+    
+    // Calculate revenue by status
+    const revenueByStatus = {};
+    orders.forEach(order => {
+        const status = (order.status || 'UNKNOWN').toUpperCase();
+        const price = parseFloat(order.total_price) || 0;
+        revenueByStatus[status] = (revenueByStatus[status] || 0) + price;
+    });
+    
+    const revenueRows = Object.entries(revenueByStatus)
+        .sort((a, b) => b[1] - a[1])
+        .map(([status, revenue]) => `
+            <tr>
+                <td><span class="status-badge status-${status}">${escapeHtml(status)}</span></td>
+                <td>${formatCurrency(revenue, 'USD')}</td>
+                <td>${((revenue / totalRevenue) * 100).toFixed(1)}%</td>
+            </tr>
+        `).join('');
+    
+    return `
+        <div class="table-container">
+            <div style="padding: 24px;">
+                <h2 style="margin-bottom: 16px;">Revenue Report</h2>
+                <p style="color: #64748b; margin-bottom: 24px;">Report generated at ${new Date().toLocaleString()}</p>
+                
+                <div class="dashboard-grid" style="margin-bottom: 32px;">
+                    <div class="dashboard-card">
+                        <h3>Total Revenue</h3>
+                        <div class="value" style="color: #22c55e;">${formatCurrency(totalRevenue, 'USD')}</div>
+                        <div class="change">All time</div>
+                    </div>
+                    <div class="dashboard-card">
+                        <h3>This Month</h3>
+                        <div class="value" style="color: #3b82f6;">${formatCurrency(currentMonthRevenue, 'USD')}</div>
+                        <div class="change">${new Date(currentYear, currentMonth, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</div>
+                    </div>
+                    <div class="dashboard-card">
+                        <h3>Growth</h3>
+                        <div class="value ${parseFloat(revenueGrowth) >= 0 ? '' : 'negative'}" style="color: ${parseFloat(revenueGrowth) >= 0 ? '#22c55e' : '#ef4444'};">${revenueGrowth}%</div>
+                        <div class="change">vs last month</div>
+                    </div>
+                    <div class="dashboard-card">
+                        <h3>Average Order</h3>
+                        <div class="value">${formatCurrency(avgOrderValue, 'USD')}</div>
+                        <div class="change">Per order</div>
+                    </div>
+                    <div class="dashboard-card">
+                        <h3>Total Orders</h3>
+                        <div class="value">${orders.length}</div>
+                        <div class="change">All orders</div>
+                    </div>
+                    <div class="dashboard-card">
+                        <h3>Last Month</h3>
+                        <div class="value">${formatCurrency(lastMonthRevenue, 'USD')}</div>
+                        <div class="change">${new Date(lastMonthYear, lastMonth, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</div>
+                    </div>
+                </div>
+                
+                <h3 style="margin-top: 32px; margin-bottom: 16px;">Revenue by Status</h3>
+                <table class="orders-table" style="margin-top: 16px;">
+                    <thead>
+                        <tr>
+                            <th>Status</th>
+                            <th>Revenue</th>
+                            <th>Percentage</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${revenueRows || '<tr><td colspan="3" class="empty-state-cell"><div class="empty-state-text">No data</div></td></tr>'}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+}
+
+// Generate Drivers Report
+function generateDriversReport(data) {
+    if (!data || !data.drivers) {
+        return '<div>No driver data available</div>';
+    }
+    
+    const drivers = data.drivers;
+    const stats = data.stats;
+    
+    const activeDrivers = drivers.filter(d => (d.status || '').toLowerCase() === 'active');
+    const inactiveDrivers = drivers.filter(d => (d.status || '').toLowerCase() !== 'active');
+    
+    // Calculate average rating
+    const driversWithRating = drivers.filter(d => d.rating);
+    const avgRating = driversWithRating.length > 0
+        ? (driversWithRating.reduce((sum, d) => sum + (parseFloat(d.rating) || 0), 0) / driversWithRating.length).toFixed(1)
+        : '0';
+    
+    const driverRows = drivers.map(driver => `
+        <tr>
+            <td><strong>${escapeHtml(driver.name || 'N/A')}</strong></td>
+            <td>${escapeHtml(driver.phone || 'N/A')}</td>
+            <td>${escapeHtml(driver.email || 'N/A')}</td>
+            <td>${escapeHtml(driver.vehicle_type || 'N/A')} ${driver.vehicle_plate ? `(${escapeHtml(driver.vehicle_plate)})` : ''}</td>
+            <td>
+                <div class="review-rating">
+                    ${generateStars(parseFloat(driver.rating) || 0)}
+                </div>
+            </td>
+            <td><span class="status-badge status-${(driver.status || 'active').toUpperCase()}">${escapeHtml(driver.status || 'active')}</span></td>
+        </tr>
+    `).join('');
+    
+    return `
+        <div class="table-container">
+            <div style="padding: 24px;">
+                <h2 style="margin-bottom: 16px;">Driver Performance Report</h2>
+                <p style="color: #64748b; margin-bottom: 24px;">Report generated at ${new Date().toLocaleString()}</p>
+                
+                <div class="dashboard-grid" style="margin-bottom: 32px;">
+                    <div class="dashboard-card">
+                        <h3>Total Drivers</h3>
+                        <div class="value">${drivers.length}</div>
+                        <div class="change">All drivers</div>
+                    </div>
+                    <div class="dashboard-card">
+                        <h3>Active Drivers</h3>
+                        <div class="value">${activeDrivers.length}</div>
+                        <div class="change">Currently active</div>
+                    </div>
+                    <div class="dashboard-card">
+                        <h3>Inactive Drivers</h3>
+                        <div class="value">${inactiveDrivers.length}</div>
+                        <div class="change">Not active</div>
+                    </div>
+                    <div class="dashboard-card">
+                        <h3>Average Rating</h3>
+                        <div class="value">${avgRating}</div>
+                        <div class="change">${driversWithRating.length} rated</div>
+                    </div>
+                </div>
+                
+                <h3 style="margin-top: 32px; margin-bottom: 16px;">All Drivers</h3>
+                <table class="orders-table" style="margin-top: 16px;">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Phone</th>
+                            <th>Email</th>
+                            <th>Vehicle</th>
+                            <th>Rating</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${driverRows || '<tr><td colspan="6" class="empty-state-cell"><div class="empty-state-text">No drivers found</div></td></tr>'}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+}
+
+// Generate Customers Report
+function generateCustomersReport(data) {
+    if (!data || !data.orders) {
+        return '<div>No order data available</div>';
+    }
+    
+    const orders = data.orders;
+    
+    // Group orders by customer
+    const customerMap = {};
+    orders.forEach(order => {
+        const customerName = extractCustomerName(order);
+        if (customerName && customerName !== 'N/A' && customerName !== 'Unknown') {
+            if (!customerMap[customerName]) {
+                customerMap[customerName] = {
+                    name: customerName,
+                    orders: [],
+                    totalSpent: 0,
+                    orderCount: 0
+                };
+            }
+            customerMap[customerName].orders.push(order);
+            customerMap[customerName].totalSpent += parseFloat(order.total_price) || 0;
+            customerMap[customerName].orderCount += 1;
+        }
+    });
+    
+    const customers = Object.values(customerMap)
+        .sort((a, b) => b.totalSpent - a.totalSpent)
+        .slice(0, 50); // Top 50 customers
+    
+    const totalCustomers = Object.keys(customerMap).length;
+    const totalRevenue = customers.reduce((sum, c) => sum + c.totalSpent, 0);
+    const avgOrderValue = customers.length > 0 ? (totalRevenue / customers.reduce((sum, c) => sum + c.orderCount, 0)) : 0;
+    
+    const customerRows = customers.map(customer => `
+        <tr>
+            <td><strong>${escapeHtml(customer.name)}</strong></td>
+            <td>${customer.orderCount}</td>
+            <td>${formatCurrency(customer.totalSpent, 'USD')}</td>
+            <td>${formatCurrency(customer.totalSpent / customer.orderCount, 'USD')}</td>
+        </tr>
+    `).join('');
+    
+    return `
+        <div class="table-container">
+            <div style="padding: 24px;">
+                <h2 style="margin-bottom: 16px;">Customer Analytics Report</h2>
+                <p style="color: #64748b; margin-bottom: 24px;">Report generated at ${new Date().toLocaleString()}</p>
+                
+                <div class="dashboard-grid" style="margin-bottom: 32px;">
+                    <div class="dashboard-card">
+                        <h3>Total Customers</h3>
+                        <div class="value">${totalCustomers}</div>
+                        <div class="change">Unique customers</div>
+                    </div>
+                    <div class="dashboard-card">
+                        <h3>Total Revenue</h3>
+                        <div class="value" style="color: #22c55e;">${formatCurrency(totalRevenue, 'USD')}</div>
+                        <div class="change">From top customers</div>
+                    </div>
+                    <div class="dashboard-card">
+                        <h3>Average Order</h3>
+                        <div class="value">${formatCurrency(avgOrderValue, 'USD')}</div>
+                        <div class="change">Per order</div>
+                    </div>
+                </div>
+                
+                <h3 style="margin-top: 32px; margin-bottom: 16px;">Top Customers (by Revenue)</h3>
+                <table class="orders-table" style="margin-top: 16px;">
+                    <thead>
+                        <tr>
+                            <th>Customer Name</th>
+                            <th>Orders</th>
+                            <th>Total Spent</th>
+                            <th>Avg Order Value</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${customerRows || '<tr><td colspan="4" class="empty-state-cell"><div class="empty-state-text">No customer data</div></td></tr>'}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+}
 
 // Show Reviews page
 function showReviewsPage() {

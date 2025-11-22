@@ -1130,6 +1130,10 @@ body {
     color: #ef4444;
 }
 
+.dashboard-card .value.negative {
+    color: #ef4444;
+}
+
 /* Map Container */
 .map-container {
     background: white;
