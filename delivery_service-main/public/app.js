@@ -1717,6 +1717,9 @@ function extractRequiredPickupTime(order) {
     if (order.requested_pickup_time) return order.requested_pickup_time;
     if (order.scheduled_pickup_time) return order.scheduled_pickup_time;
     if (order.pickup_time) return order.pickup_time;
+    if (order.pickup_datetime) return order.pickup_datetime;
+    if (order.pickup_date) return order.pickup_date;
+    if (order.scheduled_pickup_datetime) return order.scheduled_pickup_datetime;
     
     // Try to extract from raw_data
     if (order.raw_data) {
@@ -1724,26 +1727,48 @@ function extractRequiredPickupTime(order) {
             const rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
             
             const candidates = [
+                // Standard variations
                 rawData.required_pickup_time,
                 rawData.req_pickup_time,
                 rawData.requested_pickup_time,
                 rawData.pickup_time_required,
                 rawData.scheduled_pickup_time,
                 rawData.pickup_time,
+                rawData.pickup_datetime,
+                rawData.pickup_date,
+                rawData.scheduled_pickup_datetime,
+                rawData.pickup_scheduled_time,
+                rawData.pickup_scheduled_datetime,
+                // Nested in pickup object
                 rawData.pickup?.time,
                 rawData.pickup?.scheduled_time,
                 rawData.pickup?.required_time,
+                rawData.pickup?.datetime,
+                rawData.pickup?.date,
+                // Nested in delivery object
                 rawData.delivery?.required_pickup_time,
                 rawData.delivery?.req_pickup_time,
                 rawData.delivery?.scheduled_pickup_time,
                 rawData.delivery?.pickup_time,
+                rawData.delivery?.pickup_datetime,
+                rawData.delivery?.pickup?.time,
+                // Nested in order object
                 rawData.order?.required_pickup_time,
                 rawData.order?.req_pickup_time,
                 rawData.order?.pickup_time,
+                rawData.order?.pickup_datetime,
                 rawData.order?.delivery?.required_pickup_time,
                 rawData.order?.delivery?.pickup_time,
                 rawData.order?.pickup?.time,
-                rawData.order?.pickup?.scheduled_time
+                rawData.order?.pickup?.scheduled_time,
+                rawData.order?.pickup?.datetime,
+                // Additional variations
+                rawData.scheduled_time,
+                rawData.scheduled_datetime,
+                rawData.estimated_pickup_time,
+                rawData.estimated_pickup_datetime,
+                rawData.order?.scheduled_time,
+                rawData.order?.scheduled_datetime
             ];
             
             for (const candidate of candidates) {
@@ -1767,6 +1792,9 @@ function extractRequiredDeliveryTime(order) {
     if (order.requested_delivery_time) return order.requested_delivery_time;
     if (order.scheduled_delivery_time) return order.scheduled_delivery_time;
     if (order.delivery_time) return order.delivery_time;
+    if (order.delivery_datetime) return order.delivery_datetime;
+    if (order.delivery_date) return order.delivery_date;
+    if (order.scheduled_delivery_datetime) return order.scheduled_delivery_datetime;
     
     // Try to extract from raw_data
     if (order.raw_data) {
@@ -1774,33 +1802,73 @@ function extractRequiredDeliveryTime(order) {
             const rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
             
             const candidates = [
+                // Standard variations
                 rawData.required_delivery_time,
                 rawData.req_delivery_time,
                 rawData.requested_delivery_time,
                 rawData.delivery_time_required,
                 rawData.scheduled_delivery_time,
                 rawData.delivery_time,
+                rawData.delivery_datetime,
+                rawData.delivery_date,
+                rawData.scheduled_delivery_datetime,
+                rawData.delivery_scheduled_time,
+                rawData.delivery_scheduled_datetime,
+                // Nested in delivery object
                 rawData.delivery?.time,
                 rawData.delivery?.scheduled_time,
                 rawData.delivery?.required_time,
                 rawData.delivery?.required_delivery_time,
                 rawData.delivery?.req_delivery_time,
                 rawData.delivery?.scheduled_delivery_time,
+                rawData.delivery?.delivery_time,
+                rawData.delivery?.delivery_datetime,
+                rawData.delivery?.delivery_date,
+                rawData.delivery?.datetime,
+                rawData.delivery?.date,
+                rawData.delivery?.scheduled_datetime,
+                // Nested in order object
                 rawData.order?.required_delivery_time,
                 rawData.order?.req_delivery_time,
                 rawData.order?.delivery_time,
+                rawData.order?.delivery_datetime,
+                rawData.order?.delivery_date,
                 rawData.order?.delivery?.required_delivery_time,
                 rawData.order?.delivery?.time,
                 rawData.order?.delivery?.scheduled_time,
+                rawData.order?.delivery?.delivery_time,
+                rawData.order?.delivery?.delivery_datetime,
+                rawData.order?.delivery?.datetime,
                 // GloriaFood specific fields
                 rawData.asap,
                 rawData.delivery?.asap,
-                rawData.order?.asap
+                rawData.order?.asap,
+                // Additional variations
+                rawData.scheduled_time,
+                rawData.scheduled_datetime,
+                rawData.estimated_delivery_time,
+                rawData.estimated_delivery_datetime,
+                rawData.order?.scheduled_time,
+                rawData.order?.scheduled_datetime
             ];
             
             for (const candidate of candidates) {
                 if (candidate) {
+                    // Debug: log what we found
+                    console.log('Found delivery time:', candidate, 'from order:', order.gloriafood_order_id || order.id);
                     return candidate;
+                }
+            }
+            
+            // Debug: log raw_data structure if no candidate found
+            if (order.gloriafood_order_id || order.id) {
+                console.log('No delivery time found for order:', order.gloriafood_order_id || order.id);
+                console.log('Raw data keys:', Object.keys(rawData));
+                if (rawData.delivery) {
+                    console.log('Delivery object keys:', Object.keys(rawData.delivery));
+                }
+                if (rawData.order) {
+                    console.log('Order object keys:', Object.keys(rawData.order));
                 }
             }
         } catch (e) {
@@ -2262,6 +2330,67 @@ window.checkDatabaseStatus = async function() {
         console.error('Database check error:', error);
         alert('Error checking database. See console for details.');
     }
+};
+
+// Debug function - inspect order data for delivery time
+window.inspectOrderData = function(orderId) {
+    const order = allOrders.find(o => (o.gloriafood_order_id || o.id) == orderId);
+    if (!order) {
+        console.error('Order not found:', orderId);
+        return;
+    }
+    
+    console.log('=== Order Data Inspection ===');
+    console.log('Order ID:', orderId);
+    console.log('Full Order:', order);
+    
+    if (order.raw_data) {
+        try {
+            const rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+            console.log('=== Raw Data ===');
+            console.log('Raw Data:', rawData);
+            console.log('Raw Data Keys:', Object.keys(rawData));
+            
+            // Check for delivery time fields
+            console.log('=== Delivery Time Fields ===');
+            console.log('delivery_time:', rawData.delivery_time);
+            console.log('delivery_datetime:', rawData.delivery_datetime);
+            console.log('delivery_date:', rawData.delivery_date);
+            console.log('scheduled_delivery_time:', rawData.scheduled_delivery_time);
+            console.log('required_delivery_time:', rawData.required_delivery_time);
+            console.log('req_delivery_time:', rawData.req_delivery_time);
+            
+            if (rawData.delivery) {
+                console.log('=== Delivery Object ===');
+                console.log('delivery:', rawData.delivery);
+                console.log('delivery keys:', Object.keys(rawData.delivery));
+                console.log('delivery.time:', rawData.delivery.time);
+                console.log('delivery.datetime:', rawData.delivery.datetime);
+                console.log('delivery.delivery_time:', rawData.delivery.delivery_time);
+            }
+            
+            if (rawData.order) {
+                console.log('=== Order Object ===');
+                console.log('order:', rawData.order);
+                if (rawData.order.delivery) {
+                    console.log('order.delivery:', rawData.order.delivery);
+                    console.log('order.delivery keys:', Object.keys(rawData.order.delivery));
+                }
+            }
+            
+            // Test extraction
+            const reqDeliveryTime = extractRequiredDeliveryTime(order);
+            console.log('=== Extraction Result ===');
+            console.log('extractRequiredDeliveryTime result:', reqDeliveryTime);
+            
+        } catch (e) {
+            console.error('Error parsing raw_data:', e);
+        }
+    } else {
+        console.log('No raw_data found in order');
+    }
+    
+    return order;
 };
 
 // Update delete selected button visibility
