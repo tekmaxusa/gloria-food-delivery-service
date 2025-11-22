@@ -397,7 +397,7 @@ function displayRecentOrders(orders) {
         <tr>
             <td><strong>#${order.gloriafood_order_id || order.id || 'N/A'}</strong></td>
             <td>${escapeHtml(extractCustomerName(order))}</td>
-            <td>${escapeHtml(order.delivery_address || 'N/A')}</td>
+            <td>${escapeHtml(extractDeliveryAddress(order))}</td>
             <td>${formatCurrency(order.total_price || 0, order.currency || 'USD')}</td>
             <td><span class="status-badge status-${(order.status || 'UNKNOWN').toUpperCase()}">${escapeHtml(order.status || 'UNKNOWN')}</span></td>
             <td>${formatDate(order.fetched_at || order.created_at)}</td>
@@ -1715,6 +1715,8 @@ function extractRequiredPickupTime(order) {
     if (order.required_pickup_time) return order.required_pickup_time;
     if (order.req_pickup_time) return order.req_pickup_time;
     if (order.requested_pickup_time) return order.requested_pickup_time;
+    if (order.scheduled_pickup_time) return order.scheduled_pickup_time;
+    if (order.pickup_time) return order.pickup_time;
     
     // Try to extract from raw_data
     if (order.raw_data) {
@@ -1726,11 +1728,22 @@ function extractRequiredPickupTime(order) {
                 rawData.req_pickup_time,
                 rawData.requested_pickup_time,
                 rawData.pickup_time_required,
+                rawData.scheduled_pickup_time,
+                rawData.pickup_time,
+                rawData.pickup?.time,
+                rawData.pickup?.scheduled_time,
+                rawData.pickup?.required_time,
                 rawData.delivery?.required_pickup_time,
                 rawData.delivery?.req_pickup_time,
+                rawData.delivery?.scheduled_pickup_time,
+                rawData.delivery?.pickup_time,
                 rawData.order?.required_pickup_time,
                 rawData.order?.req_pickup_time,
-                rawData.order?.delivery?.required_pickup_time
+                rawData.order?.pickup_time,
+                rawData.order?.delivery?.required_pickup_time,
+                rawData.order?.delivery?.pickup_time,
+                rawData.order?.pickup?.time,
+                rawData.order?.pickup?.scheduled_time
             ];
             
             for (const candidate of candidates) {
@@ -1752,6 +1765,8 @@ function extractRequiredDeliveryTime(order) {
     if (order.required_delivery_time) return order.required_delivery_time;
     if (order.req_delivery_time) return order.req_delivery_time;
     if (order.requested_delivery_time) return order.requested_delivery_time;
+    if (order.scheduled_delivery_time) return order.scheduled_delivery_time;
+    if (order.delivery_time) return order.delivery_time;
     
     // Try to extract from raw_data
     if (order.raw_data) {
@@ -1763,11 +1778,24 @@ function extractRequiredDeliveryTime(order) {
                 rawData.req_delivery_time,
                 rawData.requested_delivery_time,
                 rawData.delivery_time_required,
+                rawData.scheduled_delivery_time,
+                rawData.delivery_time,
+                rawData.delivery?.time,
+                rawData.delivery?.scheduled_time,
+                rawData.delivery?.required_time,
                 rawData.delivery?.required_delivery_time,
                 rawData.delivery?.req_delivery_time,
+                rawData.delivery?.scheduled_delivery_time,
                 rawData.order?.required_delivery_time,
                 rawData.order?.req_delivery_time,
-                rawData.order?.delivery?.required_delivery_time
+                rawData.order?.delivery_time,
+                rawData.order?.delivery?.required_delivery_time,
+                rawData.order?.delivery?.time,
+                rawData.order?.delivery?.scheduled_time,
+                // GloriaFood specific fields
+                rawData.asap,
+                rawData.delivery?.asap,
+                rawData.order?.asap
             ];
             
             for (const candidate of candidates) {
@@ -1962,11 +1990,21 @@ function createOrderRow(order) {
     const orderPlaced = formatDate(order.fetched_at || order.created_at || order.updated_at);
     
     // Extract required pickup time (only show if available)
-    const reqPickupTimeValue = extractRequiredPickupTime(order);
+    // Try required pickup time first, then fallback to any pickup time
+    let reqPickupTimeValue = extractRequiredPickupTime(order);
+    if (!reqPickupTimeValue) {
+        // Fallback to regular pickup_time if required is not available
+        reqPickupTimeValue = extractTime(order, 'pickup_time') || order.pickup_time;
+    }
     const reqPickupTime = reqPickupTimeValue ? formatDate(reqPickupTimeValue) : '';
     
     // Extract required delivery time (only show if available)
-    const reqDeliveryTimeValue = extractRequiredDeliveryTime(order);
+    // Try required delivery time first, then fallback to any delivery time
+    let reqDeliveryTimeValue = extractRequiredDeliveryTime(order);
+    if (!reqDeliveryTimeValue) {
+        // Fallback to regular delivery_time if required is not available
+        reqDeliveryTimeValue = extractTime(order, 'delivery_time') || order.delivery_time;
+    }
     const reqDeliveryTime = reqDeliveryTimeValue ? formatDate(reqDeliveryTimeValue) : '';
     
     // Extract ready for pickup status (check if order is ready)
@@ -2283,11 +2321,21 @@ window.showOrderDetails = function(orderId) {
     const deliveryAddress = extractDeliveryAddress(order);
     
     // Extract required pickup time (only show if available)
-    const reqPickupTimeValue = extractRequiredPickupTime(order);
+    // Try required pickup time first, then fallback to any pickup time
+    let reqPickupTimeValue = extractRequiredPickupTime(order);
+    if (!reqPickupTimeValue) {
+        // Fallback to regular pickup_time if required is not available
+        reqPickupTimeValue = extractTime(order, 'pickup_time') || order.pickup_time;
+    }
     const reqPickupTime = reqPickupTimeValue ? formatDate(reqPickupTimeValue) : '';
     
     // Extract required delivery time (only show if available)
-    const reqDeliveryTimeValue = extractRequiredDeliveryTime(order);
+    // Try required delivery time first, then fallback to any delivery time
+    let reqDeliveryTimeValue = extractRequiredDeliveryTime(order);
+    if (!reqDeliveryTimeValue) {
+        // Fallback to regular delivery_time if required is not available
+        reqDeliveryTimeValue = extractTime(order, 'delivery_time') || order.delivery_time;
+    }
     const reqDeliveryTime = reqDeliveryTimeValue ? formatDate(reqDeliveryTimeValue) : '';
     
     // Extract times
