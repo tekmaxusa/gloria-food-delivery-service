@@ -108,9 +108,6 @@ function navigateToPage(page) {
         case 'reviews':
             showReviewsPage();
             break;
-        case 'reports':
-            showReportsPage();
-            break;
         default:
             showOrdersPage();
     }
@@ -294,7 +291,7 @@ function showDispatchPage() {
                         <line x1="12" y1="5" x2="12" y2="19"></line>
                         <line x1="5" y1="12" x2="19" y2="12"></line>
                     </svg>
-                    + New Order
+                    New Order
                 </button>
             </div>
         </div>
@@ -331,31 +328,31 @@ function showDriversPage() {
             </div>
         </div>
         <div class="table-container">
-            <table class="orders-table">
+            <table class="orders-table" style="table-layout: fixed; width: 100%;">
                 <thead>
                     <tr>
-                        <th>Name</th>
-                        <th>Rating</th>
-                        <th class="sortable">
+                        <th style="width: 18%;">Name</th>
+                        <th style="width: 12%;">Rating</th>
+                        <th class="sortable" style="width: 15%;">
                             <span>Phone</span>
                             <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M12 5v14M5 12l7-7 7 7"/>
                             </svg>
                         </th>
-                        <th>Email</th>
-                        <th class="sortable">
+                        <th style="width: 20%;">Email</th>
+                        <th class="sortable" style="width: 15%;">
                             <span>Vehicle</span>
                             <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M12 5v14M5 12l7-7 7 7"/>
                             </svg>
                         </th>
-                        <th class="sortable">
+                        <th class="sortable" style="width: 12%;">
                             <span>Status</span>
                             <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M12 5v14M5 12l7-7 7 7"/>
                             </svg>
                         </th>
-                        <th></th>
+                        <th style="width: 8%;"></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -395,62 +392,6 @@ function showReviewsPage() {
     `;
 }
 
-// Show Reports page
-function showReportsPage() {
-    const mainContainer = document.querySelector('.main-container');
-    mainContainer.innerHTML = `
-        <div class="orders-header">
-            <h1 class="page-title">Reports</h1>
-        </div>
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; margin-top: 24px;">
-            <div class="report-card">
-                <div class="report-icon" style="background: #d1fae5; color: #065f46;">📊</div>
-                <h3>Sales</h3>
-                <p>Key sales metrics revealing customer consumption patterns and preferences.</p>
-            </div>
-            <div class="report-card">
-                <div class="report-icon" style="background: #d1fae5; color: #065f46;">🚗</div>
-                <h3>Drivers</h3>
-                <p>Driver hours, payment and performance analysis for operational efficiency.</p>
-            </div>
-            <div class="report-card">
-                <div class="report-icon" style="background: #d1fae5; color: #065f46;">📈</div>
-                <h3>Performance</h3>
-                <p>Key operational metrics revealing delivery efficiency.</p>
-            </div>
-            <div class="report-card">
-                <div class="report-icon" style="background: #d1fae5; color: #065f46;">∞</div>
-                <h3>Extended</h3>
-                <p>Comprehensive overview providing detailed insights into all order-related metrics.</p>
-            </div>
-            <div class="report-card">
-                <div class="report-icon" style="background: #d1fae5; color: #065f46;">📊</div>
-                <h3>Analytics</h3>
-                <p>Time-based performance with charts for comprehensive insights into trends.</p>
-            </div>
-            <div class="report-card">
-                <div class="report-icon" style="background: #d1fae5; color: #065f46;">🗺️</div>
-                <h3>Heatmap</h3>
-                <p>Spatial order distribution on a map for quick trend visualization.</p>
-            </div>
-            <div class="report-card">
-                <div class="report-icon" style="background: #d1fae5; color: #065f46;">📦</div>
-                <h3>Third party delivery services</h3>
-                <p>Insights into third-party delivery operations and essential key metrics.</p>
-            </div>
-            <div class="report-card">
-                <div class="report-icon" style="background: #d1fae5; color: #065f46;">💰</div>
-                <h3>Refund</h3>
-                <p>Insights into refund request and other associated information.</p>
-            </div>
-            <div class="report-card">
-                <div class="report-icon" style="background: #d1fae5; color: #065f46;">✅</div>
-                <h3>Success Report <span style="font-size: 10px; background: #fbbf24; color: #1a202c; padding: 2px 6px; border-radius: 4px; margin-left: 8px;">Beta</span></h3>
-                <p>Analysis of successful deliveries and factors contributing to fulfillment efficiency.</p>
-            </div>
-        </div>
-    `;
-}
 
 // Handle New Order button
 function handleNewOrder() {
@@ -539,7 +480,6 @@ function handleHelp() {
         <p><strong>Orders:</strong> View and manage all your orders</p>
         <p><strong>Dispatch:</strong> Assign orders to drivers</p>
         <p><strong>Drivers:</strong> Manage your delivery drivers</p>
-        <p><strong>Reports:</strong> View analytics and reports</p>
         <p><strong>Search:</strong> Use the search bar to find specific orders</p>
         <p><strong>Status Tabs:</strong> Filter orders by status (Current, Scheduled, Completed, etc.)</p>
         <p style="margin-top: 20px;"><strong>Need more help?</strong> Contact support at support@tekmax.com</p>
@@ -764,8 +704,9 @@ function showNotification(title, message, isError = false) {
         document.body.appendChild(notification);
     }
     
-    notification.textContent = `${title}: ${message}`;
-    notification.className = `notification ${isError ? 'error' : ''}`;
+    notification.innerHTML = `<strong>${title}</strong>: ${message}`;
+    notification.className = `notification ${isError ? 'error' : 'success'}`;
+    notification.classList.remove('hidden');
     
     setTimeout(() => {
         notification.classList.add('hidden');
