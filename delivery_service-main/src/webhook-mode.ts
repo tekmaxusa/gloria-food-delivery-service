@@ -1072,6 +1072,87 @@ class GloriaFoodWebhookServer {
       }
     });
 
+    // Create new order endpoint (connected to GloriaFood format)
+    this.app.post('/orders', async (req: Request, res: Response) => {
+      try {
+        const {
+          customerName,
+          customerPhone,
+          customerEmail,
+          deliveryAddress,
+          totalAmount,
+          orderType,
+          currency = 'USD',
+          items = [],
+          notes = '',
+          storeId
+        } = req.body;
+        
+        // Validate required fields
+        if (!customerName || !customerPhone || !totalAmount || !orderType) {
+          return res.status(400).json({ 
+            success: false, 
+            error: 'Missing required fields: customerName, customerPhone, totalAmount, orderType' 
+          });
+        }
+        
+        // Generate a temporary order ID (will be replaced if synced with GloriaFood)
+        const tempOrderId = `MANUAL-${Date.now()}`;
+        
+        // Format order data in GloriaFood structure
+        const orderData: any = {
+          id: tempOrderId,
+          order_id: tempOrderId,
+          gloriafood_order_id: tempOrderId,
+          store_id: storeId || process.env.GLORIAFOOD_STORE_ID || '',
+          restaurant_id: storeId || process.env.GLORIAFOOD_STORE_ID || '',
+          customer_name: customerName,
+          client_name: customerName,
+          client_first_name: customerName.split(' ')[0] || customerName,
+          client_last_name: customerName.split(' ').slice(1).join(' ') || '',
+          customer_phone: customerPhone,
+          client_phone: customerPhone,
+          customer_email: customerEmail || '',
+          client_email: customerEmail || '',
+          delivery_address: deliveryAddress || '',
+          client_address: deliveryAddress || '',
+          total_price: parseFloat(totalAmount),
+          total: parseFloat(totalAmount),
+          currency: currency,
+          status: 'ACCEPTED',
+          order_status: 'ACCEPTED',
+          order_type: orderType,
+          type: orderType,
+          items: Array.isArray(items) ? items : [],
+          order_items: Array.isArray(items) ? items : [],
+          note: notes,
+          notes: notes,
+          special_instructions: notes,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          fetched_at: new Date().toISOString(),
+          order_date: new Date().toISOString()
+        };
+        
+        // Save order to database
+        const savedOrder = await this.handleAsync(this.database.insertOrUpdateOrder(orderData));
+        
+        if (savedOrder) {
+          console.log(chalk.green(`✅ Manual order created: #${savedOrder.gloriafood_order_id}`));
+          res.json({ 
+            success: true, 
+            message: 'Order created successfully',
+            order: savedOrder
+          });
+        } else {
+          res.status(500).json({ success: false, error: 'Failed to save order to database' });
+        }
+      } catch (error: any) {
+        console.error(chalk.red('Error creating order:'), error);
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
     // Update ready for pickup endpoint
     this.app.patch('/orders/:orderId/ready-for-pickup', async (req: Request, res: Response) => {
       try {

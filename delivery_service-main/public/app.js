@@ -1328,27 +1328,35 @@ function handleNewOrder() {
             <div class="modal-body">
                 <form id="newOrderForm">
                     <div class="form-group">
-                        <label>Customer Name</label>
-                        <input type="text" name="customerName" required>
+                        <label>Customer Name <span style="color: #ef4444;">*</span></label>
+                        <input type="text" name="customerName" required placeholder="Enter customer name">
                     </div>
                     <div class="form-group">
-                        <label>Customer Phone</label>
-                        <input type="tel" name="customerPhone" required>
+                        <label>Customer Phone <span style="color: #ef4444;">*</span></label>
+                        <input type="tel" name="customerPhone" required placeholder="Enter phone number">
                     </div>
                     <div class="form-group">
-                        <label>Delivery Address</label>
-                        <textarea name="deliveryAddress" required></textarea>
+                        <label>Customer Email</label>
+                        <input type="email" name="customerEmail" placeholder="Enter email (optional)">
                     </div>
                     <div class="form-group">
-                        <label>Total Amount</label>
-                        <input type="number" name="totalAmount" step="0.01" required>
+                        <label>Delivery Address <span style="color: #ef4444;">*</span></label>
+                        <textarea name="deliveryAddress" required placeholder="Enter delivery address"></textarea>
                     </div>
                     <div class="form-group">
-                        <label>Order Type</label>
+                        <label>Total Amount <span style="color: #ef4444;">*</span></label>
+                        <input type="number" name="totalAmount" step="0.01" required placeholder="0.00" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label>Order Type <span style="color: #ef4444;">*</span></label>
                         <select name="orderType" required>
                             <option value="delivery">Delivery</option>
                             <option value="pickup">Pickup</option>
                         </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Notes</label>
+                        <textarea name="notes" placeholder="Additional notes or special instructions (optional)"></textarea>
                     </div>
                     <div class="modal-actions">
                         <button type="button" class="btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
@@ -1366,10 +1374,67 @@ function handleNewOrder() {
         if (e.target === modal) modal.remove();
     });
     
-    modal.querySelector('#newOrderForm').addEventListener('submit', (e) => {
+    modal.querySelector('#newOrderForm').addEventListener('submit', async (e) => {
         e.preventDefault();
-        showNotification('Info', 'Order creation functionality - backend integration needed');
-        modal.remove();
+        const form = e.target;
+        const formData = new FormData(form);
+        
+        const orderData = {
+            customerName: formData.get('customerName'),
+            customerPhone: formData.get('customerPhone'),
+            customerEmail: formData.get('customerEmail') || '',
+            deliveryAddress: formData.get('deliveryAddress'),
+            totalAmount: parseFloat(formData.get('totalAmount')),
+            orderType: formData.get('orderType'),
+            currency: 'USD',
+            items: [],
+            notes: formData.get('notes') || ''
+        };
+        
+        // Validate
+        if (!orderData.customerName || !orderData.customerPhone || !orderData.totalAmount || !orderData.orderType) {
+            showNotification('Error', 'Please fill in all required fields', true);
+            return;
+        }
+        
+        // Show loading
+        const submitBtn = form.querySelector('button[type="submit"]');
+        const originalText = submitBtn.textContent;
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Creating...';
+        
+        try {
+            const headers = {
+                'Content-Type': 'application/json'
+            };
+            if (sessionId) {
+                headers['x-session-id'] = sessionId;
+            }
+            
+            const response = await fetch(`${API_BASE}/orders`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(orderData)
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok && data.success) {
+                showNotification('Success', `Order created successfully: #${data.order?.gloriafood_order_id || 'N/A'}`);
+                modal.remove();
+                // Reload orders to show the new order
+                loadOrders();
+            } else {
+                showNotification('Error', data.error || 'Failed to create order', true);
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
+            }
+        } catch (error) {
+            console.error('Error creating order:', error);
+            showNotification('Error', 'Failed to create order: ' + error.message, true);
+            submitBtn.disabled = false;
+            submitBtn.textContent = originalText;
+        }
     });
 }
 
