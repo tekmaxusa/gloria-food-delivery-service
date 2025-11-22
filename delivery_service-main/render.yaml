@@ -4,9 +4,9 @@ services:
     env: node
     plan: free
     region: singapore
-    rootDir: delivery_service-main
-    buildCommand: cd delivery_service-main && npm install --production=false && npm run build
-    startCommand: cd delivery_service-main && npm start
+    rootDir: .
+    buildCommand: npm install --production=false && npm run build
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production

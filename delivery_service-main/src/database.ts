@@ -218,6 +218,210 @@ export class OrderDatabase {
     return result.count;
   }
 
+  // User authentication methods
+  createUser(email: string, password: string, fullName: string): any {
+    try {
+      const crypto = require('crypto');
+      const hashedPassword = crypto.createHash('sha256').update(password).digest('hex');
+      
+      // Create users table if not exists
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS users (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          email TEXT UNIQUE NOT NULL,
+          password TEXT NOT NULL,
+          full_name TEXT NOT NULL,
+          role TEXT DEFAULT 'user',
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_email ON users(email);
+      `);
+      
+      const stmt = this.db.prepare('INSERT INTO users (email, password, full_name) VALUES (?, ?, ?)');
+      const result = stmt.run(email, hashedPassword, fullName);
+      
+      return {
+        id: result.lastInsertRowid,
+        email,
+        full_name: fullName,
+        role: 'user'
+      };
+    } catch (error: any) {
+      console.error('Error creating user:', error);
+      if (error.message?.includes('UNIQUE constraint')) {
+        throw new Error('Email already exists');
+      }
+      throw error;
+    }
+  }
+
+  getUserByEmail(email: string): any | null {
+    try {
+      const stmt = this.db.prepare('SELECT * FROM users WHERE email = ?');
+      return stmt.get(email) as any | null;
+    } catch (error) {
+      console.error('Error getting user:', error);
+      return null;
+    }
+  }
+
+  verifyPassword(email: string, password: string): any | null {
+    try {
+      const crypto = require('crypto');
+      const hashedPassword = crypto.createHash('sha256').update(password).digest('hex');
+      
+      const user = this.getUserByEmail(email);
+      if (!user) {
+        return null;
+      }
+      
+      if (user.password === hashedPassword) {
+        return {
+          id: user.id,
+          email: user.email,
+          full_name: user.full_name,
+          role: user.role
+        };
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error verifying password:', error);
+      return null;
+    }
+  }
+
+  // Drivers methods
+  getAllDrivers(): any[] {
+    try {
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS drivers (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          phone TEXT,
+          email TEXT,
+          vehicle_type TEXT,
+          vehicle_plate TEXT,
+          rating REAL DEFAULT 0.00,
+          status TEXT DEFAULT 'active',
+          latitude REAL,
+          longitude REAL,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_status ON drivers(status);
+      `);
+      
+      const stmt = this.db.prepare('SELECT * FROM drivers ORDER BY name');
+      return stmt.all() as any[];
+    } catch (error) {
+      console.error('Error getting drivers:', error);
+      return [];
+    }
+  }
+
+  getDriverById(id: number): any | null {
+    try {
+      const stmt = this.db.prepare('SELECT * FROM drivers WHERE id = ?');
+      return stmt.get(id) as any | null;
+    } catch (error) {
+      console.error('Error getting driver:', error);
+      return null;
+    }
+  }
+
+  // Reviews methods
+  getAllReviews(): any[] {
+    try {
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS reviews (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          order_id INTEGER,
+          driver_id INTEGER,
+          customer_name TEXT,
+          rating INTEGER NOT NULL,
+          comment TEXT,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_order_id ON reviews(order_id);
+        CREATE INDEX IF NOT EXISTS idx_driver_id ON reviews(driver_id);
+      `);
+      
+      const stmt = this.db.prepare(`
+        SELECT r.*, o.gloriafood_order_id as order_number 
+        FROM reviews r 
+        LEFT JOIN orders o ON r.order_id = o.id 
+        ORDER BY r.created_at DESC
+      `);
+      return stmt.all() as any[];
+    } catch (error) {
+      console.error('Error getting reviews:', error);
+      return [];
+    }
+  }
+
+  getReviewsByOrderId(orderId: number): any[] {
+    try {
+      const stmt = this.db.prepare('SELECT * FROM reviews WHERE order_id = ? ORDER BY created_at DESC');
+      return stmt.all(orderId) as any[];
+    } catch (error) {
+      console.error('Error getting reviews by order:', error);
+      return [];
+    }
+  }
+
+  // Statistics methods
+  getDashboardStats(): any {
+    try {
+      const orderStats = this.db.prepare(`
+        SELECT 
+          COUNT(*) as total_orders,
+          SUM(CASE WHEN status = 'DELIVERED' THEN 1 ELSE 0 END) as completed_orders,
+          SUM(CASE WHEN status NOT IN ('DELIVERED', 'CANCELLED') THEN 1 ELSE 0 END) as active_orders,
+          SUM(CASE WHEN status = 'CANCELLED' THEN 1 ELSE 0 END) as cancelled_orders,
+          SUM(total_price) as total_revenue
+        FROM orders
+      `).get() as any;
+      
+      const recentOrders = this.db.prepare(`
+        SELECT COUNT(*) as count FROM orders 
+        WHERE datetime(fetched_at) > datetime('now', '-24 hours')
+      `).get() as any;
+      
+      const driverStats = this.db.prepare(`
+        SELECT 
+          COUNT(*) as total_drivers,
+          SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_drivers
+        FROM drivers
+      `).get() as any;
+      
+      return {
+        orders: {
+          total: orderStats?.total_orders || 0,
+          completed: orderStats?.completed_orders || 0,
+          active: orderStats?.active_orders || 0,
+          cancelled: orderStats?.cancelled_orders || 0,
+          recent_24h: recentOrders?.count || 0
+        },
+        revenue: {
+          total: parseFloat(orderStats?.total_revenue || 0)
+        },
+        drivers: {
+          total: driverStats?.total_drivers || 0,
+          active: driverStats?.active_drivers || 0
+        }
+      };
+    } catch (error) {
+      console.error('Error getting dashboard stats:', error);
+      return {
+        orders: { total: 0, completed: 0, active: 0, cancelled: 0, recent_24h: 0 },
+        revenue: { total: 0 },
+        drivers: { total: 0, active: 0 }
+      };
+    }
+  }
+
   close(): void {
     this.db.close();
   }

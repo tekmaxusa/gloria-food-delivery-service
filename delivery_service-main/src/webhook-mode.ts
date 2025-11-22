@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
+import * as crypto from 'crypto';
 import { IDatabase, DatabaseFactory, Order } from './database-factory';
 import { GloriaFoodOrder } from './gloriafood-client';
 import { DoorDashClient } from './doordash-client';
@@ -36,6 +37,7 @@ class GloriaFoodWebhookServer {
   private doorDashClient?: DoorDashClient;
   private deliveryScheduler?: DeliveryScheduler;
   private emailService?: EmailService;
+  private sessions: Map<string, { userId: number; email: string; expires: number }> = new Map();
 
   constructor(config: WebhookConfig) {
     console.log(chalk.blue.bold('\n🔵 Starting GloriaFood Webhook Server...'));
@@ -499,6 +501,17 @@ class GloriaFoodWebhookServer {
     }
     
     // Parse JSON bodies
+    // CORS support for Render and other hosting platforms
+    this.app.use((req, res, next) => {
+      res.header('Access-Control-Allow-Origin', '*');
+      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+      res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, x-session-id');
+      if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+      }
+      next();
+    });
+    
     this.app.use(express.json());
     // Also parse URL-encoded bodies (some webhooks use this)
     this.app.use(express.urlencoded({ extended: true }));
@@ -822,6 +835,143 @@ class GloriaFoodWebhookServer {
       }
     });
 
+    // Authentication endpoints
+    this.app.post('/api/auth/signup', async (req: Request, res: Response) => {
+      try {
+        const { email, password, fullName, full_name } = req.body;
+        const name = fullName || full_name;
+        
+        if (!email || !password || !name) {
+          return res.status(400).json({ success: false, error: 'Email, password, and full name are required' });
+        }
+        
+        const user = await this.handleAsync(this.database.createUser(email, password, name));
+        
+        if (!user) {
+          return res.status(500).json({ success: false, error: 'Failed to create user' });
+        }
+        
+        // Create session
+        const sessionId = crypto.randomBytes(32).toString('hex');
+        this.sessions.set(sessionId, {
+          userId: user.id,
+          email: user.email,
+          expires: Date.now() + 24 * 60 * 60 * 1000 // 24 hours
+        });
+        
+        res.json({ 
+          success: true, 
+          user: {
+            id: user.id,
+            email: user.email,
+            full_name: user.full_name,
+            role: user.role
+          },
+          sessionId
+        });
+      } catch (error: any) {
+        console.error('Signup error:', error);
+        res.status(400).json({ success: false, error: error.message || 'Failed to create account' });
+      }
+    });
+
+    this.app.post('/api/auth/login', async (req: Request, res: Response) => {
+      try {
+        const { email, password } = req.body;
+        
+        if (!email || !password) {
+          return res.status(400).json({ success: false, error: 'Email and password are required' });
+        }
+        
+        const user = await this.handleAsync(this.database.verifyPassword(email, password));
+        
+        if (!user) {
+          return res.status(401).json({ success: false, error: 'Invalid email or password' });
+        }
+        
+        // Create session
+        const sessionId = crypto.randomBytes(32).toString('hex');
+        this.sessions.set(sessionId, {
+          userId: user.id,
+          email: user.email,
+          expires: Date.now() + 24 * 60 * 60 * 1000 // 24 hours
+        });
+        
+        res.json({ 
+          success: true, 
+          user: {
+            id: user.id,
+            email: user.email,
+            full_name: user.full_name,
+            role: user.role
+          },
+          sessionId
+        });
+      } catch (error: any) {
+        console.error('Login error:', error);
+        res.status(500).json({ success: false, error: 'Failed to login' });
+      }
+    });
+
+    this.app.post('/api/auth/logout', (req: Request, res: Response) => {
+      const sessionId = req.headers['x-session-id'] as string;
+      if (sessionId) {
+        this.sessions.delete(sessionId);
+      }
+      res.json({ success: true });
+    });
+
+    this.app.get('/api/auth/me', (req: Request, res: Response) => {
+      const sessionId = req.headers['x-session-id'] as string;
+      if (!sessionId) {
+        return res.status(401).json({ success: false, error: 'Not authenticated' });
+      }
+      
+      const session = this.sessions.get(sessionId);
+      if (!session || session.expires < Date.now()) {
+        this.sessions.delete(sessionId);
+        return res.status(401).json({ success: false, error: 'Session expired' });
+      }
+      
+      res.json({ 
+        success: true, 
+        user: {
+          id: session.userId,
+          email: session.email
+        }
+      });
+    });
+
+    // Dashboard stats endpoint
+    this.app.get('/api/dashboard/stats', async (req: Request, res: Response) => {
+      try {
+        const stats = await this.handleAsync(this.database.getDashboardStats());
+        res.json({ success: true, stats });
+      } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    // Drivers endpoint
+    this.app.get('/api/drivers', async (req: Request, res: Response) => {
+      try {
+        const drivers = await this.handleAsync(this.database.getAllDrivers());
+        res.json({ success: true, drivers });
+      } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    // Reviews endpoint
+    this.app.get('/api/reviews', async (req: Request, res: Response) => {
+      try {
+        const reviews = await this.handleAsync(this.database.getAllReviews());
+        res.json({ success: true, reviews });
+      } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
     // Get orders by status
     this.app.get('/orders/status/:status', async (req: Request, res: Response) => {
       try {
@@ -955,6 +1105,228 @@ class GloriaFoodWebhookServer {
         res.status(500).json({ error: error.message });
       }
     });
+
+    // Authentication endpoints
+    this.app.post('/api/auth/signup', async (req: Request, res: Response) => {
+      try {
+        const { email, password, full_name, fullName } = req.body;
+        const name = full_name || fullName;
+        
+        if (!email || !password || !name) {
+          return res.status(400).json({ success: false, error: 'Email, password, and full name are required' });
+        }
+
+        // Hash password
+        const hashedPassword = this.hashPassword(password);
+        
+        // Insert user into database
+        const db = this.database as any;
+        if (db.query) {
+          // MySQL database
+          const [rows]: any = await db.query(
+            'INSERT INTO users (email, password, full_name) VALUES (?, ?, ?)',
+            [email, hashedPassword, name]
+          );
+          
+          const sessionToken = this.createSession(rows.insertId, email);
+          res.json({ success: true, sessionId: sessionToken, token: sessionToken, user: { id: rows.insertId, email, full_name: name } });
+        } else {
+          // SQLite - use database method
+          const user = await this.handleAsync(this.database.createUser(email, password, name));
+          if (!user) {
+            return res.status(500).json({ success: false, error: 'Failed to create user' });
+          }
+          
+          const sessionToken = this.createSession(user.id, email);
+          res.json({ success: true, sessionId: sessionToken, token: sessionToken, user });
+        }
+      } catch (error: any) {
+        if (error.code === 'ER_DUP_ENTRY' || error.message.includes('UNIQUE')) {
+          res.status(400).json({ success: false, error: 'Email already exists' });
+        } else {
+          res.status(500).json({ success: false, error: error.message });
+        }
+      }
+    });
+
+    this.app.post('/api/auth/login', async (req: Request, res: Response) => {
+      try {
+        const { email, password } = req.body;
+        
+        if (!email || !password) {
+          return res.status(400).json({ success: false, error: 'Email and password are required' });
+        }
+
+        const db = this.database as any;
+        if (db.query) {
+          // MySQL database
+          const [rows]: any = await db.query(
+            'SELECT id, email, password, full_name, role FROM users WHERE email = ?',
+            [email]
+          );
+          
+          if (rows.length === 0) {
+            return res.status(401).json({ success: false, error: 'Invalid email or password' });
+          }
+          
+          const user = rows[0];
+          if (!this.verifyPassword(password, user.password)) {
+            return res.status(401).json({ success: false, error: 'Invalid email or password' });
+          }
+          
+          const sessionToken = this.createSession(user.id, user.email);
+          res.json({ 
+            success: true, 
+            sessionId: sessionToken,
+            token: sessionToken, 
+            user: { id: user.id, email: user.email, full_name: user.full_name, role: user.role } 
+          });
+        } else {
+          // SQLite - use database method
+          const dbUser = await this.handleAsync(this.database.verifyPassword(email, password));
+          if (!dbUser) {
+            return res.status(401).json({ success: false, error: 'Invalid email or password' });
+          }
+          
+          const sessionToken = this.createSession(dbUser.id, dbUser.email);
+          res.json({ 
+            success: true, 
+            sessionId: sessionToken,
+            token: sessionToken, 
+            user: { id: dbUser.id, email: dbUser.email, full_name: dbUser.full_name, role: dbUser.role } 
+          });
+        }
+      } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    this.app.post('/api/auth/logout', (req: Request, res: Response) => {
+      const token = req.headers.authorization?.replace('Bearer ', '');
+      if (token) {
+        this.sessions.delete(token);
+      }
+      res.json({ success: true });
+    });
+
+    this.app.get('/api/auth/me', async (req: Request, res: Response) => {
+      try {
+        const token = req.headers.authorization?.replace('Bearer ', '');
+        if (!token) {
+          return res.status(401).json({ success: false, error: 'Not authenticated' });
+        }
+        
+        const session = this.sessions.get(token);
+        if (!session || session.expires < Date.now()) {
+          this.sessions.delete(token);
+          return res.status(401).json({ success: false, error: 'Session expired' });
+        }
+        
+        const db = this.database as any;
+        if (db.query) {
+          const [rows]: any = await db.query(
+            'SELECT id, email, full_name, role FROM users WHERE id = ?',
+            [session.userId]
+          );
+          
+          if (rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'User not found' });
+          }
+          
+          res.json({ success: true, user: rows[0] });
+        } else {
+          res.status(500).json({ success: false, error: 'Not supported with SQLite' });
+        }
+      } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    // Drivers endpoints
+    this.app.get('/api/drivers', async (req: Request, res: Response) => {
+      try {
+        const db = this.database as any;
+        if (db.query) {
+          const [rows]: any = await db.query('SELECT * FROM drivers ORDER BY created_at DESC');
+          res.json({ success: true, drivers: rows });
+        } else {
+          res.json({ success: true, drivers: [] });
+        }
+      } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    this.app.post('/api/drivers', async (req: Request, res: Response) => {
+      try {
+        const { name, phone, email, vehicle_type, vehicle_plate } = req.body;
+        const db = this.database as any;
+        if (db.query) {
+          const [result]: any = await db.query(
+            'INSERT INTO drivers (name, phone, email, vehicle_type, vehicle_plate, status) VALUES (?, ?, ?, ?, ?, ?)',
+            [name, phone, email, vehicle_type, vehicle_plate, 'active']
+          );
+          res.json({ success: true, driver: { id: result.insertId, ...req.body } });
+        } else {
+          res.status(500).json({ success: false, error: 'Not supported with SQLite' });
+        }
+      } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    // Reviews endpoints
+    this.app.get('/api/reviews', async (req: Request, res: Response) => {
+      try {
+        const db = this.database as any;
+        if (db.query) {
+          const [rows]: any = await db.query(
+            'SELECT r.*, o.gloriafood_order_id, d.name as driver_name FROM reviews r LEFT JOIN orders o ON r.order_id = o.id LEFT JOIN drivers d ON r.driver_id = d.id ORDER BY r.created_at DESC'
+          );
+          res.json({ success: true, reviews: rows });
+        } else {
+          res.json({ success: true, reviews: [] });
+        }
+      } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    this.app.post('/api/reviews', async (req: Request, res: Response) => {
+      try {
+        const { order_id, driver_id, customer_name, rating, comment } = req.body;
+        const db = this.database as any;
+        if (db.query) {
+          const [result]: any = await db.query(
+            'INSERT INTO reviews (order_id, driver_id, customer_name, rating, comment) VALUES (?, ?, ?, ?, ?)',
+            [order_id, driver_id, customer_name, rating, comment]
+          );
+          res.json({ success: true, review: { id: result.insertId, ...req.body } });
+        } else {
+          res.status(500).json({ success: false, error: 'Not supported with SQLite' });
+        }
+      } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+  }
+
+  private hashPassword(password: string): string {
+    return crypto.createHash('sha256').update(password).digest('hex');
+  }
+
+  private verifyPassword(password: string, hashedPassword: string): boolean {
+    return this.hashPassword(password) === hashedPassword;
+  }
+
+  private createSession(userId: number, email: string): string {
+    const token = crypto.randomBytes(32).toString('hex');
+    this.sessions.set(token, {
+      userId,
+      email,
+      expires: Date.now() + (7 * 24 * 60 * 60 * 1000) // 7 days
+    });
+    return token;
   }
 
   private extractOrderData(body: any): GloriaFoodOrder | null {

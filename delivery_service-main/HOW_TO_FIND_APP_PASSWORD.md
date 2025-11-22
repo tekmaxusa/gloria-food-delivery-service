@@ -98,3 +98,6 @@ Kung wala pa naka-enable na second step method:
 - Try mo i-enable ulit ang Google prompt o phone number
 - Wait ng ilang minutes bago i-try ulit
 
+
+
+

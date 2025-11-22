@@ -509,6 +509,246 @@ export class OrderDatabaseMySQL {
     }
   }
 
+  // User authentication methods
+  async createUser(email: string, password: string, fullName: string): Promise<any> {
+    try {
+      const crypto = require('crypto');
+      const hashedPassword = crypto.createHash('sha256').update(password).digest('hex');
+      
+      const connection = await this.pool.getConnection();
+      
+      // Create users table if not exists
+      await connection.query(`
+        CREATE TABLE IF NOT EXISTS users (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          email VARCHAR(255) UNIQUE NOT NULL,
+          password VARCHAR(255) NOT NULL,
+          full_name VARCHAR(255) NOT NULL,
+          role VARCHAR(50) DEFAULT 'user',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          INDEX idx_email (email)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      `);
+      
+      const [result] = await connection.query(`
+        INSERT INTO users (email, password, full_name) VALUES (?, ?, ?)
+      `, [email, hashedPassword, fullName]) as any;
+      
+      connection.release();
+      
+      return {
+        id: result.insertId,
+        email,
+        full_name: fullName,
+        role: 'user'
+      };
+    } catch (error: any) {
+      console.error('Error creating user:', error);
+      if (error.code === 'ER_DUP_ENTRY') {
+        throw new Error('Email already exists');
+      }
+      throw error;
+    }
+  }
+
+  async getUserByEmail(email: string): Promise<any | null> {
+    try {
+      const connection = await this.pool.getConnection();
+      const [rows] = await connection.query(
+        'SELECT * FROM users WHERE email = ?',
+        [email]
+      ) as any[];
+      
+      connection.release();
+      return rows.length > 0 ? rows[0] : null;
+    } catch (error) {
+      console.error('Error getting user:', error);
+      return null;
+    }
+  }
+
+  async verifyPassword(email: string, password: string): Promise<any | null> {
+    try {
+      const crypto = require('crypto');
+      const hashedPassword = crypto.createHash('sha256').update(password).digest('hex');
+      
+      const user = await this.getUserByEmail(email);
+      if (!user) {
+        return null;
+      }
+      
+      if (user.password === hashedPassword) {
+        return {
+          id: user.id,
+          email: user.email,
+          full_name: user.full_name,
+          role: user.role
+        };
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error verifying password:', error);
+      return null;
+    }
+  }
+
+  // Drivers methods
+  async getAllDrivers(): Promise<any[]> {
+    try {
+      const connection = await this.pool.getConnection();
+      
+      // Create drivers table if not exists
+      await connection.query(`
+        CREATE TABLE IF NOT EXISTS drivers (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          name VARCHAR(255) NOT NULL,
+          phone VARCHAR(100),
+          email VARCHAR(255),
+          vehicle_type VARCHAR(100),
+          vehicle_plate VARCHAR(100),
+          rating DECIMAL(3, 2) DEFAULT 0.00,
+          status VARCHAR(50) DEFAULT 'active',
+          latitude DECIMAL(10, 8),
+          longitude DECIMAL(11, 8),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          INDEX idx_status (status)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      `);
+      
+      const [rows] = await connection.query('SELECT * FROM drivers ORDER BY name') as any[];
+      connection.release();
+      return rows || [];
+    } catch (error) {
+      console.error('Error getting drivers:', error);
+      return [];
+    }
+  }
+
+  async getDriverById(id: number): Promise<any | null> {
+    try {
+      const connection = await this.pool.getConnection();
+      const [rows] = await connection.query(
+        'SELECT * FROM drivers WHERE id = ?',
+        [id]
+      ) as any[];
+      
+      connection.release();
+      return rows.length > 0 ? rows[0] : null;
+    } catch (error) {
+      console.error('Error getting driver:', error);
+      return null;
+    }
+  }
+
+  // Reviews methods
+  async getAllReviews(): Promise<any[]> {
+    try {
+      const connection = await this.pool.getConnection();
+      
+      // Create reviews table if not exists
+      await connection.query(`
+        CREATE TABLE IF NOT EXISTS reviews (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          order_id INT,
+          driver_id INT,
+          customer_name VARCHAR(255),
+          rating INT NOT NULL,
+          comment TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          INDEX idx_order_id (order_id),
+          INDEX idx_driver_id (driver_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      `);
+      
+      const [rows] = await connection.query(`
+        SELECT r.*, o.gloriafood_order_id as order_number 
+        FROM reviews r 
+        LEFT JOIN orders o ON r.order_id = o.id 
+        ORDER BY r.created_at DESC
+      `) as any[];
+      
+      connection.release();
+      return rows || [];
+    } catch (error) {
+      console.error('Error getting reviews:', error);
+      return [];
+    }
+  }
+
+  async getReviewsByOrderId(orderId: number): Promise<any[]> {
+    try {
+      const connection = await this.pool.getConnection();
+      const [rows] = await connection.query(
+        'SELECT * FROM reviews WHERE order_id = ? ORDER BY created_at DESC',
+        [orderId]
+      ) as any[];
+      
+      connection.release();
+      return rows || [];
+    } catch (error) {
+      console.error('Error getting reviews by order:', error);
+      return [];
+    }
+  }
+
+  // Statistics methods
+  async getDashboardStats(): Promise<any> {
+    try {
+      const connection = await this.pool.getConnection();
+      
+      const [orderStats] = await connection.query(`
+        SELECT 
+          COUNT(*) as total_orders,
+          SUM(CASE WHEN status = 'DELIVERED' THEN 1 ELSE 0 END) as completed_orders,
+          SUM(CASE WHEN status NOT IN ('DELIVERED', 'CANCELLED') THEN 1 ELSE 0 END) as active_orders,
+          SUM(CASE WHEN status = 'CANCELLED' THEN 1 ELSE 0 END) as cancelled_orders,
+          SUM(total_price) as total_revenue
+        FROM orders
+      `) as any[];
+      
+      const [recentOrders] = await connection.query(`
+        SELECT COUNT(*) as count FROM orders 
+        WHERE fetched_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+      `) as any[];
+      
+      const [driverStats] = await connection.query(`
+        SELECT 
+          COUNT(*) as total_drivers,
+          SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_drivers
+        FROM drivers
+      `) as any[];
+      
+      connection.release();
+      
+      return {
+        orders: {
+          total: orderStats[0]?.total_orders || 0,
+          completed: orderStats[0]?.completed_orders || 0,
+          active: orderStats[0]?.active_orders || 0,
+          cancelled: orderStats[0]?.cancelled_orders || 0,
+          recent_24h: recentOrders[0]?.count || 0
+        },
+        revenue: {
+          total: parseFloat(orderStats[0]?.total_revenue || 0)
+        },
+        drivers: {
+          total: driverStats[0]?.total_drivers || 0,
+          active: driverStats[0]?.active_drivers || 0
+        }
+      };
+    } catch (error) {
+      console.error('Error getting dashboard stats:', error);
+      return {
+        orders: { total: 0, completed: 0, active: 0, cancelled: 0, recent_24h: 0 },
+        revenue: { total: 0 },
+        drivers: { total: 0, active: 0 }
+      };
+    }
+  }
+
   async close(): Promise<void> {
     await this.pool.end();
   }

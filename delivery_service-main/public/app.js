@@ -6,6 +6,11 @@ let lastOrderIds = new Set();
 let allOrders = [];
 let currentStatusFilter = '';
 let searchQuery = '';
+let currentUser = null;
+let sessionId = null;
+
+// TekMax Logo URL
+const TEKMAX_LOGO_URL = 'https://media.licdn.com/dms/image/v2/D560BAQHPtxnF-6ws_w/company-logo_200_200/company-logo_200_200/0/1730509053465/hellotekmax_logo?e=2147483647&v=beta&t=1Ztf8UScfnTQjphAVDFVwr9Ket7fhIUFP2PSz43nyJE';
 
 // Request notification permission on load
 if ('Notification' in window && Notification.permission === 'default') {
@@ -14,64 +19,185 @@ if ('Notification' in window && Notification.permission === 'default') {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    loadOrders();
+    checkAuthStatus();
+    setupAuthForms();
     
     // Setup navigation links
     setupNavigation();
     
-    // Setup status tabs
-    document.querySelectorAll('.status-tab').forEach(tab => {
-        tab.addEventListener('click', (e) => {
-            // Remove active class from all tabs
-            document.querySelectorAll('.status-tab').forEach(t => t.classList.remove('active'));
-            // Add active class to clicked tab
-            e.target.classList.add('active');
-            
-            const status = e.target.dataset.status;
-            currentStatusFilter = status;
-            filterAndDisplayOrders();
+    // Start auto-refresh if authenticated
+    if (sessionId) {
+        startAutoRefresh();
+    }
+});
+
+// Check authentication status
+async function checkAuthStatus() {
+    const storedSessionId = localStorage.getItem('sessionId');
+    if (!storedSessionId) {
+        showAuthContainer();
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/api/auth/me`, {
+            headers: {
+                'x-session-id': storedSessionId
+            }
         });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success) {
+                sessionId = storedSessionId;
+                currentUser = data.user;
+                showDashboard();
+                loadDashboardData();
+            } else {
+                showAuthContainer();
+            }
+        } else {
+            showAuthContainer();
+        }
+    } catch (error) {
+        console.error('Auth check error:', error);
+        showAuthContainer();
+    }
+}
+
+// Setup authentication forms
+function setupAuthForms() {
+    // Login form
+    const loginForm = document.getElementById('loginFormElement');
+    if (loginForm) {
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success && data.sessionId) {
+                    sessionId = data.sessionId;
+                    localStorage.setItem('sessionId', sessionId);
+                    currentUser = data.user;
+                    showNotification('Success', 'Login successful!');
+                    showDashboard();
+                    loadDashboardData();
+                    startAutoRefresh();
+                } else {
+                    showNotification('Error', data.error || 'Login failed', true);
+                }
+            } catch (error) {
+                showNotification('Error', 'Failed to connect to server', true);
+            }
+        });
+    }
+    
+    // Signup form
+    const signupForm = document.getElementById('signupFormElement');
+    if (signupForm) {
+        signupForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('signupEmail').value;
+            const password = document.getElementById('signupPassword').value;
+            const fullName = document.getElementById('signupName').value;
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/signup`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password, full_name: fullName })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success && data.sessionId) {
+                    sessionId = data.sessionId;
+                    localStorage.setItem('sessionId', sessionId);
+                    currentUser = data.user;
+                    showNotification('Success', 'Account created successfully!');
+                    showDashboard();
+                    loadDashboardData();
+                    startAutoRefresh();
+                } else {
+                    showNotification('Error', data.error || 'Signup failed', true);
+                }
+            } catch (error) {
+                showNotification('Error', 'Failed to connect to server', true);
+            }
+        });
+    }
+    
+    // Switch between login and signup
+    const showSignup = document.getElementById('showSignup');
+    const showLogin = document.getElementById('showLogin');
+    
+    if (showSignup) {
+        showSignup.addEventListener('click', (e) => {
+            e.preventDefault();
+            document.getElementById('loginForm').classList.remove('active');
+            document.getElementById('signupForm').classList.add('active');
+        });
+    }
+    
+    if (showLogin) {
+        showLogin.addEventListener('click', (e) => {
+            e.preventDefault();
+            document.getElementById('signupForm').classList.remove('active');
+            document.getElementById('loginForm').classList.add('active');
+        });
+    }
+    
+    // Logout button
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', async () => {
+            try {
+                await fetch(`${API_BASE}/api/auth/logout`, {
+                    method: 'POST',
+                    headers: { 'x-session-id': sessionId || '' }
+                });
+            } catch (error) {
+                console.error('Logout error:', error);
+            }
+            
+            sessionId = null;
+            currentUser = null;
+            localStorage.removeItem('sessionId');
+            showAuthContainer();
+            stopAutoRefresh();
+        });
+    }
+}
+
+// Show auth container
+function showAuthContainer() {
+    document.getElementById('authContainer').classList.remove('hidden');
+    document.getElementById('dashboardContainer').classList.add('hidden');
+}
+
+// Show dashboard
+function showDashboard() {
+    document.getElementById('authContainer').classList.add('hidden');
+    document.getElementById('dashboardContainer').classList.remove('hidden');
+    
+    // Update logo
+    const logos = document.querySelectorAll('.logo-img, .auth-logo');
+    logos.forEach(logo => {
+        if (logo) logo.src = TEKMAX_LOGO_URL;
     });
     
-    // Setup search
-    const searchInput = document.getElementById('searchInput');
-    if (searchInput) {
-        searchInput.addEventListener('input', (e) => {
-            searchQuery = e.target.value.toLowerCase();
-            filterAndDisplayOrders();
-        });
-    }
-    
-    // Setup select all checkbox
-    const selectAllCheckbox = document.querySelector('.select-all-checkbox');
-    if (selectAllCheckbox) {
-        selectAllCheckbox.addEventListener('change', (e) => {
-            const checkboxes = document.querySelectorAll('.order-checkbox');
-            checkboxes.forEach(cb => cb.checked = e.target.checked);
-        });
-    }
-    
-    // New order button
-    const newOrderBtn = document.getElementById('newOrderBtn');
-    if (newOrderBtn) {
-        newOrderBtn.addEventListener('click', handleNewOrder);
-    }
-    
-    // Notifications button
-    const notificationsBtn = document.querySelector('.icon-btn[title="Notifications"]');
-    if (notificationsBtn) {
-        notificationsBtn.addEventListener('click', handleNotifications);
-    }
-    
-    // Help button
-    const helpBtn = document.querySelector('.icon-btn[title="Help"]');
-    if (helpBtn) {
-        helpBtn.addEventListener('click', handleHelp);
-    }
-    
-    // Start auto-refresh
-    startAutoRefresh();
-});
+    // Show dashboard by default
+    showDashboardPage();
+}
 
 // Setup navigation links
 function setupNavigation() {
@@ -85,7 +211,7 @@ function setupNavigation() {
             e.target.classList.add('active');
             
             // Handle navigation
-            const page = e.target.textContent.trim();
+            const page = e.target.dataset.page || e.target.textContent.trim().toLowerCase();
             navigateToPage(page);
         });
     });
@@ -93,24 +219,178 @@ function setupNavigation() {
 
 // Navigate to different pages
 function navigateToPage(page) {
-    const mainContainer = document.querySelector('.main-container');
-    
     switch(page.toLowerCase()) {
+        case 'dashboard':
+            showDashboardPage();
+            break;
         case 'orders':
             showOrdersPage();
             break;
-        case 'dispatch':
-            showDispatchPage();
-            break;
         case 'drivers':
             showDriversPage();
+            break;
+        case 'reports':
+            showReportsPage();
             break;
         case 'reviews':
             showReviewsPage();
             break;
         default:
-            showOrdersPage();
+            showDashboardPage();
     }
+}
+
+// Load dashboard data
+async function loadDashboardData() {
+    try {
+        const [statsRes, ordersRes] = await Promise.all([
+            fetch(`${API_BASE}/api/dashboard/stats`, {
+                headers: { 'x-session-id': sessionId || '' }
+            }),
+            fetch(`${API_BASE}/orders?limit=100`, {
+                headers: { 'x-session-id': sessionId || '' }
+            })
+        ]);
+        
+        if (statsRes.ok) {
+            const statsData = await statsRes.json();
+            if (statsData.success) {
+                updateDashboardStats(statsData.stats);
+            }
+        }
+        
+        if (ordersRes.ok) {
+            const ordersData = await ordersRes.json();
+            if (ordersData.success !== false && (ordersData.orders || Array.isArray(ordersData))) {
+                allOrders = ordersData.orders || ordersData || [];
+                checkForNewOrders(allOrders);
+            }
+        }
+    } catch (error) {
+        console.error('Error loading dashboard data:', error);
+    }
+}
+
+// Update dashboard stats
+function updateDashboardStats(stats) {
+    const statsContainer = document.querySelector('.dashboard-stats');
+    if (!statsContainer) return;
+    
+    statsContainer.innerHTML = `
+        <div class="dashboard-card">
+            <h3>Total Orders</h3>
+            <div class="value">${stats.orders?.total || 0}</div>
+            <div class="change">+${stats.orders?.recent_24h || 0} in last 24h</div>
+        </div>
+        <div class="dashboard-card">
+            <h3>Active Orders</h3>
+            <div class="value">${stats.orders?.active || 0}</div>
+            <div class="change">In progress</div>
+        </div>
+        <div class="dashboard-card">
+            <h3>Completed</h3>
+            <div class="value">${stats.orders?.completed || 0}</div>
+            <div class="change">Delivered</div>
+        </div>
+        <div class="dashboard-card">
+            <h3>Total Revenue</h3>
+            <div class="value">$${parseFloat(stats.revenue?.total || 0).toFixed(2)}</div>
+            <div class="change">All time</div>
+        </div>
+        <div class="dashboard-card">
+            <h3>Active Drivers</h3>
+            <div class="value">${stats.drivers?.active || 0}</div>
+            <div class="change">of ${stats.drivers?.total || 0} total</div>
+        </div>
+    `;
+}
+
+// Show Dashboard page
+function showDashboardPage() {
+    const mainContainer = document.querySelector('.main-container');
+    mainContainer.innerHTML = `
+        <div class="orders-header">
+            <h1 class="page-title">Dashboard</h1>
+        </div>
+        
+        <div class="dashboard-stats dashboard-grid">
+            <div class="dashboard-card">
+                <h3>Loading...</h3>
+            </div>
+        </div>
+        
+        <div class="orders-header" style="margin-top: 32px;">
+            <h2 class="page-title" style="font-size: 20px;">Recent Orders</h2>
+        </div>
+        
+        <div class="table-container">
+            <table class="orders-table">
+                <thead>
+                    <tr>
+                        <th>Order No.</th>
+                        <th>C. Name</th>
+                        <th>C. Address</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                        <th>Order placed</th>
+                    </tr>
+                </thead>
+                <tbody id="dashboardOrdersTableBody">
+                    <tr><td colspan="6" class="empty-state-cell"><div class="empty-state"><div class="empty-state-text">Loading...</div></div></td></tr>
+                </tbody>
+            </table>
+        </div>
+    `;
+    
+    loadDashboardData();
+    loadRecentOrders();
+}
+
+// Load recent orders for dashboard
+async function loadRecentOrders() {
+    try {
+        const response = await fetch(`${API_BASE}/orders?limit=10`, {
+            headers: { 'x-session-id': sessionId || '' }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            const orders = data.orders || data || [];
+            displayRecentOrders(orders);
+        }
+    } catch (error) {
+        console.error('Error loading recent orders:', error);
+    }
+}
+
+// Display recent orders
+function displayRecentOrders(orders) {
+    const tbody = document.getElementById('dashboardOrdersTableBody');
+    if (!tbody) return;
+    
+    if (!orders || orders.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6" class="empty-state-cell">
+                    <div class="empty-state">
+                        <div class="empty-state-text">No recent orders</div>
+                    </div>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    tbody.innerHTML = orders.map(order => `
+        <tr>
+            <td><strong>#${order.gloriafood_order_id || order.id || 'N/A'}</strong></td>
+            <td>${escapeHtml(order.customer_name || 'N/A')}</td>
+            <td>${escapeHtml(order.delivery_address || 'N/A')}</td>
+            <td>${formatCurrency(order.total_price || 0, order.currency || 'USD')}</td>
+            <td><span class="status-badge status-${(order.status || 'UNKNOWN').toUpperCase()}">${escapeHtml(order.status || 'UNKNOWN')}</span></td>
+            <td>${formatDate(order.fetched_at || order.created_at)}</td>
+        </tr>
+    `).join('');
 }
 
 // Show Orders page
@@ -147,82 +427,22 @@ function showOrdersPage() {
                         <th class="checkbox-col">
                             <input type="checkbox" class="select-all-checkbox">
                         </th>
-                        <th class="sortable">
-                            <span>Order No.</span>
-                            <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M12 5v14M5 12l7-7 7 7"/>
-                            </svg>
-                        </th>
-                        <th class="sortable">
-                            <span>C. Name</span>
-                            <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M12 5v14M5 12l7-7 7 7"/>
-                            </svg>
-                        </th>
-                        <th class="sortable">
-                            <span>C. Address</span>
-                            <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M12 5v14M5 12l7-7 7 7"/>
-                            </svg>
-                        </th>
-                        <th class="sortable">
-                            <span>Amount</span>
-                            <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M12 5v14M5 12l7-7 7 7"/>
-                            </svg>
-                        </th>
-                        <th class="sortable">
-                            <span>Distance</span>
-                            <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M12 5v14M5 12l7-7 7 7"/>
-                            </svg>
-                        </th>
-                        <th class="sortable">
-                            <span>Order placed</span>
-                            <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M12 5v14M5 12l7-7 7 7"/>
-                            </svg>
-                        </th>
-                        <th class="sortable">
-                            <span>Req. Pickup Time</span>
-                            <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M12 5v14M5 12l7-7 7 7"/>
-                            </svg>
-                        </th>
-                        <th class="sortable">
-                            <span>Req. Delivery Time</span>
-                            <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M12 5v14M5 12l7-7 7 7"/>
-                            </svg>
-                        </th>
-                        <th class="sortable">
-                            <span>Ready for pick-up</span>
-                            <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M12 5v14M5 12l7-7 7 7"/>
-                            </svg>
-                        </th>
-                        <th class="sortable">
-                            <span>Driver</span>
-                            <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M12 5v14M5 12l7-7 7 7"/>
-                            </svg>
-                        </th>
-                        <th class="sortable">
-                            <span>Status</span>
-                            <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M12 5v14M5 12l7-7 7 7"/>
-                            </svg>
-                        </th>
-                        <th class="sortable">
-                            <span>Tracking</span>
-                            <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M12 5v14M5 12l7-7 7 7"/>
-                            </svg>
-                        </th>
+                        <th>Order No.</th>
+                        <th>C. Name</th>
+                        <th>C. Address</th>
+                        <th>Amount</th>
+                        <th>Distance</th>
+                        <th>Order placed</th>
+                        <th>Req. Pickup Time</th>
+                        <th>Req. Delivery Time</th>
+                        <th>Ready for pick-up</th>
+                        <th>Driver</th>
+                        <th>Status</th>
+                        <th>Tracking</th>
                     </tr>
                 </thead>
                 <tbody id="ordersTableBody">
-                    <!-- Orders will be inserted here by JavaScript -->
+                    <tr><td colspan="13" class="empty-state-cell"><div class="empty-state"><div class="empty-state-text">Loading...</div></div></td></tr>
                 </tbody>
             </table>
         </div>
@@ -230,7 +450,7 @@ function showOrdersPage() {
     
     // Re-initialize event listeners
     initializeOrdersPage();
-    filterAndDisplayOrders();
+    loadOrders();
 }
 
 // Initialize Orders page event listeners
@@ -270,35 +490,7 @@ function initializeOrdersPage() {
     }
 }
 
-// Show Dispatch page
-function showDispatchPage() {
-    const mainContainer = document.querySelector('.main-container');
-    mainContainer.innerHTML = `
-        <div class="orders-header">
-            <h1 class="page-title">Dispatch</h1>
-        </div>
-        <div class="table-container" style="min-height: 400px; display: flex; align-items: center; justify-content: center;">
-            <div class="empty-state">
-                <div class="empty-state-icon" style="width: 80px; height: 80px; background: #f7fafc; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #a0aec0; margin-bottom: 20px;">
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                        <path d="M9 11l3 3L22 4"></path>
-                        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7"></path>
-                    </svg>
-                </div>
-                <div class="empty-state-text" style="font-size: 18px; margin-bottom: 20px;">There is no order to dispatch</div>
-                <button class="btn-primary" style="width: 200px; height: 48px; font-size: 16px;">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">
-                        <line x1="12" y1="5" x2="12" y2="19"></line>
-                        <line x1="5" y1="12" x2="19" y2="12"></line>
-                    </svg>
-                    New Order
-                </button>
-            </div>
-        </div>
-    `;
-}
-
-// Show Drivers page
+// Show Drivers page with map
 function showDriversPage() {
     const mainContainer = document.querySelector('.main-container');
     mainContainer.innerHTML = `
@@ -306,8 +498,9 @@ function showDriversPage() {
             <h1 class="page-title">Drivers</h1>
             <div class="orders-controls">
                 <div class="order-status-tabs">
-                    <button class="status-tab active">Driver List</button>
-                    <button class="status-tab">Daily Payment</button>
+                    <button class="status-tab active" data-view="list">Driver List</button>
+                    <button class="status-tab" data-view="map">Map View</button>
+                    <button class="status-tab" data-view="payment">Daily Payment</button>
                 </div>
                 <div class="action-bar">
                     <div class="search-box">
@@ -315,67 +508,263 @@ function showDriversPage() {
                             <circle cx="11" cy="11" r="8"></circle>
                             <path d="m21 21-4.35-4.35"></path>
                         </svg>
-                        <input type="text" placeholder="Search" class="search-input">
+                        <input type="text" id="driverSearchInput" placeholder="Search drivers" class="search-input">
                     </div>
-                    <button class="btn-secondary">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
-                        </svg>
-                        Get the app
-                    </button>
                     <button class="btn-primary" id="newDriverBtn">+ New Driver</button>
                 </div>
             </div>
         </div>
-        <div class="table-container">
-            <table class="orders-table" style="table-layout: fixed; width: 100%;">
+        
+        <div id="driversMapContainer" class="map-container" style="display: none;">
+            <div class="map-placeholder">
+                <svg width="120" height="120" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                    <circle cx="12" cy="10" r="3"></circle>
+                </svg>
+                <div class="empty-state-text">Driver Map View</div>
+                <div class="empty-state-text" style="font-size: 12px; margin-top: 8px;">Real-time driver locations will be displayed here</div>
+            </div>
+        </div>
+        
+        <div id="driversListContainer" class="table-container">
+            <table class="orders-table">
                 <thead>
                     <tr>
-                        <th style="width: 18%;">Name</th>
-                        <th style="width: 12%;">Rating</th>
-                        <th class="sortable" style="width: 15%;">
-                            <span>Phone</span>
-                            <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M12 5v14M5 12l7-7 7 7"/>
-                            </svg>
-                        </th>
-                        <th style="width: 20%;">Email</th>
-                        <th class="sortable" style="width: 15%;">
-                            <span>Vehicle</span>
-                            <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M12 5v14M5 12l7-7 7 7"/>
-                            </svg>
-                        </th>
-                        <th class="sortable" style="width: 12%;">
-                            <span>Status</span>
-                            <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M12 5v14M5 12l7-7 7 7"/>
-                            </svg>
-                        </th>
-                        <th style="width: 8%;"></th>
+                        <th>Name</th>
+                        <th>Rating</th>
+                        <th>Phone</th>
+                        <th>Email</th>
+                        <th>Vehicle</th>
+                        <th>Status</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
-                <tbody>
-                    <tr>
-                        <td colspan="7" class="empty-state-cell">
-                            <div class="empty-state">
-                                <div class="empty-state-text">No drivers found</div>
-                            </div>
-                        </td>
-                    </tr>
+                <tbody id="driversTableBody">
+                    <tr><td colspan="7" class="empty-state-cell"><div class="empty-state"><div class="empty-state-text">Loading...</div></div></td></tr>
                 </tbody>
             </table>
         </div>
     `;
     
+    // Setup tab switching
+    document.querySelectorAll('.status-tab[data-view]').forEach(tab => {
+        tab.addEventListener('click', (e) => {
+            document.querySelectorAll('.status-tab[data-view]').forEach(t => t.classList.remove('active'));
+            e.target.classList.add('active');
+            const view = e.target.dataset.view;
+            
+            if (view === 'map') {
+                document.getElementById('driversMapContainer').style.display = 'flex';
+                document.getElementById('driversListContainer').style.display = 'none';
+            } else {
+                document.getElementById('driversMapContainer').style.display = 'none';
+                document.getElementById('driversListContainer').style.display = 'block';
+            }
+        });
+    });
+    
     // Setup new driver button
     const newDriverBtn = document.getElementById('newDriverBtn');
     if (newDriverBtn) {
-        newDriverBtn.addEventListener('click', () => {
-            showNotification('Info', 'New driver functionality coming soon!');
+        newDriverBtn.addEventListener('click', handleNewDriver);
+    }
+    
+    loadDrivers();
+}
+
+// Load drivers
+async function loadDrivers() {
+    try {
+        const response = await fetch(`${API_BASE}/api/drivers`, {
+            headers: { 'x-session-id': sessionId || '' }
         });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success) {
+                displayDrivers(data.drivers || []);
+            }
+        }
+    } catch (error) {
+        console.error('Error loading drivers:', error);
+        displayDrivers([]);
     }
 }
+
+// Display drivers
+function displayDrivers(drivers) {
+    const tbody = document.getElementById('driversTableBody');
+    if (!tbody) return;
+    
+    if (!drivers || drivers.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="7" class="empty-state-cell">
+                    <div class="empty-state">
+                        <div class="empty-state-text">No drivers found</div>
+                    </div>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    tbody.innerHTML = drivers.map(driver => `
+        <tr>
+            <td><strong>${escapeHtml(driver.name || 'N/A')}</strong></td>
+            <td>
+                <div class="review-rating">
+                    ${generateStars(driver.rating || 0)}
+                </div>
+            </td>
+            <td>${escapeHtml(driver.phone || 'N/A')}</td>
+            <td>${escapeHtml(driver.email || 'N/A')}</td>
+            <td>${escapeHtml(driver.vehicle_type || 'N/A')} ${driver.vehicle_plate ? `(${escapeHtml(driver.vehicle_plate)})` : ''}</td>
+            <td><span class="status-badge status-${(driver.status || 'active').toUpperCase()}">${escapeHtml(driver.status || 'active')}</span></td>
+            <td>
+                <button class="btn-icon" onclick="editDriver(${driver.id})" title="Edit">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                    </svg>
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+// Generate stars for rating
+function generateStars(rating) {
+    const fullStars = Math.floor(rating);
+    const hasHalfStar = rating % 1 >= 0.5;
+    let stars = '';
+    
+    for (let i = 0; i < 5; i++) {
+        if (i < fullStars) {
+            stars += '<span class="star">★</span>';
+        } else if (i === fullStars && hasHalfStar) {
+            stars += '<span class="star">☆</span>';
+        } else {
+            stars += '<span class="star empty">★</span>';
+        }
+    }
+    
+    return stars;
+}
+
+// Show Reports page
+function showReportsPage() {
+    const mainContainer = document.querySelector('.main-container');
+    mainContainer.innerHTML = `
+        <div class="orders-header">
+            <h1 class="page-title">Reports</h1>
+        </div>
+        
+        <div class="reports-grid">
+            <div class="report-card" onclick="generateReport('orders')">
+                <div class="report-icon">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="8" y1="6" x2="21" y2="6"></line>
+                        <line x1="8" y1="12" x2="21" y2="12"></line>
+                        <line x1="8" y1="18" x2="21" y2="18"></line>
+                        <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                        <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                        <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                    </svg>
+                </div>
+                <h3>Orders Report</h3>
+                <p>View detailed order statistics, trends, and analytics</p>
+            </div>
+            
+            <div class="report-card" onclick="generateReport('revenue')">
+                <div class="report-icon">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="2" x2="12" y2="22"></line>
+                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                    </svg>
+                </div>
+                <h3>Revenue Report</h3>
+                <p>Analyze revenue trends, daily/weekly/monthly breakdowns</p>
+            </div>
+            
+            <div class="report-card" onclick="generateReport('drivers')">
+                <div class="report-icon">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                </div>
+                <h3>Driver Performance</h3>
+                <p>Track driver performance, delivery times, and ratings</p>
+            </div>
+            
+            <div class="report-card" onclick="generateReport('customers')">
+                <div class="report-icon">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                </div>
+                <h3>Customer Analytics</h3>
+                <p>Understand customer behavior and preferences</p>
+            </div>
+        </div>
+        
+        <div id="reportContent" style="margin-top: 32px;"></div>
+    `;
+    
+    loadReportsData();
+}
+
+// Load reports data
+async function loadReportsData() {
+    try {
+        const response = await fetch(`${API_BASE}/api/dashboard/stats`, {
+            headers: { 'x-session-id': sessionId || '' }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success) {
+                // Reports data loaded
+            }
+        }
+    } catch (error) {
+        console.error('Error loading reports data:', error);
+    }
+}
+
+// Generate report
+window.generateReport = function(type) {
+    const reportContent = document.getElementById('reportContent');
+    if (!reportContent) return;
+    
+    reportContent.innerHTML = `
+        <div class="table-container">
+            <div style="padding: 24px;">
+                <h2 style="margin-bottom: 16px;">${type.charAt(0).toUpperCase() + type.slice(1)} Report</h2>
+                <p style="color: #64748b; margin-bottom: 24px;">Report generated at ${new Date().toLocaleString()}</p>
+                <div class="dashboard-grid">
+                    <div class="dashboard-card">
+                        <h3>Total ${type}</h3>
+                        <div class="value">-</div>
+                    </div>
+                    <div class="dashboard-card">
+                        <h3>This Month</h3>
+                        <div class="value">-</div>
+                    </div>
+                    <div class="dashboard-card">
+                        <h3>Growth</h3>
+                        <div class="value">-</div>
+                    </div>
+                </div>
+                <p style="margin-top: 24px; color: #94a3b8; font-size: 14px;">Detailed ${type} report data will be displayed here.</p>
+            </div>
+        </div>
+    `;
+};
 
 // Show Reviews page
 function showReviewsPage() {
@@ -384,18 +773,68 @@ function showReviewsPage() {
         <div class="orders-header">
             <h1 class="page-title">Reviews</h1>
         </div>
-        <div class="table-container" style="min-height: 400px; display: flex; align-items: center; justify-content: center;">
+        
+        <div class="reviews-list" id="reviewsList">
             <div class="empty-state">
-                <div class="empty-state-text">No reviews available</div>
+                <div class="empty-state-text">Loading reviews...</div>
             </div>
         </div>
     `;
+    
+    loadReviews();
 }
 
+// Load reviews
+async function loadReviews() {
+    try {
+        const response = await fetch(`${API_BASE}/api/reviews`, {
+            headers: { 'x-session-id': sessionId || '' }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success) {
+                displayReviews(data.reviews || []);
+            }
+        }
+    } catch (error) {
+        console.error('Error loading reviews:', error);
+        displayReviews([]);
+    }
+}
+
+// Display reviews
+function displayReviews(reviews) {
+    const reviewsList = document.getElementById('reviewsList');
+    if (!reviewsList) return;
+    
+    if (!reviews || reviews.length === 0) {
+        reviewsList.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-text">No reviews available</div>
+            </div>
+        `;
+        return;
+    }
+    
+    reviewsList.innerHTML = reviews.map(review => `
+        <div class="review-item">
+            <div class="review-header">
+                <div class="review-customer">${escapeHtml(review.customer_name || 'Anonymous')}</div>
+                <div class="review-rating">
+                    ${generateStars(review.rating || 0)}
+                </div>
+            </div>
+            <div class="review-comment">${escapeHtml(review.comment || 'No comment provided')}</div>
+            <div class="review-meta">
+                Order #${review.order_number || review.order_id || 'N/A'} • ${formatDate(review.created_at)}
+            </div>
+        </div>
+    `).join('');
+}
 
 // Handle New Order button
 function handleNewOrder() {
-    // Create a modal or form for new order
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
     modal.innerHTML = `
@@ -440,81 +879,98 @@ function handleNewOrder() {
     
     document.body.appendChild(modal);
     
-    // Close modal on X button
-    modal.querySelector('.modal-close').addEventListener('click', () => {
-        modal.remove();
-    });
-    
-    // Close modal on overlay click
+    modal.querySelector('.modal-close').addEventListener('click', () => modal.remove());
     modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-            modal.remove();
-        }
+        if (e.target === modal) modal.remove();
     });
     
-    // Handle form submission
     modal.querySelector('#newOrderForm').addEventListener('submit', (e) => {
         e.preventDefault();
-        const formData = new FormData(e.target);
-        const orderData = Object.fromEntries(formData);
-        
-        showNotification('Success', 'Order created successfully! (This is a demo - order not actually saved)');
+        showNotification('Info', 'Order creation functionality - backend integration needed');
         modal.remove();
-        
-        // Refresh orders if on orders page
-        if (document.querySelector('.page-title')?.textContent === 'Orders') {
-            loadOrders();
-        }
     });
 }
 
-// Handle Notifications button
-function handleNotifications() {
-    showNotification('Notifications', 'You have no new notifications');
-}
-
-// Handle Help button
-function handleHelp() {
-    const helpContent = `
-        <h3>Help & Support</h3>
-        <p><strong>Orders:</strong> View and manage all your orders</p>
-        <p><strong>Dispatch:</strong> Assign orders to drivers</p>
-        <p><strong>Drivers:</strong> Manage your delivery drivers</p>
-        <p><strong>Search:</strong> Use the search bar to find specific orders</p>
-        <p><strong>Status Tabs:</strong> Filter orders by status (Current, Scheduled, Completed, etc.)</p>
-        <p style="margin-top: 20px;"><strong>Need more help?</strong> Contact support at support@tekmax.com</p>
+// Handle New Driver button
+function handleNewDriver() {
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Add New Driver</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="newDriverForm">
+                    <div class="form-group">
+                        <label>Full Name</label>
+                        <input type="text" name="name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Phone</label>
+                        <input type="tel" name="phone" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" name="email">
+                    </div>
+                    <div class="form-group">
+                        <label>Vehicle Type</label>
+                        <input type="text" name="vehicleType" placeholder="e.g., Motorcycle, Car">
+                    </div>
+                    <div class="form-group">
+                        <label>Vehicle Plate</label>
+                        <input type="text" name="vehiclePlate">
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+                        <button type="submit" class="btn-primary">Add Driver</button>
+                    </div>
+                </form>
+            </div>
+        </div>
     `;
     
-    alert(helpContent);
+    document.body.appendChild(modal);
+    
+    modal.querySelector('.modal-close').addEventListener('click', () => modal.remove());
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.remove();
+    });
+    
+    modal.querySelector('#newDriverForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+        showNotification('Info', 'Driver creation functionality - backend integration needed');
+        modal.remove();
+    });
 }
+
+// Edit driver
+window.editDriver = function(driverId) {
+    showNotification('Info', `Edit driver #${driverId} - functionality coming soon`);
+};
 
 // Load orders
 async function loadOrders() {
     try {
         const url = `${API_BASE}/orders?limit=100`;
         
-        console.log('Fetching orders from:', url);
-        
-        const response = await fetch(url);
+        const response = await fetch(url, {
+            headers: { 'x-session-id': sessionId || '' }
+        });
         
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         
         const data = await response.json();
-        console.log('API response:', data);
         
         if (data.success !== false && (data.orders || Array.isArray(data))) {
             allOrders = data.orders || data || [];
-            console.log('Loaded orders:', allOrders.length);
-            
-            // Check for new orders
             checkForNewOrders(allOrders);
-            
-            // Filter and display
             filterAndDisplayOrders();
         } else {
-            console.error('API returned error:', data);
             showError('Failed to load orders: ' + (data.error || 'Unknown error'));
             allOrders = [];
             filterAndDisplayOrders();
@@ -546,7 +1002,6 @@ function filterAndDisplayOrders() {
             );
         }
     } else if (currentStatusFilter === 'current') {
-        // Current = all active orders (not delivered or cancelled)
         filtered = filtered.filter(order => {
             const status = order.status?.toUpperCase();
             return status && !['DELIVERED', 'CANCELLED'].includes(status);
@@ -625,13 +1080,6 @@ function displayOrders(orders) {
 function createOrderRow(order) {
     if (!order) return '';
     
-    const escapeHtml = (text) => {
-        if (!text) return 'N/A';
-        const div = document.createElement('div');
-        div.textContent = String(text);
-        return div.innerHTML;
-    };
-    
     const orderId = order.gloriafood_order_id || order.id || 'N/A';
     const status = (order.status || 'UNKNOWN').toUpperCase();
     const customerName = escapeHtml(order.customer_name || 'N/A');
@@ -678,17 +1126,14 @@ function checkForNewOrders(orders) {
     });
     
     if (newOrders.length > 0) {
-        // Show notification for each new order
         newOrders.forEach(order => {
             const orderId = order.gloriafood_order_id || order.id;
             showNotification(`New Order #${orderId}`, 
                 `${order.customer_name || 'Customer'} - ${formatCurrency(order.total_price || 0, order.currency || 'USD')}`);
             
-            // Show browser notification
             showBrowserNotification(order);
         });
         
-        // Update last order IDs
         lastOrderIds = currentOrderIds;
     }
 }
@@ -739,7 +1184,12 @@ function startAutoRefresh() {
     }
     
     autoRefreshInterval = setInterval(() => {
-        loadOrders();
+        if (sessionId) {
+            loadOrders();
+            loadDashboardData();
+            loadDrivers();
+            loadReviews();
+        }
     }, REFRESH_INTERVAL);
 }
 
@@ -780,31 +1230,18 @@ function formatDate(dateStr) {
     }
 }
 
-// Delete order
-async function deleteOrder(orderId) {
-    if (!confirm(`Are you sure you want to delete Order #${orderId}?`)) {
-        return;
-    }
-    
-    try {
-        const response = await fetch(`${API_BASE}/orders/${orderId}`, {
-            method: 'DELETE'
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            showNotification('Success', `Order #${orderId} deleted successfully`);
-            // Reload orders
-            loadOrders();
-        } else {
-            showError(data.error || 'Failed to delete order');
-        }
-    } catch (error) {
-        console.error('Error deleting order:', error);
-        showError('Error deleting order');
-    }
+// Escape HTML
+function escapeHtml(text) {
+    if (!text) return 'N/A';
+    const div = document.createElement('div');
+    div.textContent = String(text);
+    return div.innerHTML;
 }
 
-// Make deleteOrder available globally
-window.deleteOrder = deleteOrder;
+// Handle Notifications button
+const notificationsBtn = document.getElementById('notificationsBtn');
+if (notificationsBtn) {
+    notificationsBtn.addEventListener('click', () => {
+        showNotification('Notifications', 'You have no new notifications');
+    });
+}
