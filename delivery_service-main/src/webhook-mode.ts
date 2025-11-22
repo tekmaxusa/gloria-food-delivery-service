@@ -619,6 +619,7 @@ class GloriaFoodWebhookServer {
 
     // GET handler for webhook endpoint (for testing/debugging)
     this.app.get(this.config.webhookPath, (req: Request, res: Response) => {
+      console.log(chalk.blue(`\n📥 GET request to webhook endpoint (test)`));
       res.json({
         service: 'GloriaFood Webhook Server',
         endpoint: this.config.webhookPath,
@@ -628,22 +629,79 @@ class GloriaFoodWebhookServer {
         status: 'ready',
         message: 'This endpoint accepts POST requests only. GloriaFood will send order data here.',
         instructions: {
-          webhook_url: `https://tekmaxllc.com${this.config.webhookPath}`,
+          webhook_url: `${process.env.RENDER_EXTERNAL_URL || 'https://your-app.onrender.com'}${this.config.webhookPath}`,
           method: 'POST',
           content_type: 'application/json',
-          authentication: 'API Key or Master Key required',
+          authentication: 'Optional - API Key or Master Key',
           timestamp: new Date().toISOString()
+        },
+        test: {
+          note: 'To test, send POST request with order data',
+          example: {
+            id: '12345',
+            customer_name: 'Test Customer',
+            total_price: 25.50,
+            status: 'ACCEPTED'
+          }
         },
         stats: {
           database_type: process.env.DB_TYPE || 'sqlite',
+          database_connected: !!this.database,
           note: 'Check /stats endpoint for live statistics'
         }
       });
     });
+    
+    // Test endpoint to verify server is working
+    this.app.post('/test-webhook', async (req: Request, res: Response) => {
+      console.log(chalk.cyan('\n🧪 TEST WEBHOOK ENDPOINT CALLED'));
+      console.log(chalk.gray('   Body:'), JSON.stringify(req.body, null, 2));
+      
+      try {
+        const testOrder = {
+          id: 'TEST-' + Date.now(),
+          customer_name: 'Test Customer',
+          customer_phone: '+1234567890',
+          total_price: 25.50,
+          currency: 'USD',
+          status: 'ACCEPTED',
+          order_type: 'delivery',
+          delivery_address: '123 Test St'
+        };
+        
+        const saved = await this.handleAsync(this.database.insertOrUpdateOrder(testOrder));
+        
+        res.json({
+          success: true,
+          message: 'Test webhook received and processed',
+          order: saved,
+          received: req.body,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error: any) {
+        console.error(chalk.red('Test webhook error:'), error);
+        res.status(500).json({
+          success: false,
+          error: error.message,
+          received: req.body
+        });
+      }
+    });
 
     // Webhook endpoint for receiving orders
     this.app.post(this.config.webhookPath, async (req: Request, res: Response) => {
-      console.log(chalk.cyan('\n🔵 WEBHOOK ENDPOINT CALLED'));
+      const timestamp = new Date().toISOString();
+      console.log(chalk.cyan('\n🔵 ========================================'));
+      console.log(chalk.cyan(`🔵 WEBHOOK ENDPOINT CALLED - ${timestamp}`));
+      console.log(chalk.cyan('🔵 ========================================'));
+      console.log(chalk.gray(`   Method: ${req.method}`));
+      console.log(chalk.gray(`   Path: ${req.path}`));
+      console.log(chalk.gray(`   Content-Type: ${req.headers['content-type'] || 'N/A'}`));
+      console.log(chalk.gray(`   Has Body: ${!!req.body}`));
+      console.log(chalk.gray(`   Body Type: ${typeof req.body}`));
+      console.log(chalk.gray(`   Body Keys: ${req.body ? Object.keys(req.body).join(', ') : 'N/A'}`));
+      console.log(chalk.gray(`   Query Params: ${Object.keys(req.query).length > 0 ? Object.keys(req.query).join(', ') : 'None'}`));
+      
       try {
         // Validate authentication if master key is provided
         // Note: Some webhook providers may not send authentication, so we make it optional
@@ -678,22 +736,38 @@ class GloriaFoodWebhookServer {
         }
         
         if (!orderData) {
-          console.warn(chalk.yellow('⚠ Invalid webhook payload - no order data found'));
+          console.warn(chalk.yellow('\n⚠️  ========================================'));
+          console.warn(chalk.yellow('⚠️  INVALID WEBHOOK PAYLOAD - NO ORDER DATA FOUND'));
+          console.warn(chalk.yellow('⚠️  ========================================'));
           console.log(chalk.gray('   Request body keys:'), Object.keys(req.body || {}));
           console.log(chalk.gray('   Request query keys:'), Object.keys(req.query || {}));
           console.log(chalk.gray('   Content-Type:'), req.headers['content-type'] || 'N/A');
-          console.log(chalk.gray('   Raw body (first 500 chars):'), JSON.stringify(req.body || {}).substring(0, 500));
+          console.log(chalk.gray('   Raw body (first 1000 chars):'));
+          console.log(chalk.gray('   ' + JSON.stringify(req.body || {}, null, 2).substring(0, 1000)));
+          console.log(chalk.yellow('\n   💡 This might be a test webhook or different format'));
+          console.log(chalk.yellow('   💡 Check GloriaFood webhook configuration'));
+          console.log(chalk.yellow('   💡 Expected format: { id, customer_name, total_price, ... }'));
           
           // Still return 200 to prevent retries, but log the issue
           return res.status(200).json({ 
             success: false, 
             error: 'Invalid payload - no order data found',
+            message: 'Webhook received but no order data detected. Check payload format.',
             received: {
               hasBody: !!req.body,
               bodyKeys: Object.keys(req.body || {}),
               hasQuery: Object.keys(req.query || {}).length > 0,
               queryKeys: Object.keys(req.query || {}),
-              contentType: req.headers['content-type'] || 'N/A'
+              contentType: req.headers['content-type'] || 'N/A',
+              bodyPreview: req.body ? JSON.stringify(req.body).substring(0, 200) : 'No body'
+            },
+            expectedFormat: {
+              example: {
+                id: '12345',
+                customer_name: 'John Doe',
+                total_price: 25.50,
+                status: 'ACCEPTED'
+              }
             }
           });
         }
