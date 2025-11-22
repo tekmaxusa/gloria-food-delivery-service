@@ -148,6 +148,45 @@ export class OrderDatabase {
     }
   }
 
+  updateReadyForPickup(gloriafoodOrderId: string, ready: boolean): boolean {
+    try {
+      // Get the current order
+      const order = this.getOrderByGloriaFoodId(gloriafoodOrderId);
+      if (!order) {
+        return false;
+      }
+
+      // Parse raw_data
+      let rawData: any = {};
+      try {
+        rawData = JSON.parse(order.raw_data || '{}');
+      } catch (e) {
+        rawData = {};
+      }
+
+      // Update ready_for_pickup in raw_data
+      if (ready) {
+        rawData.ready_for_pickup = new Date().toISOString();
+      } else {
+        delete rawData.ready_for_pickup;
+      }
+
+      // Update the order
+      const stmt = this.db.prepare(`
+        UPDATE orders
+        SET raw_data = ?,
+            updated_at = ?
+        WHERE gloriafood_order_id = ?
+      `);
+      const now = new Date().toISOString();
+      stmt.run(JSON.stringify(rawData), now, gloriafoodOrderId);
+      return true;
+    } catch (error) {
+      console.error('Error updating ready_for_pickup:', error);
+      return false;
+    }
+  }
+
   private extractCustomerName(orderData: any): string {
     // Try root level client_* fields first (GloriaFood format)
     if (orderData.client_first_name || orderData.client_last_name) {

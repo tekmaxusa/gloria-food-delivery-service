@@ -1072,6 +1072,68 @@ class GloriaFoodWebhookServer {
       }
     });
 
+    // Update ready for pickup endpoint
+    this.app.patch('/orders/:orderId/ready-for-pickup', async (req: Request, res: Response) => {
+      try {
+        const orderId = req.params.orderId;
+        const { ready } = req.body;
+        
+        if (typeof ready !== 'boolean') {
+          return res.status(400).json({ success: false, error: 'ready must be a boolean value' });
+        }
+
+        // Check if database has updateReadyForPickup method
+        if (typeof (this.database as any).updateReadyForPickup === 'function') {
+          const updated = await this.handleAsync((this.database as any).updateReadyForPickup(orderId, ready));
+          
+          if (updated) {
+            res.json({ 
+              success: true, 
+              message: `Order ${orderId} ${ready ? 'marked as ready' : 'unmarked'} for pickup` 
+            });
+          } else {
+            res.status(404).json({ success: false, error: 'Order not found' });
+          }
+        } else {
+          // Fallback: update raw_data manually
+          const order = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId));
+          if (!order) {
+            return res.status(404).json({ success: false, error: 'Order not found' });
+          }
+
+          // Parse and update raw_data
+          let rawData: any = {};
+          try {
+            rawData = JSON.parse((order as any).raw_data || '{}');
+          } catch (e) {
+            rawData = {};
+          }
+
+          if (ready) {
+            rawData.ready_for_pickup = new Date().toISOString();
+          } else {
+            delete rawData.ready_for_pickup;
+          }
+
+          // Update order using insertOrUpdateOrder with updated raw_data
+          const updatedOrder = {
+            ...rawData,
+            id: orderId,
+            ready_for_pickup: ready ? new Date().toISOString() : undefined
+          };
+          
+          await this.handleAsync(this.database.insertOrUpdateOrder(updatedOrder));
+          res.json({ 
+            success: true, 
+            message: `Order ${orderId} ${ready ? 'marked as ready' : 'unmarked'} for pickup` 
+          });
+        }
+      } catch (error: any) {
+        console.error('Error updating ready for pickup:', error);
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
     // Authentication endpoints
     this.app.post('/api/auth/signup', async (req: Request, res: Response) => {
       try {

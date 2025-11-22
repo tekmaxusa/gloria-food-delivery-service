@@ -241,6 +241,46 @@ export class OrderDatabasePostgreSQL {
     }
   }
 
+  async updateReadyForPickup(gloriafoodOrderId: string, ready: boolean): Promise<boolean> {
+    try {
+      // Get the current order
+      const order = await this.getOrderByGloriaFoodId(gloriafoodOrderId);
+      if (!order) {
+        return false;
+      }
+
+      // Parse raw_data
+      let rawData: any = {};
+      try {
+        rawData = JSON.parse((order as any).raw_data || '{}');
+      } catch (e) {
+        rawData = {};
+      }
+
+      // Update ready_for_pickup in raw_data
+      if (ready) {
+        rawData.ready_for_pickup = new Date().toISOString();
+      } else {
+        delete rawData.ready_for_pickup;
+      }
+
+      // Update the order
+      const client = await this.pool.connect();
+      await client.query(
+        `UPDATE orders
+         SET raw_data = $1,
+             updated_at = NOW()
+         WHERE gloriafood_order_id = $2`,
+        [JSON.stringify(rawData), gloriafoodOrderId]
+      );
+      client.release();
+      return true;
+    } catch (error) {
+      console.error('Error updating ready_for_pickup in PostgreSQL:', error);
+      return false;
+    }
+  }
+
   // Comprehensive extraction methods matching MySQL version
   private extractCustomerName(orderData: any): string {
     // Try root level client_* fields first (GloriaFood format)
