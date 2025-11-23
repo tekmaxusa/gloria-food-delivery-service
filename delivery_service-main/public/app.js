@@ -19,15 +19,24 @@ if ('Notification' in window && Notification.permission === 'default') {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    checkAuthStatus();
-    setupAuthForms();
+    // Check if we're on reset password page
+    const urlParams = new URLSearchParams(window.location.search);
+    const resetToken = urlParams.get('token');
     
-    // Setup navigation links
-    setupNavigation();
-    
-    // Start auto-refresh if authenticated
-    if (sessionId) {
-        startAutoRefresh();
+    if (resetToken) {
+        // Show reset password modal
+        showResetPasswordModal(resetToken);
+    } else {
+        checkAuthStatus();
+        setupAuthForms();
+        
+        // Setup navigation links
+        setupNavigation();
+        
+        // Start auto-refresh if authenticated
+        if (sessionId) {
+            startAutoRefresh();
+        }
     }
 });
 
@@ -406,6 +415,75 @@ async function fetchUserInfo() {
         }
     } catch (error) {
         console.error('Error fetching user info:', error);
+    }
+}
+
+// Show Reset Password Modal
+function showResetPasswordModal(token) {
+    const resetPasswordModal = document.getElementById('resetPasswordModal');
+    const resetTokenInput = document.getElementById('resetToken');
+    
+    if (resetPasswordModal && resetTokenInput) {
+        resetTokenInput.value = token;
+        resetPasswordModal.classList.remove('hidden');
+        setupResetPasswordForm();
+    }
+}
+
+// Setup Reset Password Form
+function setupResetPasswordForm() {
+    const resetPasswordForm = document.getElementById('resetPasswordForm');
+    
+    if (resetPasswordForm) {
+        // Remove existing listeners
+        const newForm = resetPasswordForm.cloneNode(true);
+        resetPasswordForm.parentNode.replaceChild(newForm, resetPasswordForm);
+        
+        const form = document.getElementById('resetPasswordForm');
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const token = document.getElementById('resetToken').value;
+            const newPassword = document.getElementById('resetNewPassword').value;
+            const confirmPassword = document.getElementById('resetConfirmPassword').value;
+            
+            if (newPassword !== confirmPassword) {
+                showNotification('Error', 'Passwords do not match', true);
+                return;
+            }
+            
+            if (newPassword.length < 6) {
+                showNotification('Error', 'Password must be at least 6 characters', true);
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/reset-password`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        token: token,
+                        newPassword: newPassword
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showNotification('Success', 'Password reset successfully! You can now login with your new password.');
+                    // Redirect to login after 2 seconds
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 2000);
+                } else {
+                    showNotification('Error', data.error || 'Failed to reset password', true);
+                }
+            } catch (error) {
+                showNotification('Error', 'Failed to reset password: ' + error.message, true);
+            }
+        });
     }
 }
 

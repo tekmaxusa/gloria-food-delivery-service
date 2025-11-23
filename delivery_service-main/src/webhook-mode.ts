@@ -38,6 +38,7 @@ class GloriaFoodWebhookServer {
   private deliveryScheduler?: DeliveryScheduler;
   private emailService?: EmailService;
   private sessions: Map<string, { userId: number; email: string; expires: number }> = new Map();
+  private resetTokens: Map<string, { email: string; expires: number }> = new Map();
 
   constructor(config: WebhookConfig) {
     console.log(chalk.blue.bold('\n🔵 Starting GloriaFood Webhook Server...'));
@@ -592,6 +593,29 @@ class GloriaFoodWebhookServer {
   private setupRoutes(): void {
     // Root endpoint - serve dashboard HTML if available, otherwise return JSON
     // Note: This route takes precedence over static middleware, so we manually serve the file
+    // Reset password page route
+    this.app.get('/reset-password', (req: Request, res: Response) => {
+      // Serve the same index.html, the frontend will handle the reset password flow
+      const fs = require('fs');
+      const distPublicPath = path.join(__dirname, 'public', 'index.html');
+      const publicPath = path.join(__dirname, '..', 'public', 'index.html');
+      
+      const distPublicPathAbs = path.resolve(distPublicPath);
+      const publicPathAbs = path.resolve(publicPath);
+      
+      if (fs.existsSync(distPublicPathAbs)) {
+        return res.sendFile(distPublicPathAbs);
+      } else if (fs.existsSync(publicPathAbs)) {
+        return res.sendFile(publicPathAbs);
+      } else if (fs.existsSync(distPublicPath)) {
+        return res.sendFile(path.resolve(distPublicPath));
+      } else if (fs.existsSync(publicPath)) {
+        return res.sendFile(path.resolve(publicPath));
+      } else {
+        return res.status(404).json({ error: 'Page not found' });
+      }
+    });
+
     this.app.get('/', (req: Request, res: Response) => {
       console.log(chalk.blue(`📥 Root endpoint accessed at ${new Date().toISOString()}`));
       
@@ -1406,15 +1430,35 @@ class GloriaFoodWebhookServer {
         const resetToken = crypto.randomBytes(32).toString('hex');
         const resetExpires = Date.now() + 3600000; // 1 hour
         
-        // Store reset token (in a real app, you'd store this in database)
-        // For now, we'll just send a success message
-        // In production, you should send an email with the reset link
+        // Store reset token
+        this.resetTokens.set(resetToken, {
+          email: email,
+          expires: resetExpires
+        });
         
-        console.log(`Password reset requested for: ${email}`);
-        console.log(`Reset token: ${resetToken} (expires in 1 hour)`);
+        // Clean up expired tokens (simple cleanup)
+        this.cleanupExpiredTokens();
         
-        // TODO: Send email with reset link
-        // await this.emailService.sendPasswordResetEmail(email, resetToken);
+        // Build reset URL
+        const baseUrl = req.protocol + '://' + req.get('host');
+        const resetUrl = `${baseUrl}/reset-password?token=${resetToken}`;
+        
+        // Send email with reset link
+        try {
+          if (this.emailService) {
+            await this.emailService.sendPasswordResetEmail(email, resetToken, resetUrl);
+            console.log(chalk.green(`✅ Password reset email sent to ${email}`));
+          } else {
+            console.log(chalk.yellow(`⚠️  Email service not initialized`));
+            console.log(chalk.gray(`   Reset token: ${resetToken}`));
+            console.log(chalk.gray(`   Reset URL: ${resetUrl}`));
+            console.log(chalk.gray(`   Note: Make sure SMTP_HOST, SMTP_USER, and SMTP_PASS are set in your .env file`));
+          }
+        } catch (error: any) {
+          console.error(chalk.red(`❌ Error sending password reset email to ${email}:`));
+          console.error(chalk.red(`   ${error.message}`));
+          // Still return success to not reveal if email exists
+        }
         
         res.json({ 
           success: true, 
@@ -1423,6 +1467,52 @@ class GloriaFoodWebhookServer {
       } catch (error: any) {
         console.error('Forgot password error:', error);
         res.status(500).json({ success: false, error: 'Failed to process password reset request' });
+      }
+    });
+
+    // Reset password endpoint (with token)
+    this.app.post('/api/auth/reset-password', async (req: Request, res: Response) => {
+      try {
+        const { token, newPassword } = req.body;
+        
+        if (!token || !newPassword) {
+          return res.status(400).json({ success: false, error: 'Token and new password are required' });
+        }
+        
+        if (newPassword.length < 6) {
+          return res.status(400).json({ success: false, error: 'Password must be at least 6 characters' });
+        }
+        
+        // Check if token exists and is valid
+        const tokenData = this.resetTokens.get(token);
+        if (!tokenData) {
+          return res.status(400).json({ success: false, error: 'Invalid or expired reset token' });
+        }
+        
+        // Check if token is expired
+        if (tokenData.expires < Date.now()) {
+          this.resetTokens.delete(token);
+          return res.status(400).json({ success: false, error: 'Reset token has expired' });
+        }
+        
+        // Update password
+        const hashedPassword = this.hashPassword(newPassword);
+        const updated = await this.handleAsync(this.database.updateUserPassword(tokenData.email, hashedPassword));
+        
+        if (!updated) {
+          return res.status(500).json({ success: false, error: 'Failed to update password' });
+        }
+        
+        // Delete used token
+        this.resetTokens.delete(token);
+        
+        res.json({ 
+          success: true, 
+          message: 'Password reset successfully. You can now login with your new password.' 
+        });
+      } catch (error: any) {
+        console.error('Reset password error:', error);
+        res.status(500).json({ success: false, error: 'Failed to reset password' });
       }
     });
 
@@ -1806,6 +1896,15 @@ class GloriaFoodWebhookServer {
 
   private verifyPassword(password: string, hashedPassword: string): boolean {
     return this.hashPassword(password) === hashedPassword;
+  }
+
+  private cleanupExpiredTokens(): void {
+    const now = Date.now();
+    for (const [token, data] of this.resetTokens.entries()) {
+      if (data.expires < now) {
+        this.resetTokens.delete(token);
+      }
+    }
   }
 
   private createSession(userId: number, email: string): string {

@@ -428,6 +428,93 @@ export class EmailService {
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
   }
+
+  async sendPasswordResetEmail(email: string, resetToken: string, resetUrl: string): Promise<void> {
+    if (!this.transporter) {
+      console.log(chalk.yellow('⚠️  Email transporter not initialized, cannot send password reset email'));
+      console.log(chalk.gray('   Make sure SMTP_HOST, SMTP_USER, and SMTP_PASS are configured in your .env file'));
+      throw new Error('Email transporter not initialized');
+    }
+
+    const subject = 'Reset Your Password - TekMax Delivery Management';
+    const text = this.buildPasswordResetText(email, resetToken, resetUrl);
+    const html = this.buildPasswordResetHtml(email, resetToken, resetUrl);
+
+    try {
+      console.log(chalk.blue(`📧 Sending password reset email to ${email}...`));
+      
+      const sendMailPromise = this.transporter.sendMail({
+        from: this.config.from || this.config.user,
+        to: email,
+        subject,
+        text,
+        html,
+      });
+
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Email send operation timed out after 60 seconds')), 60000);
+      });
+
+      const result = await Promise.race([sendMailPromise, timeoutPromise]) as any;
+      
+      console.log(chalk.green(`✅ Password reset email sent successfully to ${email}`));
+      console.log(chalk.gray(`   Message ID: ${result.messageId || 'N/A'}`));
+    } catch (error: any) {
+      console.error(chalk.red(`❌ Failed to send password reset email to ${email}`));
+      console.error(chalk.red(`   Error: ${error.message}`));
+      throw error;
+    }
+  }
+
+  private buildPasswordResetText(email: string, resetToken: string, resetUrl: string): string {
+    return `
+Reset Your Password - TekMax Delivery Management
+
+Hello,
+
+You requested to reset your password for your TekMax account.
+
+Click the link below to reset your password:
+${resetUrl}
+
+Or copy and paste this token if the link doesn't work:
+${resetToken}
+
+This link will expire in 1 hour.
+
+If you didn't request this password reset, please ignore this email.
+
+Best regards,
+TekMax Team
+    `.trim();
+  }
+
+  private buildPasswordResetHtml(email: string, resetToken: string, resetUrl: string): string {
+    return `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+          <h1 style="color: white; margin: 0;">TekMax</h1>
+          <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0;">Delivery Management System</p>
+        </div>
+        <div style="background: #ffffff; padding: 30px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 10px 10px;">
+          <h2 style="color: #0f172a; margin-top: 0;">Reset Your Password</h2>
+          <p style="color: #475569;">Hello,</p>
+          <p style="color: #475569;">You requested to reset your password for your TekMax account (${this.escapeHtml(email)}).</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${resetUrl}" style="display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">Reset Password</a>
+          </div>
+          <p style="color: #64748b; font-size: 14px; margin-top: 30px;">Or copy and paste this link into your browser:</p>
+          <p style="color: #3b82f6; word-break: break-all; font-size: 12px; background: #f1f5f9; padding: 10px; border-radius: 6px;">${resetUrl}</p>
+          <p style="color: #64748b; font-size: 14px; margin-top: 20px;"><strong>Reset Token:</strong></p>
+          <p style="color: #1e293b; font-size: 14px; background: #f8fafc; padding: 10px; border-radius: 6px; font-family: monospace; word-break: break-all;">${resetToken}</p>
+          <p style="color: #ef4444; font-size: 13px; margin-top: 20px;"><strong>⚠️ This link will expire in 1 hour.</strong></p>
+          <p style="color: #64748b; font-size: 14px; margin-top: 30px;">If you didn't request this password reset, please ignore this email. Your password will remain unchanged.</p>
+          <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 30px 0;">
+          <p style="color: #94a3b8; font-size: 12px; text-align: center; margin: 0;">Best regards,<br>TekMax Team</p>
+        </div>
+      </div>
+    `.trim();
+  }
 }
 
 

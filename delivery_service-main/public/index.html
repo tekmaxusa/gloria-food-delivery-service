@@ -198,6 +198,33 @@
         </div>
     </div>
 
+    <!-- Reset Password Modal -->
+    <div id="resetPasswordModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Reset Password</h2>
+            </div>
+            <div class="modal-body">
+                <p style="margin-bottom: 20px; color: #64748b;">Enter your new password below.</p>
+                <form id="resetPasswordForm">
+                    <input type="hidden" id="resetToken" value="">
+                    <div class="form-group">
+                        <label>New Password</label>
+                        <input type="password" id="resetNewPassword" required placeholder="Enter new password" minlength="6">
+                    </div>
+                    <div class="form-group">
+                        <label>Confirm New Password</label>
+                        <input type="password" id="resetConfirmPassword" required placeholder="Confirm new password" minlength="6">
+                    </div>
+                    <button type="submit" class="btn-primary btn-full">Reset Password</button>
+                    <p style="text-align: center; margin-top: 16px;">
+                        <a href="/" style="color: #3b82f6; text-decoration: none;">Back to Login</a>
+                    </p>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script src="app.js"></script>
 </body>
 </html>
