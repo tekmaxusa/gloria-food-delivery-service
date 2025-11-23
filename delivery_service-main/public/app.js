@@ -19,14 +19,21 @@ if ('Notification' in window && Notification.permission === 'default') {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    // Check if we're on reset password page
+    // Check if we're on reset password page (only if token is in URL)
     const urlParams = new URLSearchParams(window.location.search);
     const resetToken = urlParams.get('token');
     
-    if (resetToken) {
-        // Show reset password modal
+    // Only show reset password modal if there's a valid token in URL
+    if (resetToken && resetToken.length > 0) {
+        // Show reset password modal only when token is present
         showResetPasswordModal(resetToken);
+        // Hide auth container and show reset password modal
+        const authContainer = document.getElementById('authContainer');
+        if (authContainer) {
+            authContainer.classList.add('hidden');
+        }
     } else {
+        // Normal flow - show login/signup
         checkAuthStatus();
         setupAuthForms();
         
@@ -433,6 +440,30 @@ function showResetPasswordModal(token) {
 // Setup Reset Password Form
 function setupResetPasswordForm() {
     const resetPasswordForm = document.getElementById('resetPasswordForm');
+    const closeResetPasswordModal = document.getElementById('closeResetPasswordModal');
+    
+    // Close button handler
+    if (closeResetPasswordModal) {
+        closeResetPasswordModal.addEventListener('click', () => {
+            const resetPasswordModal = document.getElementById('resetPasswordModal');
+            if (resetPasswordModal) {
+                resetPasswordModal.classList.add('hidden');
+            }
+            // Redirect to home
+            window.location.href = '/';
+        });
+    }
+    
+    // Close modal when clicking outside
+    const resetPasswordModal = document.getElementById('resetPasswordModal');
+    if (resetPasswordModal) {
+        resetPasswordModal.addEventListener('click', (e) => {
+            if (e.target === resetPasswordModal) {
+                resetPasswordModal.classList.add('hidden');
+                window.location.href = '/';
+            }
+        });
+    }
     
     if (resetPasswordForm) {
         // Remove existing listeners
