@@ -117,3 +117,5 @@ CREATE TRIGGER update_drivers_updated_at
 -- Show success message
 SELECT 'Database and tables created successfully!' AS Status;
 
+
+

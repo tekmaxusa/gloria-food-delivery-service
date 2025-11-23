@@ -197,3 +197,5 @@ Kung lahat ng steps ay nagawa na pero hindi pa rin lumalabas:
 
 **Quick Test:** Place test order → Check Render logs → Check database → Check UI
 
+
+
