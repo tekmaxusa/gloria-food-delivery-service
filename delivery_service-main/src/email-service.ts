@@ -52,10 +52,10 @@ export class EmailService {
             user: this.config.user,
             pass: this.config.pass,
           },
-          // Increased timeouts for Render/cloud environments
-          connectionTimeout: 30000, // 30 seconds
-          greetingTimeout: 30000,   // 30 seconds
-          socketTimeout: 30000,     // 30 seconds
+          // Reduced timeouts for faster failure detection (cloud platforms often block SMTP)
+          connectionTimeout: 15000, // 15 seconds
+          greetingTimeout: 15000,   // 15 seconds
+          socketTimeout: 15000,     // 15 seconds
           // Additional options for better reliability
           requireTLS: !this.config.secure && (this.config.port === 587 || !this.config.port),
           tls: {
@@ -138,7 +138,13 @@ export class EmailService {
     if (!this.transporter) return;
     
     try {
-      await this.transporter.verify();
+      // Use a shorter timeout for verification (10 seconds)
+      const verifyPromise = this.transporter.verify();
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Connection verification timed out after 10 seconds')), 10000);
+      });
+      
+      await Promise.race([verifyPromise, timeoutPromise]);
       console.log(chalk.green('✅ SMTP connection verified successfully'));
     } catch (error: any) {
       console.error(chalk.red('❌ SMTP connection verification failed:'));
@@ -146,7 +152,21 @@ export class EmailService {
       if (error.code) {
         console.error(chalk.red(`   Error Code: ${error.code}`));
       }
-      console.error(chalk.yellow('⚠️  Emails may not be sent. Please check your SMTP configuration.'));
+      
+      // Provide helpful suggestions based on error type
+      if (error.code === 'ETIMEDOUT' || error.message.includes('timeout')) {
+        console.error(chalk.yellow('\n⚠️  Connection Timeout - This usually means:'));
+        console.error(chalk.yellow('   1. Gmail may be blocking connections from cloud platforms (Render, Heroku, etc.)'));
+        console.error(chalk.yellow('   2. Render free tier may block outbound SMTP connections'));
+        console.error(chalk.yellow('   3. Firewall or network restrictions'));
+        console.error(chalk.yellow('\n💡 Solutions:'));
+        console.error(chalk.yellow('   • Use a different SMTP service (SendGrid, Mailgun, AWS SES)'));
+        console.error(chalk.yellow('   • Upgrade to Render paid tier (allows SMTP)'));
+        console.error(chalk.yellow('   • Use a VPN or proxy service'));
+        console.error(chalk.yellow('   • Try SMTP port 465 with SMTP_SECURE=true'));
+      }
+      
+      console.error(chalk.yellow('\n⚠️  Emails may not be sent. Please check your SMTP configuration.'));
     }
   }
 
@@ -183,9 +203,9 @@ export class EmailService {
         html,
       });
 
-      // Reduced timeout to 30 seconds for faster failure detection
+      // Reduced timeout to 20 seconds for faster failure detection (cloud platforms often block SMTP)
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Email send operation timed out after 30 seconds')), 30000);
+        setTimeout(() => reject(new Error('Email send operation timed out after 20 seconds')), 20000);
       });
 
       const result = await Promise.race([sendMailPromise, timeoutPromise]) as any;
@@ -220,10 +240,14 @@ export class EmailService {
       // Check if it's a connection timeout issue
       if (error.message && (error.message.includes('timeout') || error.message.includes('ETIMEDOUT') || error.code === 'ETIMEDOUT')) {
         console.error(chalk.yellow(`   ⚠️  Connection timeout detected. This might be due to:`));
-        console.error(chalk.yellow(`      - Network restrictions on Render (free tier may block SMTP)`));
+        console.error(chalk.yellow(`      - Network restrictions on Render (free tier blocks SMTP)`));
         console.error(chalk.yellow(`      - Firewall blocking outbound SMTP connections`));
         console.error(chalk.yellow(`      - Gmail blocking connections from Render's IP`));
-        console.error(chalk.yellow(`      - Try using a different SMTP service (SendGrid, Mailgun, etc.)`));
+        console.error(chalk.yellow(`\n   💡 Solutions:`));
+        console.error(chalk.yellow(`      • Use SendGrid, Mailgun, or AWS SES (work better with cloud platforms)`));
+        console.error(chalk.yellow(`      • Upgrade to Render paid tier (allows SMTP)`));
+        console.error(chalk.yellow(`      • Try port 465 with SMTP_SECURE=true`));
+        console.error(chalk.yellow(`      • Use a different email service provider`));
       }
       
       // Don't re-throw - allow the webhook to continue processing
@@ -479,9 +503,9 @@ export class EmailService {
         html,
       });
 
-      // Reduced timeout to 30 seconds for faster failure detection
+      // Reduced timeout to 20 seconds for faster failure detection (cloud platforms often block SMTP)
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Email send operation timed out after 30 seconds')), 30000);
+        setTimeout(() => reject(new Error('Email send operation timed out after 20 seconds')), 20000);
       });
 
       const result = await Promise.race([sendMailPromise, timeoutPromise]) as any;
@@ -491,6 +515,19 @@ export class EmailService {
     } catch (error: any) {
       console.error(chalk.red(`❌ Failed to send password reset email to ${email}`));
       console.error(chalk.red(`   Error: ${error.message}`));
+      
+      // Provide helpful suggestions for timeout errors
+      if (error.message && (error.message.includes('timeout') || error.message.includes('ETIMEDOUT'))) {
+        console.error(chalk.yellow('\n⚠️  Email Timeout - Common causes:'));
+        console.error(chalk.yellow('   • Gmail blocking connections from cloud platforms (Render, Heroku)'));
+        console.error(chalk.yellow('   • Render free tier blocking outbound SMTP'));
+        console.error(chalk.yellow('   • Network/firewall restrictions'));
+        console.error(chalk.yellow('\n💡 Solutions:'));
+        console.error(chalk.yellow('   • Use SendGrid, Mailgun, or AWS SES instead of Gmail'));
+        console.error(chalk.yellow('   • Upgrade to Render paid tier'));
+        console.error(chalk.yellow('   • Try port 465 with SMTP_SECURE=true'));
+      }
+      
       throw error;
     }
   }
