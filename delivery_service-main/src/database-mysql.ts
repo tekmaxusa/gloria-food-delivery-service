@@ -671,6 +671,19 @@ export class OrderDatabaseMySQL {
     }
   }
 
+  async updateUserPassword(email: string, hashedPassword: string): Promise<boolean> {
+    try {
+      const [result] = await this.pool.execute(
+        'UPDATE users SET password = ? WHERE email = ?',
+        [hashedPassword, email]
+      ) as any;
+      return result.affectedRows > 0;
+    } catch (error) {
+      console.error('Error updating password:', error);
+      return false;
+    }
+  }
+
   // Drivers methods
   async getAllDrivers(): Promise<any[]> {
     try {

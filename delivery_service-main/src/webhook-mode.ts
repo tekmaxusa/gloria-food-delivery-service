@@ -87,6 +87,7 @@ class GloriaFoodWebhookServer {
         createUser: () => null,
         getUserByEmail: () => null,
         verifyPassword: () => null,
+        updateUserPassword: () => false,
         getAllDrivers: () => [],
         getDriverById: () => null,
         getAllReviews: () => [],
@@ -1305,7 +1306,7 @@ class GloriaFoodWebhookServer {
       res.json({ success: true });
     });
 
-    this.app.get('/api/auth/me', (req: Request, res: Response) => {
+    this.app.get('/api/auth/me', async (req: Request, res: Response) => {
       const sessionId = req.headers['x-session-id'] as string;
       if (!sessionId) {
         return res.status(401).json({ success: false, error: 'Not authenticated' });
@@ -1317,6 +1318,24 @@ class GloriaFoodWebhookServer {
         return res.status(401).json({ success: false, error: 'Session expired' });
       }
       
+      // Get full user info from database
+      try {
+        const user = await this.handleAsync(this.database.getUserByEmail(session.email));
+        if (user) {
+          return res.json({ 
+            success: true, 
+            user: {
+              id: user.id,
+              email: user.email,
+              full_name: user.full_name,
+              role: user.role
+            }
+          });
+        }
+      } catch (error) {
+        console.error('Error getting user info:', error);
+      }
+      
       res.json({ 
         success: true, 
         user: {
@@ -1324,6 +1343,87 @@ class GloriaFoodWebhookServer {
           email: session.email
         }
       });
+    });
+
+    // Change password endpoint
+    this.app.post('/api/auth/change-password', async (req: Request, res: Response) => {
+      try {
+        const sessionId = req.headers['x-session-id'] as string;
+        if (!sessionId) {
+          return res.status(401).json({ success: false, error: 'Not authenticated' });
+        }
+        
+        const session = this.sessions.get(sessionId);
+        if (!session || session.expires < Date.now()) {
+          this.sessions.delete(sessionId);
+          return res.status(401).json({ success: false, error: 'Session expired' });
+        }
+        
+        const { currentPassword, newPassword } = req.body;
+        
+        if (!currentPassword || !newPassword) {
+          return res.status(400).json({ success: false, error: 'Current password and new password are required' });
+        }
+        
+        if (newPassword.length < 6) {
+          return res.status(400).json({ success: false, error: 'New password must be at least 6 characters' });
+        }
+        
+        // Verify current password
+        const userResult = await this.handleAsync(this.database.verifyPassword(session.email, currentPassword));
+        if (!userResult || typeof userResult === 'boolean') {
+          return res.status(401).json({ success: false, error: 'Current password is incorrect' });
+        }
+        
+        // Update password
+        const hashedPassword = this.hashPassword(newPassword);
+        await this.handleAsync(this.database.updateUserPassword(session.email, hashedPassword));
+        
+        res.json({ success: true, message: 'Password changed successfully' });
+      } catch (error: any) {
+        console.error('Change password error:', error);
+        res.status(500).json({ success: false, error: 'Failed to change password' });
+      }
+    });
+
+    // Forgot password endpoint
+    this.app.post('/api/auth/forgot-password', async (req: Request, res: Response) => {
+      try {
+        const { email } = req.body;
+        
+        if (!email) {
+          return res.status(400).json({ success: false, error: 'Email is required' });
+        }
+        
+        // Check if user exists
+        const user = await this.handleAsync(this.database.getUserByEmail(email));
+        if (!user) {
+          // Don't reveal if user exists or not for security
+          return res.json({ success: true, message: 'If the email exists, a password reset link has been sent' });
+        }
+        
+        // Generate reset token
+        const resetToken = crypto.randomBytes(32).toString('hex');
+        const resetExpires = Date.now() + 3600000; // 1 hour
+        
+        // Store reset token (in a real app, you'd store this in database)
+        // For now, we'll just send a success message
+        // In production, you should send an email with the reset link
+        
+        console.log(`Password reset requested for: ${email}`);
+        console.log(`Reset token: ${resetToken} (expires in 1 hour)`);
+        
+        // TODO: Send email with reset link
+        // await this.emailService.sendPasswordResetEmail(email, resetToken);
+        
+        res.json({ 
+          success: true, 
+          message: 'If the email exists, a password reset link has been sent' 
+        });
+      } catch (error: any) {
+        console.error('Forgot password error:', error);
+        res.status(500).json({ success: false, error: 'Failed to process password reset request' });
+      }
     });
 
     // Dashboard stats endpoint

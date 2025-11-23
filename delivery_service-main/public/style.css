@@ -583,6 +583,25 @@ body {
 }
 
 /* Modal Styles - Modern Design */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    animation: fadeIn 0.2s ease;
+}
+
+.modal.hidden {
+    display: none;
+}
+
 .modal-overlay {
     position: fixed;
     top: 0;
@@ -1347,4 +1366,61 @@ body {
 
 .btn-auto-assign:active {
     transform: translateY(0);
+}
+
+/* Profile Styles */
+.profile-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 32px;
+}
+
+.profile-avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.profile-details {
+    width: 100%;
+}
+
+.profile-field {
+    margin-bottom: 20px;
+}
+
+.profile-field label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 500;
+    color: #64748b;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.profile-value {
+    font-size: 16px;
+    color: #0f172a;
+    font-weight: 500;
+    padding: 10px 0;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.profile-actions {
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.profile-actions .btn-primary {
+    width: 100%;
 }

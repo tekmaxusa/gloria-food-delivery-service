@@ -51,6 +51,8 @@ async function checkAuthStatus() {
             if (data.success) {
                 sessionId = storedSessionId;
                 currentUser = data.user;
+                // Fetch full user info for profile
+                fetchUserInfo();
                 showDashboard();
                 loadDashboardData();
             } else {
@@ -88,6 +90,8 @@ function setupAuthForms() {
                     sessionId = data.sessionId;
                     localStorage.setItem('sessionId', sessionId);
                     currentUser = data.user;
+                    // Fetch full user info for profile
+                    fetchUserInfo();
                     showNotification('Success', 'Login successful!');
                     showDashboard();
                     loadDashboardData();
@@ -123,6 +127,8 @@ function setupAuthForms() {
                     sessionId = data.sessionId;
                     localStorage.setItem('sessionId', sessionId);
                     currentUser = data.user;
+                    // Fetch full user info for profile
+                    fetchUserInfo();
                     showNotification('Success', 'Account created successfully!');
                     showDashboard();
                     loadDashboardData();
@@ -175,6 +181,231 @@ function setupAuthForms() {
             showAuthContainer();
             stopAutoRefresh();
         });
+    }
+    
+    // Forgot password link
+    const forgotPasswordLink = document.getElementById('forgotPasswordLink');
+    if (forgotPasswordLink) {
+        forgotPasswordLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            showForgotPasswordModal();
+        });
+    }
+    
+    // Setup profile functionality
+    setupProfileModal();
+    setupChangePasswordModal();
+    setupForgotPasswordModal();
+}
+
+// Setup Profile Modal
+function setupProfileModal() {
+    const profileBtn = document.getElementById('profileBtn');
+    const profileModal = document.getElementById('profileModal');
+    const closeProfileModal = document.getElementById('closeProfileModal');
+    
+    if (profileBtn) {
+        profileBtn.addEventListener('click', () => {
+            if (currentUser) {
+                updateProfileInfo();
+                profileModal.classList.remove('hidden');
+            }
+        });
+    }
+    
+    if (closeProfileModal) {
+        closeProfileModal.addEventListener('click', () => {
+            profileModal.classList.add('hidden');
+        });
+    }
+    
+    // Close modal when clicking outside
+    if (profileModal) {
+        profileModal.addEventListener('click', (e) => {
+            if (e.target === profileModal) {
+                profileModal.classList.add('hidden');
+            }
+        });
+    }
+}
+
+// Update profile info display
+function updateProfileInfo() {
+    if (currentUser) {
+        document.getElementById('profileFullName').textContent = currentUser.full_name || currentUser.fullName || 'N/A';
+        document.getElementById('profileEmail').textContent = currentUser.email || 'N/A';
+        document.getElementById('profileRole').textContent = currentUser.role || 'User';
+    }
+}
+
+// Setup Change Password Modal
+function setupChangePasswordModal() {
+    const changePasswordBtn = document.getElementById('changePasswordBtn');
+    const changePasswordModal = document.getElementById('changePasswordModal');
+    const closeChangePasswordModal = document.getElementById('closeChangePasswordModal');
+    const changePasswordForm = document.getElementById('changePasswordForm');
+    
+    if (changePasswordBtn) {
+        changePasswordBtn.addEventListener('click', () => {
+            document.getElementById('profileModal').classList.add('hidden');
+            changePasswordModal.classList.remove('hidden');
+        });
+    }
+    
+    if (closeChangePasswordModal) {
+        closeChangePasswordModal.addEventListener('click', () => {
+            changePasswordModal.classList.add('hidden');
+            // Clear form
+            if (changePasswordForm) {
+                changePasswordForm.reset();
+            }
+        });
+    }
+    
+    // Close modal when clicking outside
+    if (changePasswordModal) {
+        changePasswordModal.addEventListener('click', (e) => {
+            if (e.target === changePasswordModal) {
+                changePasswordModal.classList.add('hidden');
+                if (changePasswordForm) {
+                    changePasswordForm.reset();
+                }
+            }
+        });
+    }
+    
+    if (changePasswordForm) {
+        changePasswordForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const currentPassword = document.getElementById('currentPassword').value;
+            const newPassword = document.getElementById('newPassword').value;
+            const confirmNewPassword = document.getElementById('confirmNewPassword').value;
+            
+            if (newPassword !== confirmNewPassword) {
+                showNotification('Error', 'New passwords do not match', true);
+                return;
+            }
+            
+            if (newPassword.length < 6) {
+                showNotification('Error', 'Password must be at least 6 characters', true);
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/change-password`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-session-id': sessionId || ''
+                    },
+                    body: JSON.stringify({
+                        currentPassword,
+                        newPassword
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showNotification('Success', 'Password changed successfully!');
+                    changePasswordModal.classList.add('hidden');
+                    changePasswordForm.reset();
+                } else {
+                    showNotification('Error', data.error || 'Failed to change password', true);
+                }
+            } catch (error) {
+                showNotification('Error', 'Failed to change password: ' + error.message, true);
+            }
+        });
+    }
+}
+
+// Setup Forgot Password Modal
+function setupForgotPasswordModal() {
+    const forgotPasswordModal = document.getElementById('forgotPasswordModal');
+    const closeForgotPasswordModal = document.getElementById('closeForgotPasswordModal');
+    const forgotPasswordForm = document.getElementById('forgotPasswordForm');
+    
+    if (closeForgotPasswordModal) {
+        closeForgotPasswordModal.addEventListener('click', () => {
+            forgotPasswordModal.classList.add('hidden');
+            if (forgotPasswordForm) {
+                forgotPasswordForm.reset();
+            }
+        });
+    }
+    
+    // Close modal when clicking outside
+    if (forgotPasswordModal) {
+        forgotPasswordModal.addEventListener('click', (e) => {
+            if (e.target === forgotPasswordModal) {
+                forgotPasswordModal.classList.add('hidden');
+                if (forgotPasswordForm) {
+                    forgotPasswordForm.reset();
+                }
+            }
+        });
+    }
+    
+    if (forgotPasswordForm) {
+        forgotPasswordForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('forgotPasswordEmail').value;
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/forgot-password`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showNotification('Success', 'Password reset link sent to your email!');
+                    forgotPasswordModal.classList.add('hidden');
+                    forgotPasswordForm.reset();
+                } else {
+                    showNotification('Error', data.error || 'Failed to send reset link', true);
+                }
+            } catch (error) {
+                showNotification('Error', 'Failed to send reset link: ' + error.message, true);
+            }
+        });
+    }
+}
+
+// Show Forgot Password Modal
+function showForgotPasswordModal() {
+    const forgotPasswordModal = document.getElementById('forgotPasswordModal');
+    if (forgotPasswordModal) {
+        forgotPasswordModal.classList.remove('hidden');
+    }
+}
+
+// Fetch full user info from API
+async function fetchUserInfo() {
+    if (!sessionId) return;
+    
+    try {
+        const response = await fetch(`${API_BASE}/api/auth/me`, {
+            headers: {
+                'x-session-id': sessionId
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.user) {
+                currentUser = data.user;
+            }
+        }
+    } catch (error) {
+        console.error('Error fetching user info:', error);
     }
 }
 

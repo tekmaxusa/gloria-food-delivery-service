@@ -445,6 +445,17 @@ export class OrderDatabase {
     }
   }
 
+  updateUserPassword(email: string, hashedPassword: string): boolean {
+    try {
+      const stmt = this.db.prepare('UPDATE users SET password = ? WHERE email = ?');
+      const result = stmt.run(hashedPassword, email);
+      return result.changes > 0;
+    } catch (error) {
+      console.error('Error updating password:', error);
+      return false;
+    }
+  }
+
   // Drivers methods
   getAllDrivers(): any[] {
     try {

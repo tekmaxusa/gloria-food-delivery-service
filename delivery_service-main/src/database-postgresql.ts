@@ -602,6 +602,21 @@ export class OrderDatabasePostgreSQL {
     }
   }
 
+  async updateUserPassword(email: string, hashedPassword: string): Promise<boolean> {
+    try {
+      const client = await this.pool.connect();
+      const result = await client.query(
+        'UPDATE users SET password = $1 WHERE email = $2',
+        [hashedPassword, email]
+      );
+      client.release();
+      return result.rowCount > 0;
+    } catch (error) {
+      console.error('Error updating password:', error);
+      return false;
+    }
+  }
+
   // Drivers methods
   async getAllDrivers(): Promise<any[]> {
     try {
