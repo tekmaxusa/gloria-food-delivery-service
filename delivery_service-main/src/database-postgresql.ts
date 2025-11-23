@@ -610,7 +610,7 @@ export class OrderDatabasePostgreSQL {
         [hashedPassword, email]
       );
       client.release();
-      return result.rowCount > 0;
+      return (result.rowCount ?? 0) > 0;
     } catch (error) {
       console.error('Error updating password:', error);
       return false;
