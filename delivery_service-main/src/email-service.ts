@@ -68,6 +68,11 @@ export class EmailService {
           maxMessages: 3,
         });
         
+        // Verify transporter connection (async, will run in background)
+        this.verifyConnection().catch(err => {
+          console.error(chalk.red('Error verifying SMTP connection:'), err);
+        });
+        
         // Merchant emails enabled if merchant email is set (checks MERCHANT_EMAIL, API_VENDOR_CONTACT_EMAIL, VENDOR_CONTACT_EMAIL, or VENDOR_EMAIL)
         this.enabled = !!this.config.to;
         if (this.enabled) {
@@ -125,6 +130,26 @@ export class EmailService {
     return this.customerEmailsEnabled && !!this.transporter;
   }
 
+  isTransporterAvailable(): boolean {
+    return !!this.transporter;
+  }
+
+  private async verifyConnection(): Promise<void> {
+    if (!this.transporter) return;
+    
+    try {
+      await this.transporter.verify();
+      console.log(chalk.green('✅ SMTP connection verified successfully'));
+    } catch (error: any) {
+      console.error(chalk.red('❌ SMTP connection verification failed:'));
+      console.error(chalk.red(`   ${error.message}`));
+      if (error.code) {
+        console.error(chalk.red(`   Error Code: ${error.code}`));
+      }
+      console.error(chalk.yellow('⚠️  Emails may not be sent. Please check your SMTP configuration.'));
+    }
+  }
+
   async sendOrderUpdate(orderData: any, context: MerchantEmailContext): Promise<void> {
     if (!this.enabled || !this.transporter || !this.config.to) {
       if (!this.enabled) {
@@ -158,9 +183,9 @@ export class EmailService {
         html,
       });
 
-      // Wrap with timeout
+      // Reduced timeout to 30 seconds for faster failure detection
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Email send operation timed out after 60 seconds')), 60000);
+        setTimeout(() => reject(new Error('Email send operation timed out after 30 seconds')), 30000);
       });
 
       const result = await Promise.race([sendMailPromise, timeoutPromise]) as any;
@@ -442,6 +467,9 @@ export class EmailService {
 
     try {
       console.log(chalk.blue(`📧 Sending password reset email to ${email}...`));
+      console.log(chalk.gray(`   From: ${this.config.from || this.config.user}`));
+      console.log(chalk.gray(`   To: ${email}`));
+      console.log(chalk.gray(`   SMTP Host: ${this.config.host}:${this.config.port || 587}`));
       
       const sendMailPromise = this.transporter.sendMail({
         from: this.config.from || this.config.user,
@@ -451,8 +479,9 @@ export class EmailService {
         html,
       });
 
+      // Reduced timeout to 30 seconds for faster failure detection
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Email send operation timed out after 60 seconds')), 60000);
+        setTimeout(() => reject(new Error('Email send operation timed out after 30 seconds')), 30000);
       });
 
       const result = await Promise.race([sendMailPromise, timeoutPromise]) as any;

@@ -246,6 +246,29 @@ class GloriaFoodWebhookServer {
       return null;
     }
 
+    // Check if order was already sent to DoorDash
+    const orderId = this.getOrderIdentifier(orderData);
+    if (orderId) {
+      try {
+        const existingOrder = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId));
+        if (existingOrder && (existingOrder as any).sent_to_doordash) {
+          console.log(chalk.yellow(`⚠️  Order ${orderId} already sent to DoorDash, skipping duplicate send`));
+          if ((existingOrder as any).doordash_order_id) {
+            return {
+              id: (existingOrder as any).doordash_order_id,
+              external_delivery_id: orderId,
+              status: 'already_sent',
+              tracking_url: (existingOrder as any).doordash_tracking_url
+            };
+          }
+          return null;
+        }
+      } catch (error) {
+        // Continue if check fails
+        console.log(chalk.gray(`   Could not check if order already sent: ${error}`));
+      }
+    }
+
     try {
       // Convert to DoorDash Drive delivery payload
       const drivePayload = this.doorDashClient.convertGloriaFoodToDrive(orderData);
@@ -269,6 +292,29 @@ class GloriaFoodWebhookServer {
         tracking_url: response.tracking_url 
       };
     } catch (error: any) {
+      // Check if it's a duplicate delivery ID error
+      if (error.message && error.message.includes('duplicate_delivery_id')) {
+        console.log(chalk.yellow(`⚠️  Order ${orderId || 'unknown'} already exists in DoorDash (duplicate_delivery_id)`));
+        console.log(chalk.gray(`   This is normal if the order was already sent. Skipping...`));
+        // Try to get existing delivery info
+        if (orderId) {
+          try {
+            const existingOrder = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId));
+            if (existingOrder && (existingOrder as any).doordash_order_id) {
+              return {
+                id: (existingOrder as any).doordash_order_id,
+                external_delivery_id: orderId,
+                status: 'already_exists',
+                tracking_url: (existingOrder as any).doordash_tracking_url
+              };
+            }
+          } catch (e) {
+            // Ignore
+          }
+        }
+        return null;
+      }
+      
       // Log error but don't fail the webhook
       console.error(chalk.red(`❌ Failed to send order to DoorDash: ${error.message}`));
       
@@ -322,11 +368,19 @@ class GloriaFoodWebhookServer {
   private async notifyMerchant(orderData: any, context: MerchantEmailContext): Promise<void> {
     if (!this.emailService) {
       console.log(chalk.yellow('⚠️  Email service not initialized'));
+      console.log(chalk.gray('   Make sure SMTP_HOST, SMTP_USER, and SMTP_PASS are set in your .env file'));
+      return;
+    }
+    
+    if (!this.emailService.isTransporterAvailable()) {
+      console.log(chalk.yellow('⚠️  Email transporter not available'));
+      console.log(chalk.gray('   Make sure SMTP_HOST, SMTP_USER, and SMTP_PASS are set in your .env file'));
       return;
     }
     
     if (!this.emailService.isEnabled()) {
-      console.log(chalk.yellow('⚠️  Email service is disabled'));
+      console.log(chalk.yellow('⚠️  Merchant email notifications disabled'));
+      console.log(chalk.gray('   Set MERCHANT_EMAIL (or API_VENDOR_CONTACT_EMAIL, VENDOR_CONTACT_EMAIL, or VENDOR_EMAIL) in your .env file'));
       return;
     }
     
@@ -334,6 +388,12 @@ class GloriaFoodWebhookServer {
       await this.emailService.sendOrderUpdate(orderData, context);
     } catch (error: any) {
       console.error(chalk.red(`❌ Failed to send merchant notification: ${error.message}`));
+      if (error.code) {
+        console.error(chalk.red(`   Error Code: ${error.code}`));
+      }
+      if (error.response) {
+        console.error(chalk.red(`   SMTP Response: ${error.response}`));
+      }
       if (error.stack) {
         console.error(chalk.gray(`   Stack: ${error.stack}`));
       }
@@ -1445,11 +1505,16 @@ class GloriaFoodWebhookServer {
         
         // Send email with reset link
         try {
-          if (this.emailService) {
+          if (this.emailService && this.emailService.isTransporterAvailable()) {
             await this.emailService.sendPasswordResetEmail(email, resetToken, resetUrl);
             console.log(chalk.green(`✅ Password reset email sent to ${email}`));
           } else {
-            console.log(chalk.yellow(`⚠️  Email service not initialized`));
+            console.log(chalk.yellow(`⚠️  Email service not available`));
+            if (!this.emailService) {
+              console.log(chalk.gray(`   Email service not initialized`));
+            } else if (!this.emailService.isTransporterAvailable()) {
+              console.log(chalk.gray(`   Email transporter not available`));
+            }
             console.log(chalk.gray(`   Reset token: ${resetToken}`));
             console.log(chalk.gray(`   Reset URL: ${resetUrl}`));
             console.log(chalk.gray(`   Note: Make sure SMTP_HOST, SMTP_USER, and SMTP_PASS are set in your .env file`));
@@ -1457,6 +1522,9 @@ class GloriaFoodWebhookServer {
         } catch (error: any) {
           console.error(chalk.red(`❌ Error sending password reset email to ${email}:`));
           console.error(chalk.red(`   ${error.message}`));
+          if (error.stack) {
+            console.error(chalk.gray(`   Stack: ${error.stack}`));
+          }
           // Still return success to not reveal if email exists
         }
         
