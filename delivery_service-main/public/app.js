@@ -2475,6 +2475,33 @@ function extractDoorDashTrackingUrl(order) {
     return null;
 }
 
+// Restaurant coordinates (can be set via environment or config)
+// These can be overridden if restaurant location is in order data
+let RESTAURANT_LAT = null;
+let RESTAURANT_LNG = null;
+
+// Fetch restaurant coordinates from API on page load
+async function loadRestaurantCoordinates() {
+    try {
+        const response = await fetch(`${API_BASE}/api/restaurant/coordinates`);
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.coordinates) {
+                RESTAURANT_LAT = data.coordinates.lat;
+                RESTAURANT_LNG = data.coordinates.lng;
+                console.log('Restaurant coordinates loaded:', RESTAURANT_LAT, RESTAURANT_LNG);
+            }
+        }
+    } catch (error) {
+        console.warn('Could not load restaurant coordinates:', error);
+    }
+}
+
+// Load restaurant coordinates when page loads
+if (typeof window !== 'undefined') {
+    loadRestaurantCoordinates();
+}
+
 // Extract distance from order data
 function extractDistance(order) {
     // Try direct fields first
@@ -2487,29 +2514,41 @@ function extractDistance(order) {
             const rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
             
             const candidates = [
+                // Direct distance fields
                 rawData.distance,
                 rawData.distance_km,
                 rawData.distance_miles,
+                rawData.delivery_distance,
+                // Delivery object fields
                 rawData.delivery?.distance,
                 rawData.delivery?.distance_km,
                 rawData.delivery?.distance_miles,
                 rawData.delivery?.delivery_distance,
+                // Order object fields
                 rawData.order?.distance,
                 rawData.order?.distance_km,
                 rawData.order?.delivery?.distance,
                 rawData.order?.delivery?.distance_km,
                 rawData.order?.delivery?.delivery_distance,
+                // Client/Customer fields
                 rawData.client?.distance,
                 rawData.client?.distance_km,
+                rawData.customer?.distance,
+                rawData.customer?.distance_km,
+                // Restaurant/Store fields
                 rawData.restaurant?.distance,
                 rawData.restaurant?.distance_km,
+                rawData.store?.distance,
+                rawData.store?.distance_km,
                 // DoorDash fields
                 rawData.doordash?.distance,
                 rawData.doordash?.distance_km,
                 rawData.delivery?.doordash?.distance,
-                // Calculate from coordinates if available
-                rawData.delivery?.lat && rawData.delivery?.lng ? null : null, // Will calculate below
-                rawData.order?.delivery?.lat && rawData.order?.delivery?.lng ? null : null
+                // Address parts fields
+                rawData.delivery_address_parts?.distance,
+                rawData.delivery_address_parts?.distance_km,
+                rawData.client_address_parts?.distance,
+                rawData.client_address_parts?.distance_km
             ];
             
             for (const candidate of candidates) {
@@ -2523,10 +2562,68 @@ function extractDistance(order) {
             }
             
             // Try to calculate distance from coordinates if available
-            const deliveryLat = rawData.delivery?.lat || rawData.order?.delivery?.lat || rawData.lat;
-            const deliveryLng = rawData.delivery?.lng || rawData.order?.delivery?.lng || rawData.lng;
-            const restaurantLat = rawData.restaurant?.lat || rawData.store?.lat;
-            const restaurantLng = rawData.restaurant?.lng || rawData.store?.lng;
+            // Check multiple possible locations for delivery coordinates
+            const deliveryLat = 
+                rawData.delivery?.lat || 
+                rawData.delivery?.latitude ||
+                rawData.order?.delivery?.lat ||
+                rawData.order?.delivery?.latitude ||
+                rawData.client?.lat ||
+                rawData.client?.latitude ||
+                rawData.lat ||
+                rawData.latitude ||
+                rawData.delivery_address_parts?.lat ||
+                rawData.delivery_address_parts?.latitude;
+                
+            const deliveryLng = 
+                rawData.delivery?.lng || 
+                rawData.delivery?.longitude ||
+                rawData.order?.delivery?.lng ||
+                rawData.order?.delivery?.longitude ||
+                rawData.client?.lng ||
+                rawData.client?.longitude ||
+                rawData.lng ||
+                rawData.longitude ||
+                rawData.delivery_address_parts?.lng ||
+                rawData.delivery_address_parts?.longitude;
+                
+            // Check multiple possible locations for restaurant coordinates
+            let restaurantLat = 
+                rawData.restaurant?.lat || 
+                rawData.restaurant?.latitude ||
+                rawData.store?.lat ||
+                rawData.store?.latitude ||
+                rawData.restaurant_location?.lat ||
+                rawData.restaurant_location?.latitude ||
+                rawData.pickup?.lat ||
+                rawData.pickup?.latitude ||
+                rawData.pickup_address?.lat ||
+                rawData.pickup_address?.latitude;
+                
+            let restaurantLng = 
+                rawData.restaurant?.lng || 
+                rawData.restaurant?.longitude ||
+                rawData.store?.lng ||
+                rawData.store?.longitude ||
+                rawData.restaurant_location?.lng ||
+                rawData.restaurant_location?.longitude ||
+                rawData.pickup?.lng ||
+                rawData.pickup?.longitude ||
+                rawData.pickup_address?.lng ||
+                rawData.pickup_address?.longitude;
+            
+            // Fallback to global restaurant coordinates if not in order data
+            if (!restaurantLat || !restaurantLng) {
+                restaurantLat = restaurantLat || RESTAURANT_LAT;
+                restaurantLng = restaurantLng || RESTAURANT_LNG;
+            }
+            
+            // Debug: Log what we found
+            if (deliveryLat || deliveryLng || restaurantLat || restaurantLng) {
+                console.log('Coordinates found for order:', order.gloriafood_order_id || order.id);
+                console.log('  Delivery:', deliveryLat, deliveryLng);
+                console.log('  Restaurant:', restaurantLat, restaurantLng);
+            }
             
             if (deliveryLat && deliveryLng && restaurantLat && restaurantLng) {
                 // Calculate distance using Haversine formula
@@ -2537,8 +2634,16 @@ function extractDistance(order) {
                     parseFloat(deliveryLng)
                 );
                 if (distance > 0) {
-                    console.log('Calculated distance:', distance, 'from coordinates for order:', order.gloriafood_order_id || order.id);
+                    console.log('Calculated distance:', distance, 'km from coordinates for order:', order.gloriafood_order_id || order.id);
                     return distance;
+                }
+            } else {
+                // Log what's missing
+                if (!deliveryLat || !deliveryLng) {
+                    console.log('Missing delivery coordinates for order:', order.gloriafood_order_id || order.id);
+                }
+                if (!restaurantLat || !restaurantLng) {
+                    console.log('Missing restaurant coordinates for order:', order.gloriafood_order_id || order.id);
                 }
             }
         } catch (e) {

@@ -1594,6 +1594,31 @@ class GloriaFoodWebhookServer {
       }
     });
 
+    // Restaurant coordinates endpoint (for distance calculation)
+    this.app.get('/api/restaurant/coordinates', (req: Request, res: Response) => {
+      try {
+        const lat = process.env.RESTAURANT_LAT || process.env.RESTAURANT_LATITUDE;
+        const lng = process.env.RESTAURANT_LNG || process.env.RESTAURANT_LONGITUDE;
+        
+        if (lat && lng) {
+          res.json({ 
+            success: true, 
+            coordinates: {
+              lat: parseFloat(lat),
+              lng: parseFloat(lng)
+            }
+          });
+        } else {
+          res.json({ 
+            success: false, 
+            message: 'Restaurant coordinates not configured. Set RESTAURANT_LAT and RESTAURANT_LNG in .env file.' 
+          });
+        }
+      } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
     // Drivers endpoint
     this.app.get('/api/drivers', async (req: Request, res: Response) => {
       try {
