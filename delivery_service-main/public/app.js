@@ -1544,10 +1544,37 @@ async function loadOrders() {
 // Filter and display orders
 // Check if order is ASAP (as soon as possible)
 function isOrderASAP(order) {
-    if (!order.raw_data) return false;
+    if (!order.raw_data) {
+        // If no raw_data, check if there's no delivery time - likely ASAP
+        const deliveryTime = extractRequiredDeliveryTime(order) || extractTime(order, 'delivery_time') || order.delivery_time;
+        if (!deliveryTime) {
+            return true; // No delivery time usually means ASAP
+        }
+        return false;
+    }
     
     try {
         const rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+        
+        // Check if order is explicitly marked as "later" or "scheduled" - NOT ASAP
+        if (rawData.scheduled === true || rawData.scheduled === 'true' || rawData.scheduled === 1) {
+            return false;
+        }
+        if (rawData.delivery?.scheduled === true || rawData.delivery?.scheduled === 'true') {
+            return false;
+        }
+        if (rawData.order?.scheduled === true || rawData.order?.scheduled === 'true') {
+            return false;
+        }
+        if (rawData.later === true || rawData.later === 'true' || rawData.later === 1) {
+            return false;
+        }
+        if (rawData.delivery?.later === true || rawData.delivery?.later === 'true') {
+            return false;
+        }
+        if (rawData.order?.later === true || rawData.order?.later === 'true') {
+            return false;
+        }
         
         // Check ASAP field
         if (rawData.asap === true || rawData.asap === 'true' || rawData.asap === 1) {
@@ -1566,14 +1593,24 @@ function isOrderASAP(order) {
             const deliveryDate = new Date(deliveryTime);
             const now = new Date();
             const diffMinutes = (deliveryDate.getTime() - now.getTime()) / (1000 * 60);
+            // If delivery time is within 30 minutes, it's likely ASAP
             if (diffMinutes <= 30 && diffMinutes >= -30) {
-                return true; // Likely ASAP if within 30 minutes
+                return true;
             }
+            // If delivery time is more than 30 minutes in the future, it's likely scheduled (NOT ASAP)
+            if (diffMinutes > 30) {
+                return false;
+            }
+        } else {
+            // No delivery time specified - likely ASAP
+            return true;
         }
         
         return false;
     } catch (e) {
-        return false;
+        // If parsing fails, assume it might be ASAP if no delivery time
+        const deliveryTime = extractRequiredDeliveryTime(order) || extractTime(order, 'delivery_time') || order.delivery_time;
+        return !deliveryTime;
     }
 }
 
@@ -1582,6 +1619,11 @@ function isOrderScheduled(order) {
     // If it's completed, cancelled, or failed, it's not scheduled
     const status = (order.status || '').toUpperCase();
     if (['DELIVERED', 'CANCELLED', 'FAILED', 'COMPLETED'].includes(status)) {
+        return false;
+    }
+    
+    // Must NOT be ASAP
+    if (isOrderASAP(order)) {
         return false;
     }
     
@@ -1598,8 +1640,8 @@ function isOrderScheduled(order) {
         // Must be in the future (more than 30 minutes from now)
         const diffMinutes = (deliveryDate.getTime() - now.getTime()) / (1000 * 60);
         if (diffMinutes > 30) {
-            // Check if it's not ASAP
-            return !isOrderASAP(order);
+            // Has future delivery time and is not ASAP - it's scheduled
+            return true;
         }
     } catch (e) {
         return false;
@@ -1613,13 +1655,16 @@ function filterAndDisplayOrders() {
     
     // Apply status filter
     if (currentStatusFilter === 'current') {
-        // Current: All active orders (not completed, not cancelled, not failed)
+        // Current: Only ASAP orders (soon as possible) that are active
         filtered = filtered.filter(order => {
             const status = (order.status || '').toUpperCase();
-            return status && !['DELIVERED', 'CANCELLED', 'FAILED', 'COMPLETED'].includes(status);
+            // Must be active and ASAP
+            return status && 
+                   !['DELIVERED', 'CANCELLED', 'FAILED', 'COMPLETED'].includes(status) &&
+                   isOrderASAP(order);
         });
     } else if (currentStatusFilter === 'scheduled') {
-        // Scheduled: Orders with future delivery time that are not ASAP
+        // Scheduled: Orders with future delivery time that are not ASAP (later orders)
         filtered = filtered.filter(order => isOrderScheduled(order));
     } else if (currentStatusFilter === 'completed') {
         // Completed: Orders with DELIVERED or COMPLETED status
