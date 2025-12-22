@@ -102,11 +102,8 @@ function showDashboard() {
     if (authContainer) authContainer.classList.add('hidden');
     if (dashboardContainer) dashboardContainer.classList.remove('hidden');
     
-    // Setup UI elements when dashboard is shown
-    setupDashboardUI();
-    
-    // Load orders when dashboard is shown
-    loadOrders();
+    // Show dashboard page by default
+    showDashboardPage();
     
     // Start auto-refresh only when authenticated
     startAutoRefresh();
@@ -336,6 +333,9 @@ function navigateToPage(page) {
     const mainContainer = document.querySelector('.main-container');
     
     switch(page.toLowerCase()) {
+        case 'dashboard':
+            showDashboardPage();
+            break;
         case 'orders':
             showOrdersPage();
             break;
@@ -347,6 +347,9 @@ function navigateToPage(page) {
             break;
         case 'drivers':
             showDriversPage();
+            break;
+        case 'reports':
+            showReportsPage();
             break;
         case 'reviews':
             showReviewsPage();
@@ -976,6 +979,239 @@ async function deleteMerchant(storeId, merchantName) {
 // Make functions available globally
 window.editMerchant = editMerchant;
 window.deleteMerchant = deleteMerchant;
+
+// Show Dashboard page
+function showDashboardPage() {
+    const mainContainer = document.querySelector('.main-container');
+    mainContainer.innerHTML = `
+        <div class="orders-header">
+            <h1 class="page-title">Dashboard</h1>
+        </div>
+        
+        <div class="dashboard-grid">
+            <div class="dashboard-card">
+                <div class="dashboard-card-header">
+                    <h3>Total Orders</h3>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="8.5" cy="7" r="4"></circle>
+                        <path d="M20 8v6M23 11h-6"></path>
+                    </svg>
+                </div>
+                <div class="dashboard-card-value" id="totalOrders">0</div>
+                <div class="dashboard-card-change">All time</div>
+            </div>
+            
+            <div class="dashboard-card">
+                <div class="dashboard-card-header">
+                    <h3>Active Orders</h3>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <polyline points="12 6 12 12 16 14"></polyline>
+                    </svg>
+                </div>
+                <div class="dashboard-card-value" id="activeOrders">0</div>
+                <div class="dashboard-card-change">In progress</div>
+            </div>
+            
+            <div class="dashboard-card">
+                <div class="dashboard-card-header">
+                    <h3>Completed Orders</h3>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                    </svg>
+                </div>
+                <div class="dashboard-card-value" id="completedOrders">0</div>
+                <div class="dashboard-card-change">Delivered</div>
+            </div>
+            
+            <div class="dashboard-card">
+                <div class="dashboard-card-header">
+                    <h3>Total Revenue</h3>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="1" x2="12" y2="23"></line>
+                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                    </svg>
+                </div>
+                <div class="dashboard-card-value" id="totalRevenue">$0.00</div>
+                <div class="dashboard-card-change">All time</div>
+            </div>
+        </div>
+        
+        <div class="table-container" style="margin-top: 24px;">
+            <h2 style="margin-bottom: 16px; font-size: 20px; font-weight: 600; color: #0f172a;">Recent Orders</h2>
+            <table class="orders-table">
+                <thead>
+                    <tr>
+                        <th>Order No.</th>
+                        <th>Customer</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody id="dashboardOrdersTableBody">
+                    <tr>
+                        <td colspan="5" class="empty-state-cell">
+                            <div class="empty-state">
+                                <div class="empty-state-text">Loading...</div>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    `;
+    
+    // Load dashboard data
+    loadDashboardData();
+}
+
+// Load dashboard data
+async function loadDashboardData() {
+    try {
+        // Load stats
+        const statsResponse = await authenticatedFetch(`${API_BASE}/api/dashboard/stats`);
+        if (statsResponse.ok) {
+            const statsData = await statsResponse.json();
+            if (statsData.success) {
+                const stats = statsData.stats;
+                document.getElementById('totalOrders').textContent = stats.orders?.total || 0;
+                document.getElementById('activeOrders').textContent = stats.orders?.active || 0;
+                document.getElementById('completedOrders').textContent = stats.orders?.completed || 0;
+                document.getElementById('totalRevenue').textContent = formatCurrency(stats.revenue?.total || 0, 'USD');
+            }
+        }
+        
+        // Load recent orders
+        const ordersResponse = await authenticatedFetch(`${API_BASE}/orders?limit=10`);
+        if (ordersResponse.ok) {
+            const ordersData = await ordersResponse.json();
+            if (ordersData.success && ordersData.orders) {
+                displayDashboardOrders(ordersData.orders.slice(0, 10));
+            }
+        }
+    } catch (error) {
+        console.error('Error loading dashboard data:', error);
+    }
+}
+
+// Display dashboard orders
+function displayDashboardOrders(orders) {
+    const tbody = document.getElementById('dashboardOrdersTableBody');
+    if (!tbody) return;
+    
+    if (orders.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="5" class="empty-state-cell">
+                    <div class="empty-state">
+                        <div class="empty-state-text">No orders found</div>
+                    </div>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    tbody.innerHTML = orders.map(order => `
+        <tr>
+            <td>#${order.gloriafood_order_id || order.id}</td>
+            <td>${order.customer_name || 'N/A'}</td>
+            <td>${formatCurrency(order.total_price || 0, order.currency || 'USD')}</td>
+            <td><span class="status-badge status-${(order.status || '').toLowerCase()}">${order.status || 'N/A'}</span></td>
+            <td>${formatDate(order.created_at || order.fetched_at)}</td>
+        </tr>
+    `).join('');
+}
+
+// Show Reports page
+function showReportsPage() {
+    const mainContainer = document.querySelector('.main-container');
+    mainContainer.innerHTML = `
+        <div class="orders-header">
+            <h1 class="page-title">Reports</h1>
+        </div>
+        
+        <div class="reports-grid">
+            <div class="report-card" onclick="generateReport('sales')">
+                <div class="report-icon">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="1" x2="12" y2="23"></line>
+                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                    </svg>
+                </div>
+                <h3>Sales Report</h3>
+                <p>View detailed sales reports by date range, merchant, and order status. Export to CSV or PDF.</p>
+            </div>
+            
+            <div class="report-card" onclick="generateReport('orders')">
+                <div class="report-icon">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="8.5" cy="7" r="4"></circle>
+                        <path d="M20 8v6M23 11h-6"></path>
+                    </svg>
+                </div>
+                <h3>Orders Report</h3>
+                <p>Comprehensive order analysis including order volume, completion rates, and customer trends.</p>
+            </div>
+            
+            <div class="report-card" onclick="generateReport('revenue')">
+                <div class="report-icon">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                    </svg>
+                </div>
+                <h3>Revenue Report</h3>
+                <p>Track revenue trends, daily/weekly/monthly breakdowns, and revenue by merchant or driver.</p>
+            </div>
+            
+            <div class="report-card" onclick="generateReport('drivers')">
+                <div class="report-icon">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 17H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v1"></path>
+                        <path d="M12 12h.01M17 12h.01M7 12h.01"></path>
+                        <path d="M19 17h1a2 2 0 0 0 2-2v-1"></path>
+                        <path d="M2 22h20"></path>
+                    </svg>
+                </div>
+                <h3>Driver Performance</h3>
+                <p>Analyze driver performance metrics including delivery times, ratings, and completion rates.</p>
+            </div>
+            
+            <div class="report-card" onclick="generateReport('customers')">
+                <div class="report-icon">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                </div>
+                <h3>Customer Analytics</h3>
+                <p>Customer insights including order frequency, average order value, and customer retention metrics.</p>
+            </div>
+            
+            <div class="report-card" onclick="generateReport('merchants')">
+                <div class="report-icon">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                </div>
+                <h3>Merchant Reports</h3>
+                <p>Merchant-specific reports showing order volume, revenue, and performance comparisons.</p>
+            </div>
+        </div>
+    `;
+}
+
+// Generate report (placeholder)
+window.generateReport = function(type) {
+    showNotification('Info', `${type.charAt(0).toUpperCase() + type.slice(1)} report generation coming soon!`);
+};
 
 // Show Reviews page
 function showReviewsPage() {

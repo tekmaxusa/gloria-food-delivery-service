@@ -985,16 +985,27 @@ body {
     transform: translateY(-2px);
 }
 
-.dashboard-card h3 {
+.dashboard-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.dashboard-card-header h3 {
     font-size: 14px;
     font-weight: 600;
     color: #64748b;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    margin-bottom: 12px;
+    margin: 0;
 }
 
-.dashboard-card .value {
+.dashboard-card-header svg {
+    color: #94a3b8;
+}
+
+.dashboard-card-value {
     font-size: 32px;
     font-weight: 700;
     color: #0f172a;
@@ -1003,7 +1014,7 @@ body {
 
 .dashboard-card .change {
     font-size: 12px;
-    color: #10b981;
+    color: #64748b;
 }
 
 .dashboard-card .change.negative {
