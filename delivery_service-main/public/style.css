@@ -321,17 +321,19 @@ body {
 .orders-table th.sortable {
     cursor: pointer;
     user-select: none;
+    white-space: nowrap;
 }
 
 .orders-table th.sortable span {
     display: inline-block;
     margin-right: 6px;
+    vertical-align: middle;
 }
 
-.orders-table th.sortable {
-    display: flex;
-    align-items: center;
-    gap: 6px;
+.orders-table th.sortable .sort-icon {
+    display: inline-block;
+    vertical-align: middle;
+    margin-left: 4px;
 }
 
 .sort-icon {
