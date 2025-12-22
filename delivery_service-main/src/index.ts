@@ -101,6 +101,45 @@ class GloriaFoodOrderFetcher {
 
   async fetchAndStoreOrders(): Promise<void> {
     const timestamp = new Date().toISOString();
+    
+    // Reload merchants from database to pick up newly added merchants
+    await this.merchantManager.reload();
+    
+    // Update merchant clients to include any newly added merchants
+    const currentMerchants = this.merchantManager.getAllMerchants();
+    const currentStoreIds = new Set(currentMerchants.map(m => m.store_id));
+    
+    // Remove merchants that are no longer active
+    for (const [storeId] of this.merchantClients.entries()) {
+      if (!currentStoreIds.has(storeId)) {
+        this.merchantClients.delete(storeId);
+        console.log(chalk.yellow(`   ⚠️  Removed inactive merchant: ${storeId}`));
+      }
+    }
+    
+    // Add new merchants that aren't in the clients map
+    for (const merchant of currentMerchants) {
+      if (!this.merchantClients.has(merchant.store_id)) {
+        if (!merchant.api_key) {
+          console.warn(chalk.yellow(`⚠️  Merchant "${merchant.merchant_name}" (${merchant.store_id}) has no API key, skipping`));
+          continue;
+        }
+
+        const client = new GloriaFoodClient({
+          apiKey: merchant.api_key,
+          storeId: merchant.store_id,
+          apiUrl: merchant.api_url,
+          masterKey: merchant.master_key,
+        });
+
+        this.merchantClients.set(merchant.store_id, {
+          merchant,
+          client
+        });
+        console.log(chalk.green(`   ✅ Added new merchant: ${merchant.merchant_name} (${merchant.store_id})`));
+      }
+    }
+    
     console.log(chalk.cyan(`\n[${timestamp}] Fetching orders from ${this.merchantClients.size} merchant(s)...`));
 
     let totalNewCount = 0;
