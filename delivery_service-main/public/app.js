@@ -542,6 +542,7 @@ function showOrdersPage() {
                                 <path d="M12 5v14M5 12l7-7 7 7"/>
                             </svg>
                         </th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody id="ordersTableBody">
@@ -2300,7 +2301,7 @@ function displayOrders(orders) {
     if (!orders || orders.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="14" class="empty-state-cell">
+                <td colspan="15" class="empty-state-cell">
                     <div class="empty-state">
                         <div class="empty-state-icon">
                             <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -2327,7 +2328,7 @@ function displayOrders(orders) {
         console.error('Error displaying orders:', error);
         tbody.innerHTML = `
             <tr>
-                <td colspan="14" class="empty-state-cell">
+                <td colspan="15" class="empty-state-cell">
                     <div class="empty-state">
                         <div class="empty-state-text">Error displaying orders: ${error.message}</div>
                     </div>
@@ -2436,6 +2437,14 @@ function createOrderRow(order) {
             <td>${formattedDriver}</td>
             <td><span class="status-badge status-${status.toLowerCase()}">${escapeHtml(status)}</span></td>
             <td>${tracking}</td>
+            <td>
+                <button class="btn-icon" onclick="deleteOrder('${escapeHtml(String(orderId))}')" title="Delete" style="color: #ef4444;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                </button>
+            </td>
         </tr>
     `;
 }

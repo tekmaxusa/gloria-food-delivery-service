@@ -1,6 +1,4 @@
 import * as dotenv from 'dotenv';
-import { OrderDatabase } from './database';
-import { OrderDatabaseMySQL } from './database-mysql';
 import { OrderDatabasePostgreSQL } from './database-postgresql';
 import { Order } from './database';
 
@@ -54,55 +52,28 @@ export interface IDatabase {
   getMerchantByStoreId(storeId: string): Promise<Merchant | null> | Merchant | null;
   insertOrUpdateMerchant(merchant: Partial<Merchant>): Promise<Merchant | null> | Merchant | null;
   deleteMerchant(storeId: string): Promise<boolean> | boolean;
+  // Order deletion method
+  deleteOrder(orderId: string): Promise<boolean> | boolean;
   close(): Promise<void> | void;
 }
 
 export class DatabaseFactory {
   static createDatabase(): IDatabase {
-    const dbType = process.env.DB_TYPE?.toLowerCase() || 'sqlite';
-    
-    // Debug: Log environment variables
-    console.log('\n🔍 Database Factory Debug:');
+    // Only PostgreSQL is supported
+    console.log('\n🔍 Database Factory:');
     console.log(`   DB_TYPE from env: "${process.env.DB_TYPE}"`);
-    console.log(`   DB_TYPE (processed): "${dbType}"`);
-    console.log(`   DB_HOST: "${process.env.DB_HOST}"`);
-    console.log(`   DB_NAME: "${process.env.DB_NAME}"`);
+    console.log(`   ✅ Using PostgreSQL database only\n`);
     
-    // Check database type and config
-    const hasDBConfig = 
-      process.env.DB_HOST || 
-      process.env.DB_USER || 
-      process.env.DB_NAME;
-    
-    if (dbType === 'postgresql' || dbType === 'postgres') {
-      // Use PostgreSQL
-      console.log('   ✅ Selecting PostgreSQL database\n');
-      return new OrderDatabasePostgreSQL({
-        host: process.env.DB_HOST || 'localhost',
-        port: parseInt(process.env.DB_PORT || '5432'),
-        user: process.env.DB_USER || 'postgres',
-        password: process.env.DB_PASSWORD || '',
-        database: process.env.DB_NAME || 'gloriafood_orders',
-        ssl: process.env.DB_SSL === 'true' || process.env.DB_SSL === '1',
-      });
-    } else if (dbType === 'mysql' || (hasDBConfig && dbType !== 'sqlite' && dbType !== 'postgresql' && dbType !== 'postgres')) {
-      // Use MySQL
-      console.log('   ✅ Selecting MySQL database\n');
-      return new OrderDatabaseMySQL({
-        host: process.env.DB_HOST || 'localhost',
-        port: parseInt(process.env.DB_PORT || '3306'),
-        user: process.env.DB_USER || 'root',
-        password: process.env.DB_PASSWORD || '',
-        database: process.env.DB_NAME || 'gloriafood_orders',
-      });
-    } else {
-      // Use SQLite (default)
-      console.log('   ⚠️  Selecting SQLite database (no database config found)\n');
-      const dbPath = process.env.DATABASE_PATH || './orders.db';
-      return new OrderDatabase(dbPath);
-    }
+    return new OrderDatabasePostgreSQL({
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT || '5432'),
+      user: process.env.DB_USER || 'postgres',
+      password: process.env.DB_PASSWORD || '',
+      database: process.env.DB_NAME || 'gloriafood_orders',
+      ssl: process.env.DB_SSL === 'true' || process.env.DB_SSL === '1',
+    });
   }
 }
 
-export { Order, OrderDatabase, OrderDatabaseMySQL, OrderDatabasePostgreSQL };
+export { Order, OrderDatabasePostgreSQL };
 

@@ -950,6 +950,22 @@ class GloriaFoodWebhookServer {
       }
     });
 
+    // Delete order endpoint
+    this.app.delete('/orders/:orderId', async (req: Request, res: Response) => {
+      try {
+        const orderId = req.params.orderId;
+        const deleted = await this.handleAsync(this.database.deleteOrder(orderId));
+        
+        if (deleted) {
+          res.json({ success: true, message: 'Order deleted successfully' });
+        } else {
+          res.status(404).json({ success: false, error: 'Order not found' });
+        }
+      } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
 
     // Get recent orders endpoint
     this.app.get('/orders/recent/:minutes?', async (req: Request, res: Response) => {

@@ -885,6 +885,23 @@ export class OrderDatabasePostgreSQL {
     }
   }
 
+  async deleteOrder(orderId: string): Promise<boolean> {
+    try {
+      const client = await this.pool.connect();
+      // Try to delete by gloriafood_order_id first, then by id
+      const result = await client.query(
+        `DELETE FROM orders WHERE gloriafood_order_id = $1 OR id::text = $1`,
+        [orderId]
+      );
+      client.release();
+      
+      return (result.rowCount || 0) > 0;
+    } catch (error) {
+      console.error('Error deleting order:', error);
+      return false;
+    }
+  }
+
   async close(): Promise<void> {
     await this.pool.end();
   }
