@@ -223,6 +223,9 @@ function setupHeaderButtons() {
 
 // Setup authentication handlers
 function setupAuth() {
+    // Setup password toggle buttons
+    setupPasswordToggles();
+    
     // Login form
     const loginForm = document.getElementById('loginFormElement');
     if (loginForm) {
@@ -326,6 +329,53 @@ function setupAuth() {
     }
     
     // Logout button is handled in setupHeaderButtons()
+}
+
+// Setup password toggle functionality
+function setupPasswordToggles() {
+    // Login password toggle
+    const toggleLoginPassword = document.getElementById('toggleLoginPassword');
+    const loginPassword = document.getElementById('loginPassword');
+    
+    if (toggleLoginPassword && loginPassword) {
+        toggleLoginPassword.addEventListener('click', () => {
+            const type = loginPassword.getAttribute('type') === 'password' ? 'text' : 'password';
+            loginPassword.setAttribute('type', type);
+            
+            // Toggle eye icons
+            const eyeOpen = toggleLoginPassword.querySelector('.eye-open');
+            const eyeClosed = toggleLoginPassword.querySelector('.eye-closed');
+            if (type === 'text') {
+                eyeOpen.style.display = 'none';
+                eyeClosed.style.display = 'block';
+            } else {
+                eyeOpen.style.display = 'block';
+                eyeClosed.style.display = 'none';
+            }
+        });
+    }
+    
+    // Signup password toggle
+    const toggleSignupPassword = document.getElementById('toggleSignupPassword');
+    const signupPassword = document.getElementById('signupPassword');
+    
+    if (toggleSignupPassword && signupPassword) {
+        toggleSignupPassword.addEventListener('click', () => {
+            const type = signupPassword.getAttribute('type') === 'password' ? 'text' : 'password';
+            signupPassword.setAttribute('type', type);
+            
+            // Toggle eye icons
+            const eyeOpen = toggleSignupPassword.querySelector('.eye-open');
+            const eyeClosed = toggleSignupPassword.querySelector('.eye-closed');
+            if (type === 'text') {
+                eyeOpen.style.display = 'none';
+                eyeClosed.style.display = 'block';
+            } else {
+                eyeOpen.style.display = 'block';
+                eyeClosed.style.display = 'none';
+            }
+        });
+    }
 }
 
 // Setup navigation links
