@@ -1378,6 +1378,20 @@ function handleNewOrder() {
 // Notification storage
 let notifications = [];
 
+// Handle Profile button
+function handleProfile() {
+    const panel = document.getElementById('profilePanel');
+    if (panel) {
+        if (panel.classList.contains('hidden')) {
+            panel.classList.remove('hidden');
+        } else {
+            panel.classList.add('hidden');
+        }
+    } else {
+        createProfilePanel();
+    }
+}
+
 // Handle Notifications button
 function handleNotifications() {
     const panel = document.getElementById('notificationsPanel');
@@ -1390,6 +1404,123 @@ function handleNotifications() {
     } else {
         createNotificationsPanel();
     }
+}
+
+// Create profile panel
+function createProfilePanel() {
+    // Remove existing panel if any
+    const existing = document.getElementById('profilePanel');
+    if (existing) {
+        existing.remove();
+    }
+    
+    const panel = document.createElement('div');
+    panel.id = 'profilePanel';
+    panel.className = 'profile-panel';
+    
+    // Get current user profile picture from localStorage
+    const profilePicture = localStorage.getItem('profilePicture') || '';
+    const userName = currentUser?.full_name || currentUser?.email || 'User';
+    const userEmail = currentUser?.email || '';
+    
+    panel.innerHTML = `
+        <div class="profile-header">
+            <h3>Profile</h3>
+            <button class="close-profile-btn" id="closeProfilePanel">×</button>
+        </div>
+        <div class="profile-content">
+            <div class="profile-picture-section">
+                <div class="profile-picture-container">
+                    <img id="profilePicturePreview" src="${profilePicture || 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22%3E%3Ccircle cx=%2250%22 cy=%2250%22 r=%2250%22 fill=%22%23e2e8f0%22/%3E%3Ctext x=%2250%22 y=%2255%22 font-size=%2230%22 text-anchor=%22middle%22 fill=%22%2364748b%22%3E${userName.charAt(0).toUpperCase()}%3C/text%3E%3C/svg%3E'}" alt="Profile Picture" class="profile-picture">
+                    <label for="profilePictureInput" class="upload-label">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                        Upload Photo
+                    </label>
+                    <input type="file" id="profilePictureInput" accept="image/*" style="display: none;">
+                </div>
+            </div>
+            <div class="profile-info">
+                <div class="profile-field">
+                    <label>Name</label>
+                    <div class="profile-value">${userName}</div>
+                </div>
+                <div class="profile-field">
+                    <label>Email</label>
+                    <div class="profile-value">${userEmail}</div>
+                </div>
+                <div class="profile-field">
+                    <label>Role</label>
+                    <div class="profile-value">${currentUser?.role || 'User'}</div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(panel);
+    
+    // Setup event listeners
+    document.getElementById('closeProfilePanel')?.addEventListener('click', () => {
+        panel.classList.add('hidden');
+    });
+    
+    // Handle profile picture upload
+    const fileInput = document.getElementById('profilePictureInput');
+    if (fileInput) {
+        fileInput.addEventListener('change', handleProfilePictureUpload);
+    }
+    
+    // Close when clicking outside
+    document.addEventListener('click', function closeOnOutsideClick(e) {
+        if (!panel.contains(e.target) && !e.target.closest('#profileBtn')) {
+            panel.classList.add('hidden');
+            document.removeEventListener('click', closeOnOutsideClick);
+        }
+    });
+}
+
+// Handle profile picture upload
+function handleProfilePictureUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+        addNotification('Error', 'Please select an image file', 'error');
+        return;
+    }
+    
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+        addNotification('Error', 'Image size must be less than 5MB', 'error');
+        return;
+    }
+    
+    // Read file as data URL
+    const reader = new FileReader();
+    reader.onload = function(event) {
+        const dataUrl = event.target.result;
+        
+        // Save to localStorage
+        localStorage.setItem('profilePicture', dataUrl);
+        
+        // Update preview
+        const preview = document.getElementById('profilePicturePreview');
+        if (preview) {
+            preview.src = dataUrl;
+        }
+        
+        addNotification('Success', 'Profile picture updated successfully', 'success');
+    };
+    
+    reader.onerror = function() {
+        addNotification('Error', 'Error reading image file', 'error');
+    };
+    
+    reader.readAsDataURL(file);
 }
 
 // Create notifications panel
