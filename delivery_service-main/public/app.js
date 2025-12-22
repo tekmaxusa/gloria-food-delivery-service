@@ -1273,17 +1273,531 @@ function showReportsPage() {
     `;
 }
 
-// Generate report
+// Generate report - show actual report data
 window.generateReport = function(type) {
-    // Add notification about report generation
-    addNotification('Report', `${type.charAt(0).toUpperCase() + type.slice(1)} report generation initiated`, 'info');
+    showReportView(type);
+};
+
+// Show report view with actual data
+async function showReportView(reportType) {
+    const mainContainer = document.querySelector('.main-container');
     
-    // Here you can add actual report generation logic
-    // For now, show a message
-    console.log(`Generating ${type} report...`);
+    // Show loading state
+    mainContainer.innerHTML = `
+        <div class="orders-header">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h1 class="page-title">${getReportTitle(reportType)}</h1>
+                <button class="btn-secondary" onclick="showReportsPage()" style="display: flex; align-items: center; gap: 8px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"></path>
+                    </svg>
+                    Back to Reports
+                </button>
+            </div>
+        </div>
+        <div style="text-align: center; padding: 40px;">
+            <div class="empty-state-text">Loading report data...</div>
+        </div>
+    `;
     
-    // You can redirect to a report page or open a modal with report details
-    // Example: window.location.href = `/reports/${type}`;
+    try {
+        let reportData = null;
+        let reportHTML = '';
+        
+        switch(reportType) {
+            case 'sales':
+                reportData = await fetchSalesReport();
+                reportHTML = renderSalesReport(reportData);
+                break;
+            case 'orders':
+                reportData = await fetchOrdersReport();
+                reportHTML = renderOrdersReport(reportData);
+                break;
+            case 'revenue':
+                reportData = await fetchRevenueReport();
+                reportHTML = renderRevenueReport(reportData);
+                break;
+            case 'drivers':
+                reportData = await fetchDriversReport();
+                reportHTML = renderDriversReport(reportData);
+                break;
+            case 'customers':
+                reportData = await fetchCustomersReport();
+                reportHTML = renderCustomersReport(reportData);
+                break;
+            case 'merchants':
+                reportData = await fetchMerchantsReport();
+                reportHTML = renderMerchantsReport(reportData);
+                break;
+            default:
+                reportHTML = '<div class="empty-state-text">Invalid report type</div>';
+        }
+        
+        mainContainer.innerHTML = `
+            <div class="orders-header">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h1 class="page-title">${getReportTitle(reportType)}</h1>
+                    <div style="display: flex; gap: 12px;">
+                        <button class="btn-secondary" onclick="exportReport('${reportType}')" style="display: flex; align-items: center; gap: 8px;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                            Export
+                        </button>
+                        <button class="btn-secondary" onclick="showReportsPage()" style="display: flex; align-items: center; gap: 8px;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 12H5M12 19l-7-7 7-7"></path>
+                            </svg>
+                            Back to Reports
+                        </button>
+                    </div>
+                </div>
+            </div>
+            ${reportHTML}
+        `;
+    } catch (error) {
+        console.error('Error loading report:', error);
+        mainContainer.innerHTML = `
+            <div class="orders-header">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h1 class="page-title">${getReportTitle(reportType)}</h1>
+                    <button class="btn-secondary" onclick="showReportsPage()">Back to Reports</button>
+                </div>
+            </div>
+            <div style="text-align: center; padding: 40px;">
+                <div class="empty-state-text" style="color: #ef4444;">Error loading report: ${error.message}</div>
+            </div>
+        `;
+    }
+}
+
+// Get report title
+function getReportTitle(type) {
+    const titles = {
+        'sales': 'Sales Report',
+        'orders': 'Orders Report',
+        'revenue': 'Revenue Report',
+        'drivers': 'Driver Performance Report',
+        'customers': 'Customer Analytics Report',
+        'merchants': 'Merchant Reports'
+    };
+    return titles[type] || 'Report';
+}
+
+// Fetch sales report data
+async function fetchSalesReport() {
+    const response = await authenticatedFetch(`${API_BASE}/orders?limit=1000`);
+    const data = await response.json();
+    return data.orders || data || [];
+}
+
+// Fetch orders report data
+async function fetchOrdersReport() {
+    const response = await authenticatedFetch(`${API_BASE}/orders?limit=1000`);
+    const data = await response.json();
+    return data.orders || data || [];
+}
+
+// Fetch revenue report data
+async function fetchRevenueReport() {
+    const [ordersResponse, statsResponse] = await Promise.all([
+        authenticatedFetch(`${API_BASE}/orders?limit=1000`),
+        authenticatedFetch(`${API_BASE}/api/dashboard/stats`)
+    ]);
+    const ordersData = await ordersResponse.json();
+    const statsData = await statsResponse.json();
+    return {
+        orders: ordersData.orders || ordersData || [],
+        stats: statsData.stats || {}
+    };
+}
+
+// Fetch drivers report data
+async function fetchDriversReport() {
+    const response = await authenticatedFetch(`${API_BASE}/api/drivers`);
+    const data = await response.json();
+    return data.drivers || [];
+}
+
+// Fetch customers report data
+async function fetchCustomersReport() {
+    const response = await authenticatedFetch(`${API_BASE}/orders?limit=1000`);
+    const data = await response.json();
+    return data.orders || data || [];
+}
+
+// Fetch merchants report data
+async function fetchMerchantsReport() {
+    const response = await authenticatedFetch(`${API_BASE}/merchants`);
+    const data = await response.json();
+    return data.merchants || [];
+}
+
+// Render sales report
+function renderSalesReport(orders) {
+    const totalSales = orders.reduce((sum, o) => sum + (parseFloat(o.total_price) || 0), 0);
+    const completedOrders = orders.filter(o => o.status === 'DELIVERED' || o.status === 'COMPLETED').length;
+    const pendingOrders = orders.filter(o => o.status !== 'DELIVERED' && o.status !== 'COMPLETED' && o.status !== 'CANCELLED').length;
+    
+    return `
+        <div class="dashboard-grid" style="margin-bottom: 24px;">
+            <div class="dashboard-card">
+                <div class="dashboard-card-header">
+                    <h3>Total Sales</h3>
+                </div>
+                <div class="dashboard-card-value">${formatCurrency(totalSales, 'USD')}</div>
+                <div class="dashboard-card-change">All time</div>
+            </div>
+            <div class="dashboard-card">
+                <div class="dashboard-card-header">
+                    <h3>Completed Orders</h3>
+                </div>
+                <div class="dashboard-card-value">${completedOrders}</div>
+                <div class="dashboard-card-change">Delivered</div>
+            </div>
+            <div class="dashboard-card">
+                <div class="dashboard-card-header">
+                    <h3>Pending Orders</h3>
+                </div>
+                <div class="dashboard-card-value">${pendingOrders}</div>
+                <div class="dashboard-card-change">In progress</div>
+            </div>
+            <div class="dashboard-card">
+                <div class="dashboard-card-header">
+                    <h3>Total Orders</h3>
+                </div>
+                <div class="dashboard-card-value">${orders.length}</div>
+                <div class="dashboard-card-change">All orders</div>
+            </div>
+        </div>
+        <div class="table-container">
+            <h2 style="margin-bottom: 16px; font-size: 20px; font-weight: 600; color: #0f172a;">Sales Details</h2>
+            <table class="orders-table">
+                <thead>
+                    <tr>
+                        <th>Order No.</th>
+                        <th>Customer</th>
+                        <th>Merchant</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${orders.length === 0 ? '<tr><td colspan="6" class="empty-state-cell"><div class="empty-state"><div class="empty-state-text">No sales data available</div></div></td></tr>' : 
+                      orders.slice(0, 100).map(order => `
+                        <tr>
+                            <td>#${order.gloriafood_order_id || order.id}</td>
+                            <td>${order.customer_name || 'N/A'}</td>
+                            <td>${order.merchant_name || 'N/A'}</td>
+                            <td>${formatCurrency(order.total_price || 0, order.currency || 'USD')}</td>
+                            <td><span class="status-badge status-${(order.status || '').toLowerCase()}">${order.status || 'N/A'}</span></td>
+                            <td>${formatDate(order.created_at || order.fetched_at)}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+// Render orders report
+function renderOrdersReport(orders) {
+    const statusCounts = {};
+    orders.forEach(order => {
+        const status = order.status || 'UNKNOWN';
+        statusCounts[status] = (statusCounts[status] || 0) + 1;
+    });
+    
+    return `
+        <div class="dashboard-grid" style="margin-bottom: 24px;">
+            ${Object.entries(statusCounts).map(([status, count]) => `
+                <div class="dashboard-card">
+                    <div class="dashboard-card-header">
+                        <h3>${status}</h3>
+                    </div>
+                    <div class="dashboard-card-value">${count}</div>
+                    <div class="dashboard-card-change">Orders</div>
+                </div>
+            `).join('')}
+        </div>
+        <div class="table-container">
+            <h2 style="margin-bottom: 16px; font-size: 20px; font-weight: 600; color: #0f172a;">All Orders</h2>
+            <table class="orders-table">
+                <thead>
+                    <tr>
+                        <th>Order No.</th>
+                        <th>Customer</th>
+                        <th>Merchant</th>
+                        <th>Address</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${orders.length === 0 ? '<tr><td colspan="7" class="empty-state-cell"><div class="empty-state"><div class="empty-state-text">No orders available</div></div></td></tr>' : 
+                      orders.slice(0, 100).map(order => `
+                        <tr>
+                            <td>#${order.gloriafood_order_id || order.id}</td>
+                            <td>${order.customer_name || 'N/A'}</td>
+                            <td>${order.merchant_name || 'N/A'}</td>
+                            <td>${(order.delivery_address || order.customer_address || 'N/A').substring(0, 50)}${(order.delivery_address || order.customer_address || '').length > 50 ? '...' : ''}</td>
+                            <td>${formatCurrency(order.total_price || 0, order.currency || 'USD')}</td>
+                            <td><span class="status-badge status-${(order.status || '').toLowerCase()}">${order.status || 'N/A'}</span></td>
+                            <td>${formatDate(order.created_at || order.fetched_at)}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+// Render revenue report
+function renderRevenueReport(data) {
+    const { orders, stats } = data;
+    const totalRevenue = stats.revenue?.total || orders.reduce((sum, o) => sum + (parseFloat(o.total_price) || 0), 0);
+    
+    // Group by date
+    const revenueByDate = {};
+    orders.forEach(order => {
+        const date = new Date(order.created_at || order.fetched_at).toLocaleDateString();
+        revenueByDate[date] = (revenueByDate[date] || 0) + (parseFloat(order.total_price) || 0);
+    });
+    
+    return `
+        <div class="dashboard-grid" style="margin-bottom: 24px;">
+            <div class="dashboard-card">
+                <div class="dashboard-card-header">
+                    <h3>Total Revenue</h3>
+                </div>
+                <div class="dashboard-card-value">${formatCurrency(totalRevenue, 'USD')}</div>
+                <div class="dashboard-card-change">All time</div>
+            </div>
+            <div class="dashboard-card">
+                <div class="dashboard-card-header">
+                    <h3>Total Orders</h3>
+                </div>
+                <div class="dashboard-card-value">${orders.length}</div>
+                <div class="dashboard-card-change">Orders</div>
+            </div>
+            <div class="dashboard-card">
+                <div class="dashboard-card-header">
+                    <h3>Average Order Value</h3>
+                </div>
+                <div class="dashboard-card-value">${formatCurrency(orders.length > 0 ? totalRevenue / orders.length : 0, 'USD')}</div>
+                <div class="dashboard-card-change">Per order</div>
+            </div>
+        </div>
+        <div class="table-container">
+            <h2 style="margin-bottom: 16px; font-size: 20px; font-weight: 600; color: #0f172a;">Revenue by Date</h2>
+            <table class="orders-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Revenue</th>
+                        <th>Orders</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${Object.keys(revenueByDate).length === 0 ? '<tr><td colspan="3" class="empty-state-cell"><div class="empty-state"><div class="empty-state-text">No revenue data available</div></div></td></tr>' : 
+                      Object.entries(revenueByDate).sort((a, b) => new Date(b[0]) - new Date(a[0])).slice(0, 50).map(([date, revenue]) => {
+                          const dateOrders = orders.filter(o => new Date(o.created_at || o.fetched_at).toLocaleDateString() === date);
+                          return `
+                            <tr>
+                                <td>${date}</td>
+                                <td>${formatCurrency(revenue, 'USD')}</td>
+                                <td>${dateOrders.length}</td>
+                            </tr>
+                        `;
+                      }).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+// Render drivers report
+function renderDriversReport(drivers) {
+    return `
+        <div class="dashboard-grid" style="margin-bottom: 24px;">
+            <div class="dashboard-card">
+                <div class="dashboard-card-header">
+                    <h3>Total Drivers</h3>
+                </div>
+                <div class="dashboard-card-value">${drivers.length}</div>
+                <div class="dashboard-card-change">All drivers</div>
+            </div>
+            <div class="dashboard-card">
+                <div class="dashboard-card-header">
+                    <h3>Active Drivers</h3>
+                </div>
+                <div class="dashboard-card-value">${drivers.filter(d => d.status === 'active').length}</div>
+                <div class="dashboard-card-change">Active</div>
+            </div>
+        </div>
+        <div class="table-container">
+            <h2 style="margin-bottom: 16px; font-size: 20px; font-weight: 600; color: #0f172a;">Driver Performance</h2>
+            <table class="orders-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Phone</th>
+                        <th>Email</th>
+                        <th>Vehicle</th>
+                        <th>Status</th>
+                        <th>Rating</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${drivers.length === 0 ? '<tr><td colspan="6" class="empty-state-cell"><div class="empty-state"><div class="empty-state-text">No drivers available</div></div></td></tr>' : 
+                      drivers.map(driver => `
+                        <tr>
+                            <td>${driver.name || driver.full_name || 'N/A'}</td>
+                            <td>${driver.phone || 'N/A'}</td>
+                            <td>${driver.email || 'N/A'}</td>
+                            <td>${driver.vehicle || 'N/A'}</td>
+                            <td><span class="status-badge status-${(driver.status || 'inactive').toLowerCase()}">${driver.status || 'Inactive'}</span></td>
+                            <td>${driver.rating ? '⭐'.repeat(Math.round(driver.rating)) : 'N/A'}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+// Render customers report
+function renderCustomersReport(orders) {
+    // Group by customer
+    const customerData = {};
+    orders.forEach(order => {
+        const email = order.customer_email || order.customer_name || 'Unknown';
+        if (!customerData[email]) {
+            customerData[email] = {
+                name: order.customer_name || 'Unknown',
+                email: order.customer_email || '',
+                phone: order.customer_phone || '',
+                orders: 0,
+                totalSpent: 0
+            };
+        }
+        customerData[email].orders++;
+        customerData[email].totalSpent += parseFloat(order.total_price) || 0;
+    });
+    
+    const customers = Object.values(customerData).sort((a, b) => b.totalSpent - a.totalSpent);
+    
+    return `
+        <div class="dashboard-grid" style="margin-bottom: 24px;">
+            <div class="dashboard-card">
+                <div class="dashboard-card-header">
+                    <h3>Total Customers</h3>
+                </div>
+                <div class="dashboard-card-value">${customers.length}</div>
+                <div class="dashboard-card-change">Unique customers</div>
+            </div>
+            <div class="dashboard-card">
+                <div class="dashboard-card-header">
+                    <h3>Total Orders</h3>
+                </div>
+                <div class="dashboard-card-value">${orders.length}</div>
+                <div class="dashboard-card-change">All orders</div>
+            </div>
+            <div class="dashboard-card">
+                <div class="dashboard-card-header">
+                    <h3>Average Orders per Customer</h3>
+                </div>
+                <div class="dashboard-card-value">${customers.length > 0 ? (orders.length / customers.length).toFixed(1) : 0}</div>
+                <div class="dashboard-card-change">Orders</div>
+            </div>
+        </div>
+        <div class="table-container">
+            <h2 style="margin-bottom: 16px; font-size: 20px; font-weight: 600; color: #0f172a;">Customer Analytics</h2>
+            <table class="orders-table">
+                <thead>
+                    <tr>
+                        <th>Customer Name</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>Total Orders</th>
+                        <th>Total Spent</th>
+                        <th>Average Order Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${customers.length === 0 ? '<tr><td colspan="6" class="empty-state-cell"><div class="empty-state"><div class="empty-state-text">No customer data available</div></div></td></tr>' : 
+                      customers.slice(0, 100).map(customer => `
+                        <tr>
+                            <td>${customer.name}</td>
+                            <td>${customer.email || 'N/A'}</td>
+                            <td>${customer.phone || 'N/A'}</td>
+                            <td>${customer.orders}</td>
+                            <td>${formatCurrency(customer.totalSpent, 'USD')}</td>
+                            <td>${formatCurrency(customer.orders > 0 ? customer.totalSpent / customer.orders : 0, 'USD')}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+// Render merchants report
+function renderMerchantsReport(merchants) {
+    return `
+        <div class="dashboard-grid" style="margin-bottom: 24px;">
+            <div class="dashboard-card">
+                <div class="dashboard-card-header">
+                    <h3>Total Merchants</h3>
+                </div>
+                <div class="dashboard-card-value">${merchants.length}</div>
+                <div class="dashboard-card-change">All merchants</div>
+            </div>
+            <div class="dashboard-card">
+                <div class="dashboard-card-header">
+                    <h3>Active Merchants</h3>
+                </div>
+                <div class="dashboard-card-value">${merchants.filter(m => m.is_active).length}</div>
+                <div class="dashboard-card-change">Active</div>
+            </div>
+        </div>
+        <div class="table-container">
+            <h2 style="margin-bottom: 16px; font-size: 20px; font-weight: 600; color: #0f172a;">Merchant Reports</h2>
+            <table class="orders-table">
+                <thead>
+                    <tr>
+                        <th>Store ID</th>
+                        <th>Merchant Name</th>
+                        <th>API URL</th>
+                        <th>Status</th>
+                        <th>Created</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${merchants.length === 0 ? '<tr><td colspan="5" class="empty-state-cell"><div class="empty-state"><div class="empty-state-text">No merchants available</div></div></td></tr>' : 
+                      merchants.map(merchant => `
+                        <tr>
+                            <td>${merchant.store_id || 'N/A'}</td>
+                            <td>${merchant.merchant_name || 'N/A'}</td>
+                            <td>${merchant.api_url || 'N/A'}</td>
+                            <td><span class="status-badge ${merchant.is_active ? 'status-active' : 'status-inactive'}">${merchant.is_active ? 'Active' : 'Inactive'}</span></td>
+                            <td>${formatDate(merchant.created_at)}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+// Export report (placeholder)
+window.exportReport = function(type) {
+    addNotification('Info', `Exporting ${getReportTitle(type)}...`, 'info');
+    // Add actual export functionality here (CSV, PDF, etc.)
 };
 
 // Show Reviews page
