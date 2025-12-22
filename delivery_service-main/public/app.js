@@ -375,6 +375,9 @@ function navigateToPage(page) {
         default:
             showOrdersPage();
     }
+    
+    // Ensure header buttons are always clickable after navigation
+    setupHeaderButtons();
 }
 
 // Show Orders page
