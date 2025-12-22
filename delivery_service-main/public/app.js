@@ -102,26 +102,73 @@ function showDashboard() {
     if (authContainer) authContainer.classList.add('hidden');
     if (dashboardContainer) dashboardContainer.classList.remove('hidden');
     
-    // Setup UI elements when dashboard is shown
-    setupDashboardUI();
-    
     // Load orders when dashboard is shown
     loadOrders();
-    
-    // Start auto-refresh only when authenticated
-    startAutoRefresh();
 }
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    // Setup authentication handlers first
+    // Show dashboard directly (authentication optional)
+    showDashboard();
+    
+    // Setup authentication handlers (for login/logout if needed)
     setupAuth();
     
     // Setup navigation links
     setupNavigation();
     
-    // Check authentication - this will show login or dashboard
-    checkAuth();
+    // Setup status tabs
+    document.querySelectorAll('.status-tab').forEach(tab => {
+        tab.addEventListener('click', (e) => {
+            // Remove active class from all tabs
+            document.querySelectorAll('.status-tab').forEach(t => t.classList.remove('active'));
+            // Add active class to clicked tab
+            e.target.classList.add('active');
+            
+            const status = e.target.dataset.status;
+            currentStatusFilter = status;
+            filterAndDisplayOrders();
+        });
+    });
+    
+    // Setup search
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            searchQuery = e.target.value.toLowerCase();
+            filterAndDisplayOrders();
+        });
+    }
+    
+    // Setup select all checkbox
+    const selectAllCheckbox = document.querySelector('.select-all-checkbox');
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', (e) => {
+            const checkboxes = document.querySelectorAll('.order-checkbox');
+            checkboxes.forEach(cb => cb.checked = e.target.checked);
+        });
+    }
+    
+    // New order button
+    const newOrderBtn = document.getElementById('newOrderBtn');
+    if (newOrderBtn) {
+        newOrderBtn.addEventListener('click', handleNewOrder);
+    }
+    
+    // Notifications button
+    const notificationsBtn = document.querySelector('.icon-btn[title="Notifications"]');
+    if (notificationsBtn) {
+        notificationsBtn.addEventListener('click', handleNotifications);
+    }
+    
+    // Help button
+    const helpBtn = document.querySelector('.icon-btn[title="Help"]');
+    if (helpBtn) {
+        helpBtn.addEventListener('click', handleHelp);
+    }
+    
+    // Start auto-refresh
+    startAutoRefresh();
 });
 
 // Setup authentication handlers
@@ -233,7 +280,7 @@ function setupAuth() {
     if (logoutBtn) {
         logoutBtn.addEventListener('click', async () => {
         try {
-            await authenticatedFetch(`${API_BASE}/api/auth/logout`, {
+            await fetch(`${API_BASE}/api/auth/logout`, {
                 method: 'POST'
             });
             } catch (error) {
@@ -243,7 +290,7 @@ function setupAuth() {
             currentUser = null;
             sessionId = null;
             saveSessionId(null);
-            showLogin();
+            // Don't show login, just stay on dashboard
         });
     }
 }
@@ -690,7 +737,7 @@ function initializeMerchantsPage() {
 // Load merchants from API
 async function loadMerchants() {
     try {
-        const response = await authenticatedFetch(`${API_BASE}/merchants`);
+        const response = await fetch(`${API_BASE}/merchants`);
         const data = await response.json();
         
         if (data.success) {
@@ -835,8 +882,9 @@ async function handleMerchantSubmit(e) {
         let response;
         if (editingStoreId) {
             // Update existing merchant
-            response = await authenticatedFetch(`${API_BASE}/merchants/${editingStoreId}`, {
+            response = await fetch(`${API_BASE}/merchants/${editingStoreId}`, {
                 method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(merchantData)
             });
         } else {
@@ -845,8 +893,9 @@ async function handleMerchantSubmit(e) {
                 showError('API Key is required when creating a new merchant');
                 return;
             }
-            response = await authenticatedFetch(`${API_BASE}/merchants`, {
+            response = await fetch(`${API_BASE}/merchants`, {
                 method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(merchantData)
             });
         }
@@ -869,7 +918,7 @@ async function handleMerchantSubmit(e) {
 // Edit merchant
 async function editMerchant(storeId) {
     try {
-        const response = await authenticatedFetch(`${API_BASE}/merchants/${storeId}`);
+        const response = await fetch(`${API_BASE}/merchants/${storeId}`);
         const data = await response.json();
         
         if (data.success && data.merchant) {
@@ -890,7 +939,7 @@ async function deleteMerchant(storeId, merchantName) {
     }
     
     try {
-        const response = await authenticatedFetch(`${API_BASE}/merchants/${storeId}`, {
+        const response = await fetch(`${API_BASE}/merchants/${storeId}`, {
             method: 'DELETE'
         });
         
@@ -1030,7 +1079,7 @@ async function loadOrders() {
         
         console.log('Fetching orders from:', url);
         
-        const response = await authenticatedFetch(url);
+        const response = await fetch(url);
         
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
@@ -1325,7 +1374,7 @@ async function deleteOrder(orderId) {
     }
     
     try {
-        const response = await authenticatedFetch(`${API_BASE}/orders/${orderId}`, {
+        const response = await fetch(`${API_BASE}/orders/${orderId}`, {
             method: 'DELETE'
         });
         
