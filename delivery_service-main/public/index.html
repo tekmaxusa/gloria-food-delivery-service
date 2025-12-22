@@ -29,9 +29,6 @@
                         <label>Password</label>
                         <input type="password" id="loginPassword" required placeholder="Enter your password">
                     </div>
-                    <div class="form-group" style="text-align: right; margin-top: -8px; margin-bottom: 8px;">
-                        <a href="#" id="forgotPasswordLink" style="color: #3b82f6; text-decoration: none; font-size: 14px;">Forgot Password?</a>
-                    </div>
                     <button type="submit" class="btn-primary btn-full">Login</button>
                 </form>
                 <p class="auth-switch">
@@ -78,6 +75,7 @@
                 <nav class="main-nav">
                     <a href="#" class="nav-link" data-page="dashboard">Dashboard</a>
                     <a href="#" class="nav-link" data-page="orders">Orders</a>
+                    <a href="#" class="nav-link" data-page="merchants">Merchants</a>
                     <a href="#" class="nav-link" data-page="drivers">Drivers</a>
                     <a href="#" class="nav-link" data-page="reports">Reports</a>
                     <a href="#" class="nav-link" data-page="reviews">Reviews</a>
@@ -87,12 +85,6 @@
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
                             <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-                        </svg>
-                    </button>
-                    <button class="icon-btn" title="Profile" id="profileBtn">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                            <circle cx="12" cy="7" r="4"></circle>
                         </svg>
                     </button>
                     <button class="icon-btn" title="Logout" id="logoutBtn">
@@ -113,118 +105,6 @@
     </div>
 
     <div id="notification" class="notification hidden"></div>
-
-    <!-- Profile Modal -->
-    <div id="profileModal" class="modal hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Profile</h2>
-                <button class="modal-close" id="closeProfileModal">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div class="profile-info">
-                    <div class="profile-avatar">
-                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                            <circle cx="12" cy="7" r="4"></circle>
-                        </svg>
-                    </div>
-                    <div class="profile-details">
-                        <div class="profile-field">
-                            <label>Full Name</label>
-                            <div class="profile-value" id="profileFullName">-</div>
-                        </div>
-                        <div class="profile-field">
-                            <label>Email</label>
-                            <div class="profile-value" id="profileEmail">-</div>
-                        </div>
-                        <div class="profile-field">
-                            <label>Role</label>
-                            <div class="profile-value" id="profileRole">-</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="profile-actions">
-                    <button class="btn-primary" id="changePasswordBtn">Change Password</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Change Password Modal -->
-    <div id="changePasswordModal" class="modal hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Change Password</h2>
-                <button class="modal-close" id="closeChangePasswordModal">&times;</button>
-            </div>
-            <div class="modal-body">
-                <form id="changePasswordForm">
-                    <div class="form-group">
-                        <label>Current Password</label>
-                        <input type="password" id="currentPassword" required placeholder="Enter current password">
-                    </div>
-                    <div class="form-group">
-                        <label>New Password</label>
-                        <input type="password" id="newPassword" required placeholder="Enter new password" minlength="6">
-                    </div>
-                    <div class="form-group">
-                        <label>Confirm New Password</label>
-                        <input type="password" id="confirmNewPassword" required placeholder="Confirm new password" minlength="6">
-                    </div>
-                    <button type="submit" class="btn-primary btn-full">Change Password</button>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <!-- Forgot Password Modal -->
-    <div id="forgotPasswordModal" class="modal hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Forgot Password</h2>
-                <button class="modal-close" id="closeForgotPasswordModal">&times;</button>
-            </div>
-            <div class="modal-body">
-                <p style="margin-bottom: 20px; color: #64748b;">Enter your email address and we'll send you a link to reset your password.</p>
-                <form id="forgotPasswordForm">
-                    <div class="form-group">
-                        <label>Email</label>
-                        <input type="email" id="forgotPasswordEmail" required placeholder="Enter your email">
-                    </div>
-                    <button type="submit" class="btn-primary btn-full">Send Reset Link</button>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <!-- Reset Password Modal -->
-    <div id="resetPasswordModal" class="modal hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Reset Password</h2>
-                <button class="modal-close" id="closeResetPasswordModal">&times;</button>
-            </div>
-            <div class="modal-body">
-                <p style="margin-bottom: 20px; color: #64748b;">Enter your new password below.</p>
-                <form id="resetPasswordForm">
-                    <input type="hidden" id="resetToken" value="">
-                    <div class="form-group">
-                        <label>New Password</label>
-                        <input type="password" id="resetNewPassword" required placeholder="Enter new password" minlength="6">
-                    </div>
-                    <div class="form-group">
-                        <label>Confirm New Password</label>
-                        <input type="password" id="resetConfirmPassword" required placeholder="Confirm new password" minlength="6">
-                    </div>
-                    <button type="submit" class="btn-primary btn-full">Reset Password</button>
-                    <p style="text-align: center; margin-top: 16px;">
-                        <a href="/" style="color: #3b82f6; text-decoration: none;">Back to Login</a>
-                    </p>
-                </form>
-            </div>
-        </div>
-    </div>
 
     <script src="app.js"></script>
 </body>

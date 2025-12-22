@@ -2,11 +2,12 @@ import express, { Request, Response } from 'express';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import { IDatabase, DatabaseFactory, Order } from './database-factory';
+import { IDatabase, DatabaseFactory, Order, User } from './database-factory';
 import { GloriaFoodOrder } from './gloriafood-client';
 import { DoorDashClient } from './doordash-client';
 import { DeliveryScheduler, ScheduleResult, DispatchPayload } from './delivery-scheduler';
 import { EmailService, MerchantEmailContext } from './email-service';
+import { MerchantManager } from './merchant-manager';
 import chalk from 'chalk';
 
 // Load environment variables
@@ -15,8 +16,8 @@ dotenv.config();
 interface WebhookConfig {
   port: number;
   webhookPath: string;
-  apiKey: string;
-  storeId: string;
+  apiKey?: string; // Optional for multi-merchant mode
+  storeId?: string; // Optional for multi-merchant mode
   masterKey?: string;
   protocolVersion: string;
   databasePath: string;
@@ -37,8 +38,8 @@ class GloriaFoodWebhookServer {
   private doorDashClient?: DoorDashClient;
   private deliveryScheduler?: DeliveryScheduler;
   private emailService?: EmailService;
+  private merchantManager: MerchantManager;
   private sessions: Map<string, { userId: number; email: string; expires: number }> = new Map();
-  private resetTokens: Map<string, { email: string; expires: number }> = new Map();
 
   constructor(config: WebhookConfig) {
     console.log(chalk.blue.bold('\n🔵 Starting GloriaFood Webhook Server...'));
@@ -66,6 +67,10 @@ class GloriaFoodWebhookServer {
     try {
       this.database = DatabaseFactory.createDatabase();
       console.log(chalk.green('✅ Database connection created'));
+      
+      // Initialize merchant manager (will be initialized in start method)
+      this.merchantManager = new MerchantManager(this.database);
+      
       this.initializeDeliveryScheduler();
     } catch (error: any) {
       console.error(chalk.red(`❌ Failed to create database: ${error.message}`));
@@ -73,7 +78,7 @@ class GloriaFoodWebhookServer {
       console.error(chalk.yellow('⚠️  Check your database configuration in environment variables'));
       // Don't throw - allow server to start for UI access
       // Create a dummy database interface that returns empty results
-      this.database = {
+      const dummyDb: any = {
         insertOrUpdateOrder: () => { 
           console.error(chalk.red('⚠️  Database not initialized - cannot save order')); 
           return null; 
@@ -83,23 +88,22 @@ class GloriaFoodWebhookServer {
         getRecentOrders: () => [],
         getOrdersByStatus: () => [],
         getOrderCount: () => 0,
-        deleteOrder: () => false,
-        deleteOrders: () => 0,
         createUser: () => null,
         getUserByEmail: () => null,
-        verifyPassword: () => null,
-        updateUserPassword: () => false,
+        verifyPassword: () => false,
         getAllDrivers: () => [],
         getDriverById: () => null,
         getAllReviews: () => [],
         getReviewsByOrderId: () => [],
-        getDashboardStats: () => ({
-          orders: { total: 0, completed: 0, active: 0, cancelled: 0, recent_24h: 0 },
-          revenue: { total: 0 },
-          drivers: { total: 0, active: 0 }
-        }),
+        getDashboardStats: () => ({ orders: { total: 0 }, revenue: { total: 0 }, drivers: { total: 0 } }),
+        getAllMerchants: () => [],
+        getMerchantByStoreId: () => null,
+        insertOrUpdateMerchant: () => null,
+        deleteMerchant: () => false,
         close: () => {}
-      } as IDatabase;
+      };
+      this.database = dummyDb as IDatabase;
+      this.merchantManager = new MerchantManager(this.database);
     }
     
     // Setup middleware first (body parsing), then routes
@@ -137,49 +141,20 @@ class GloriaFoodWebhookServer {
     console.log(chalk.gray(`   DOORDASH_SANDBOX: ${sandbox || 'NOT SET'}`));
 
     if (developerId && keyId && signingSecret) {
-      // Validate that credentials are not just whitespace
-      const trimmedDevId = developerId.trim();
-      const trimmedKeyId = keyId.trim();
-      const trimmedSecret = signingSecret.trim();
-
-      if (!trimmedDevId || !trimmedKeyId || !trimmedSecret) {
-        console.warn(chalk.yellow('⚠️  DoorDash credentials contain only whitespace'));
-        console.warn(chalk.yellow('   Please check your environment variables'));
-        return;
-      }
-
       try {
         this.doorDashClient = new DoorDashClient({
-          developerId: trimmedDevId,
-          keyId: trimmedKeyId,
-          signingSecret: trimmedSecret,
+          developerId,
+          keyId,
+          signingSecret,
           merchantId: merchantId,
           apiUrl: process.env.DOORDASH_API_URL,
           isSandbox: sandbox === 'true',
         });
         console.log(chalk.green('✅ DoorDash API client initialized successfully'));
         console.log(chalk.gray(`   Mode: ${sandbox === 'true' ? 'SANDBOX' : 'PRODUCTION'}`));
-        console.log(chalk.gray(`   Developer ID: ${trimmedDevId.substring(0, 8)}...`));
-        console.log(chalk.gray(`   Key ID: ${trimmedKeyId.substring(0, 8)}...`));
-        console.log(chalk.gray(`   ⚠️  Ensure Key ID belongs to Developer ID in DoorDash Developer Portal`));
-        
-        // Optionally test connection (async, don't block initialization)
-        // This will catch credential mismatches early
-        this.doorDashClient.testConnection().catch((error: any) => {
-          console.error(chalk.red(`\n❌ DoorDash Credential Validation Failed:`));
-          console.error(chalk.red(`   ${error.message}`));
-          console.error(chalk.yellow(`\n   🔧 Action Required:`));
-          console.error(chalk.yellow(`   1. Go to https://developer.doordash.com/`));
-          console.error(chalk.yellow(`   2. Verify your Developer ID matches: ${trimmedDevId.substring(0, 12)}...`));
-          console.error(chalk.yellow(`   3. Ensure Key ID ${trimmedKeyId.substring(0, 12)}... was created by this Developer ID`));
-          console.error(chalk.yellow(`   4. Verify DOORDASH_SIGNING_SECRET matches the secret for this Key ID`));
-          console.error(chalk.yellow(`   5. Update your environment variables and restart the service\n`));
-        });
       } catch (error: any) {
         console.warn(chalk.yellow(`⚠️  Failed to initialize DoorDash client: ${error.message}`));
-        if (error.stack) {
-          console.warn(chalk.yellow(`   Error stack: ${error.stack}`));
-        }
+        console.warn(chalk.yellow(`   Error stack: ${error.stack}`));
       }
     } else {
       console.log(chalk.yellow('⚠️  DoorDash integration disabled (missing required credentials)'));
@@ -246,29 +221,6 @@ class GloriaFoodWebhookServer {
       return null;
     }
 
-    // Check if order was already sent to DoorDash
-    const orderId = this.getOrderIdentifier(orderData);
-    if (orderId) {
-      try {
-        const existingOrder = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId));
-        if (existingOrder && (existingOrder as any).sent_to_doordash) {
-          console.log(chalk.yellow(`⚠️  Order ${orderId} already sent to DoorDash, skipping duplicate send`));
-          if ((existingOrder as any).doordash_order_id) {
-            return {
-              id: (existingOrder as any).doordash_order_id,
-              external_delivery_id: orderId,
-              status: 'already_sent',
-              tracking_url: (existingOrder as any).doordash_tracking_url
-            };
-          }
-          return null;
-        }
-      } catch (error) {
-        // Continue if check fails
-        console.log(chalk.gray(`   Could not check if order already sent: ${error}`));
-      }
-    }
-
     try {
       // Convert to DoorDash Drive delivery payload
       const drivePayload = this.doorDashClient.convertGloriaFoodToDrive(orderData);
@@ -292,46 +244,9 @@ class GloriaFoodWebhookServer {
         tracking_url: response.tracking_url 
       };
     } catch (error: any) {
-      // Check if it's a duplicate delivery ID error
-      if (error.message && error.message.includes('duplicate_delivery_id')) {
-        console.log(chalk.yellow(`⚠️  Order ${orderId || 'unknown'} already exists in DoorDash (duplicate_delivery_id)`));
-        console.log(chalk.gray(`   This is normal if the order was already sent. Skipping...`));
-        // Try to get existing delivery info
-        if (orderId) {
-          try {
-            const existingOrder = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId));
-            if (existingOrder && (existingOrder as any).doordash_order_id) {
-              return {
-                id: (existingOrder as any).doordash_order_id,
-                external_delivery_id: orderId,
-                status: 'already_exists',
-                tracking_url: (existingOrder as any).doordash_tracking_url
-              };
-            }
-          } catch (e) {
-            // Ignore
-          }
-        }
-        return null;
-      }
-      
       // Log error but don't fail the webhook
       console.error(chalk.red(`❌ Failed to send order to DoorDash: ${error.message}`));
-      
-      // If it's an authentication error, provide additional guidance
-      if (error.message && (error.message.includes('401') || error.message.includes('authentication_error'))) {
-        console.error(chalk.yellow(`\n   🔧 Troubleshooting Steps:`));
-        console.error(chalk.yellow(`   1. Verify DOORDASH_DEVELOPER_ID matches your DoorDash Developer Portal account`));
-        console.error(chalk.yellow(`   2. Verify DOORDASH_KEY_ID was created by the same Developer ID`));
-        console.error(chalk.yellow(`   3. Verify DOORDASH_SIGNING_SECRET matches the secret for the Key ID`));
-        console.error(chalk.yellow(`   4. Check DoorDash Developer Portal: https://developer.doordash.com/`));
-        console.error(chalk.yellow(`   5. Ensure you're using the correct environment (sandbox vs production)`));
-        console.error(chalk.yellow(`   6. See DOORDASH_TROUBLESHOOTING.md for detailed step-by-step instructions\n`));
-      }
-      
-      if (error.stack) {
-        console.error(chalk.red(`   Error details: ${error.stack}`));
-      }
+      console.error(chalk.red(`   Error details: ${error.stack || 'No stack trace'}`));
       // Continue processing - don't throw
       return null;
     }
@@ -368,19 +283,11 @@ class GloriaFoodWebhookServer {
   private async notifyMerchant(orderData: any, context: MerchantEmailContext): Promise<void> {
     if (!this.emailService) {
       console.log(chalk.yellow('⚠️  Email service not initialized'));
-      console.log(chalk.gray('   Make sure SMTP_HOST, SMTP_USER, and SMTP_PASS are set in your .env file'));
-      return;
-    }
-    
-    if (!this.emailService.isTransporterAvailable()) {
-      console.log(chalk.yellow('⚠️  Email transporter not available'));
-      console.log(chalk.gray('   Make sure SMTP_HOST, SMTP_USER, and SMTP_PASS are set in your .env file'));
       return;
     }
     
     if (!this.emailService.isEnabled()) {
-      console.log(chalk.yellow('⚠️  Merchant email notifications disabled'));
-      console.log(chalk.gray('   Set MERCHANT_EMAIL (or API_VENDOR_CONTACT_EMAIL, VENDOR_CONTACT_EMAIL, or VENDOR_EMAIL) in your .env file'));
+      console.log(chalk.yellow('⚠️  Email service is disabled'));
       return;
     }
     
@@ -388,12 +295,6 @@ class GloriaFoodWebhookServer {
       await this.emailService.sendOrderUpdate(orderData, context);
     } catch (error: any) {
       console.error(chalk.red(`❌ Failed to send merchant notification: ${error.message}`));
-      if (error.code) {
-        console.error(chalk.red(`   Error Code: ${error.code}`));
-      }
-      if (error.response) {
-        console.error(chalk.red(`   SMTP Response: ${error.response}`));
-      }
       if (error.stack) {
         console.error(chalk.gray(`   Stack: ${error.stack}`));
       }
@@ -620,17 +521,6 @@ class GloriaFoodWebhookServer {
     }
     
     // Parse JSON bodies
-    // CORS support for Render and other hosting platforms
-    this.app.use((req, res, next) => {
-      res.header('Access-Control-Allow-Origin', '*');
-      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-      res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, x-session-id');
-      if (req.method === 'OPTIONS') {
-        return res.sendStatus(200);
-      }
-      next();
-    });
-    
     this.app.use(express.json());
     // Also parse URL-encoded bodies (some webhooks use this)
     this.app.use(express.urlencoded({ extended: true }));
@@ -653,29 +543,6 @@ class GloriaFoodWebhookServer {
   private setupRoutes(): void {
     // Root endpoint - serve dashboard HTML if available, otherwise return JSON
     // Note: This route takes precedence over static middleware, so we manually serve the file
-    // Reset password page route
-    this.app.get('/reset-password', (req: Request, res: Response) => {
-      // Serve the same index.html, the frontend will handle the reset password flow
-      const fs = require('fs');
-      const distPublicPath = path.join(__dirname, 'public', 'index.html');
-      const publicPath = path.join(__dirname, '..', 'public', 'index.html');
-      
-      const distPublicPathAbs = path.resolve(distPublicPath);
-      const publicPathAbs = path.resolve(publicPath);
-      
-      if (fs.existsSync(distPublicPathAbs)) {
-        return res.sendFile(distPublicPathAbs);
-      } else if (fs.existsSync(publicPathAbs)) {
-        return res.sendFile(publicPathAbs);
-      } else if (fs.existsSync(distPublicPath)) {
-        return res.sendFile(path.resolve(distPublicPath));
-      } else if (fs.existsSync(publicPath)) {
-        return res.sendFile(path.resolve(publicPath));
-      } else {
-        return res.status(404).json({ error: 'Page not found' });
-      }
-    });
-
     this.app.get('/', (req: Request, res: Response) => {
       console.log(chalk.blue(`📥 Root endpoint accessed at ${new Date().toISOString()}`));
       
@@ -747,63 +614,8 @@ class GloriaFoodWebhookServer {
       });
     });
 
-    // DoorDash credentials test endpoint
-    this.app.get('/api/doordash/test', async (req: Request, res: Response) => {
-      console.log(chalk.blue(`🔍 DoorDash credentials test requested at ${new Date().toISOString()}`));
-      
-      if (!this.doorDashClient) {
-        return res.status(400).json({
-          status: 'error',
-          message: 'DoorDash client not initialized',
-          reason: 'Missing required environment variables',
-          required: ['DOORDASH_DEVELOPER_ID', 'DOORDASH_KEY_ID', 'DOORDASH_SIGNING_SECRET'],
-          help: 'Set these environment variables in your Render dashboard or .env file'
-        });
-      }
-
-      try {
-        const isValid = await this.doorDashClient.testConnection();
-        const developerId = process.env.DOORDASH_DEVELOPER_ID || '';
-        const keyId = process.env.DOORDASH_KEY_ID || '';
-        
-        res.json({
-          status: 'success',
-          message: 'DoorDash credentials are valid',
-          credentials: {
-            developerId: developerId ? `${developerId.substring(0, 8)}...` : 'NOT SET',
-            keyId: keyId ? `${keyId.substring(0, 8)}...` : 'NOT SET',
-            mode: process.env.DOORDASH_SANDBOX === 'true' ? 'SANDBOX' : 'PRODUCTION'
-          },
-          timestamp: new Date().toISOString()
-        });
-      } catch (error: any) {
-        const developerId = process.env.DOORDASH_DEVELOPER_ID || '';
-        const keyId = process.env.DOORDASH_KEY_ID || '';
-        
-        res.status(401).json({
-          status: 'error',
-          message: 'DoorDash credentials validation failed',
-          error: error.message,
-          credentials: {
-            developerId: developerId ? `${developerId.substring(0, 12)}...` : 'NOT SET',
-            keyId: keyId ? `${keyId.substring(0, 12)}...` : 'NOT SET',
-            mode: process.env.DOORDASH_SANDBOX === 'true' ? 'SANDBOX' : 'PRODUCTION'
-          },
-          troubleshooting: {
-            step1: 'Go to https://developer.doordash.com/',
-            step2: `Verify your Developer ID matches: ${developerId ? developerId.substring(0, 12) + '...' : 'YOUR_DEVELOPER_ID'}`,
-            step3: `Ensure Key ID ${keyId ? keyId.substring(0, 12) + '...' : 'YOUR_KEY_ID'} was created by this Developer ID`,
-            step4: 'Verify DOORDASH_SIGNING_SECRET matches the secret for this Key ID',
-            step5: 'Update your environment variables in Render dashboard and restart the service'
-          },
-          timestamp: new Date().toISOString()
-        });
-      }
-    });
-
     // GET handler for webhook endpoint (for testing/debugging)
     this.app.get(this.config.webhookPath, (req: Request, res: Response) => {
-      console.log(chalk.blue(`\n📥 GET request to webhook endpoint (test)`));
       res.json({
         service: 'GloriaFood Webhook Server',
         endpoint: this.config.webhookPath,
@@ -813,84 +625,22 @@ class GloriaFoodWebhookServer {
         status: 'ready',
         message: 'This endpoint accepts POST requests only. GloriaFood will send order data here.',
         instructions: {
-          webhook_url: `${process.env.RENDER_EXTERNAL_URL || 'https://your-app.onrender.com'}${this.config.webhookPath}`,
+          webhook_url: `https://tekmaxllc.com${this.config.webhookPath}`,
           method: 'POST',
           content_type: 'application/json',
-          authentication: 'Optional - API Key or Master Key',
+          authentication: 'API Key or Master Key required',
           timestamp: new Date().toISOString()
-        },
-        test: {
-          note: 'To test, send POST request with order data',
-          example: {
-            id: '12345',
-            customer_name: 'Test Customer',
-            total_price: 25.50,
-            status: 'ACCEPTED'
-          }
         },
         stats: {
           database_type: process.env.DB_TYPE || 'sqlite',
-          database_connected: !!this.database,
           note: 'Check /stats endpoint for live statistics'
         }
       });
     });
-    
-    // Test endpoint to verify server is working
-    this.app.post('/test-webhook', async (req: Request, res: Response) => {
-      console.log(chalk.cyan('\n🧪 TEST WEBHOOK ENDPOINT CALLED'));
-      console.log(chalk.gray('   Body:'), JSON.stringify(req.body, null, 2));
-      
-      try {
-        const testOrder = {
-          id: 'TEST-' + Date.now(),
-          customer_name: 'Test Customer',
-          customer_phone: '+1234567890',
-          total_price: 25.50,
-          currency: 'USD',
-          status: 'ACCEPTED',
-          order_type: 'delivery',
-          delivery_address: '123 Test St'
-        };
-        
-        const saved = await this.handleAsync(this.database.insertOrUpdateOrder(testOrder));
-        
-        res.json({
-          success: true,
-          message: 'Test webhook received and processed',
-          order: saved,
-          received: req.body,
-          timestamp: new Date().toISOString()
-        });
-      } catch (error: any) {
-        console.error(chalk.red('Test webhook error:'), error);
-        res.status(500).json({
-          success: false,
-          error: error.message,
-          received: req.body
-        });
-      }
-    });
 
     // Webhook endpoint for receiving orders
     this.app.post(this.config.webhookPath, async (req: Request, res: Response) => {
-      const timestamp = new Date().toISOString();
-      console.log(chalk.cyan('\n🔵 ========================================'));
-      console.log(chalk.cyan(`🔵 WEBHOOK ENDPOINT CALLED - ${timestamp}`));
-      console.log(chalk.cyan('🔵 ========================================'));
-      console.log(chalk.gray(`   Method: ${req.method}`));
-      console.log(chalk.gray(`   Path: ${req.path}`));
-      console.log(chalk.gray(`   Content-Type: ${req.headers['content-type'] || 'N/A'}`));
-      console.log(chalk.gray(`   Has Body: ${!!req.body}`));
-      console.log(chalk.gray(`   Body Type: ${typeof req.body}`));
-      console.log(chalk.gray(`   Body Keys: ${req.body ? Object.keys(req.body).join(', ') : 'N/A'}`));
-      console.log(chalk.gray(`   Query Params: ${Object.keys(req.query).length > 0 ? Object.keys(req.query).join(', ') : 'None'}`));
-      
-      // ALWAYS log the full body for debugging
-      console.log(chalk.yellow('\n📦 FULL WEBHOOK BODY:'));
-      console.log(chalk.gray(JSON.stringify(req.body, null, 2)));
-      console.log(chalk.yellow('📦 END OF BODY\n'));
-      
+      console.log(chalk.cyan('\n🔵 WEBHOOK ENDPOINT CALLED'));
       try {
         // Validate authentication if master key is provided
         // Note: Some webhook providers may not send authentication, so we make it optional
@@ -925,38 +675,22 @@ class GloriaFoodWebhookServer {
         }
         
         if (!orderData) {
-          console.warn(chalk.yellow('\n⚠️  ========================================'));
-          console.warn(chalk.yellow('⚠️  INVALID WEBHOOK PAYLOAD - NO ORDER DATA FOUND'));
-          console.warn(chalk.yellow('⚠️  ========================================'));
+          console.warn(chalk.yellow('⚠ Invalid webhook payload - no order data found'));
           console.log(chalk.gray('   Request body keys:'), Object.keys(req.body || {}));
           console.log(chalk.gray('   Request query keys:'), Object.keys(req.query || {}));
           console.log(chalk.gray('   Content-Type:'), req.headers['content-type'] || 'N/A');
-          console.log(chalk.gray('   Raw body (first 1000 chars):'));
-          console.log(chalk.gray('   ' + JSON.stringify(req.body || {}, null, 2).substring(0, 1000)));
-          console.log(chalk.yellow('\n   💡 This might be a test webhook or different format'));
-          console.log(chalk.yellow('   💡 Check GloriaFood webhook configuration'));
-          console.log(chalk.yellow('   💡 Expected format: { id, customer_name, total_price, ... }'));
+          console.log(chalk.gray('   Raw body (first 500 chars):'), JSON.stringify(req.body || {}).substring(0, 500));
           
           // Still return 200 to prevent retries, but log the issue
           return res.status(200).json({ 
             success: false, 
             error: 'Invalid payload - no order data found',
-            message: 'Webhook received but no order data detected. Check payload format.',
             received: {
               hasBody: !!req.body,
               bodyKeys: Object.keys(req.body || {}),
               hasQuery: Object.keys(req.query || {}).length > 0,
               queryKeys: Object.keys(req.query || {}),
-              contentType: req.headers['content-type'] || 'N/A',
-              bodyPreview: req.body ? JSON.stringify(req.body).substring(0, 200) : 'No body'
-            },
-            expectedFormat: {
-              example: {
-                id: '12345',
-                customer_name: 'John Doe',
-                total_price: 25.50,
-                status: 'ACCEPTED'
-              }
+              contentType: req.headers['content-type'] || 'N/A'
             }
           });
         }
@@ -966,24 +700,23 @@ class GloriaFoodWebhookServer {
         console.log(chalk.green(`\n✅ Order data extracted successfully from GloriaFood: #${orderId}`));
         console.log(chalk.green(`   ✅ Connected to GloriaFood - Order received!`));
 
+        // Identify merchant for this order
+        const merchant = this.merchantManager.findMerchantForOrder(orderData);
+        if (merchant) {
+          console.log(chalk.cyan(`   🏪 Merchant: ${merchant.merchant_name} (${merchant.store_id})`));
+        } else {
+          const storeId = orderData.store_id || orderData.restaurant_id || 'unknown';
+          console.log(chalk.yellow(`   ⚠️  Merchant not found for store_id: ${storeId}`));
+          console.log(chalk.gray(`   💡 Add this merchant to GLORIAFOOD_MERCHANTS in .env or database`));
+        }
+
         // Determine if this is a new order BEFORE saving
         const existingBefore = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId.toString()));
 
         // Store order in database (handle both sync SQLite and async MySQL)
-        console.log(chalk.blue(`\n💾 Saving order to database...`));
-        console.log(chalk.gray(`   Order ID: ${orderId}`));
-        console.log(chalk.gray(`   Customer: ${orderData.customer_name || orderData.client_name || 'N/A'}`));
-        console.log(chalk.gray(`   Amount: ${orderData.total_price || orderData.total || 'N/A'}`));
-        
+        console.log(chalk.blue(`💾 Saving order to database...`));
         const savedOrder = await this.handleAsync(this.database.insertOrUpdateOrder(orderData));
-        
-        if (savedOrder) {
-          console.log(chalk.green(`✅ Database save result: SUCCESS`));
-          console.log(chalk.green(`   Saved Order ID: ${savedOrder.gloriafood_order_id || savedOrder.id}`));
-        } else {
-          console.error(chalk.red(`❌ Database save result: FAILED`));
-          console.error(chalk.red(`   Order was NOT saved to database!`));
-        }
+        console.log(chalk.blue(`💾 Database save result: ${savedOrder ? 'SUCCESS' : 'FAILED'}`));
 
         if (savedOrder) {
           const isNew = !existingBefore;
@@ -1080,14 +813,127 @@ class GloriaFoodWebhookServer {
           orders = orders.filter(order => order.store_id === storeId);
         }
         
+        // Enrich orders with merchant information
+        const enrichedOrders = orders.map(order => {
+          const merchant = order.store_id 
+            ? this.merchantManager.getMerchantByStoreId(order.store_id)
+            : null;
+          
+          return {
+            ...order,
+            merchant_name: merchant?.merchant_name || order.store_id || 'Unknown Merchant'
+          };
+        });
+        
         res.json({ 
           success: true, 
-          count: orders.length, 
+          count: enrichedOrders.length, 
           limit: limit,
-          orders 
+          orders: enrichedOrders
         });
       } catch (error: any) {
         res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Merchant management endpoints
+    this.app.get('/merchants', async (req: Request, res: Response) => {
+      try {
+        const merchants = this.merchantManager.getAllMerchants();
+        res.json({ 
+          success: true, 
+          count: merchants.length, 
+          merchants 
+        });
+      } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    this.app.get('/merchants/:storeId', async (req: Request, res: Response) => {
+      try {
+        const merchant = this.merchantManager.getMerchantByStoreId(req.params.storeId);
+        if (!merchant) {
+          return res.status(404).json({ success: false, error: 'Merchant not found' });
+        }
+        res.json({ success: true, merchant });
+      } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    this.app.post('/merchants', async (req: Request, res: Response) => {
+      try {
+        const { store_id, merchant_name, api_key, api_url, master_key, is_active } = req.body;
+        
+        if (!store_id || !merchant_name) {
+          return res.status(400).json({ 
+            success: false, 
+            error: 'store_id and merchant_name are required' 
+          });
+        }
+
+        const merchant = await this.handleAsync(this.database.insertOrUpdateMerchant({
+          store_id,
+          merchant_name,
+          api_key,
+          api_url,
+          master_key,
+          is_active: is_active !== false
+        }));
+
+        if (merchant) {
+          // Reload merchants in manager
+          await this.merchantManager.reload();
+          res.json({ success: true, merchant });
+        } else {
+          res.status(500).json({ success: false, error: 'Failed to create merchant' });
+        }
+      } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    this.app.put('/merchants/:storeId', async (req: Request, res: Response) => {
+      try {
+        const { merchant_name, api_key, api_url, master_key, is_active } = req.body;
+        const storeId = req.params.storeId;
+
+        const merchant = await this.handleAsync(this.database.insertOrUpdateMerchant({
+          store_id: storeId,
+          merchant_name,
+          api_key,
+          api_url,
+          master_key,
+          is_active
+        }));
+
+        if (merchant) {
+          // Reload merchants in manager
+          await this.merchantManager.reload();
+          res.json({ success: true, merchant });
+        } else {
+          res.status(500).json({ success: false, error: 'Failed to update merchant' });
+        }
+      } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    this.app.delete('/merchants/:storeId', async (req: Request, res: Response) => {
+      try {
+        const storeId = req.params.storeId;
+        const deleted = await this.handleAsync(this.database.deleteMerchant(storeId));
+        
+        if (deleted) {
+          // Reload merchants in manager
+          await this.merchantManager.reload();
+          res.json({ success: true, message: 'Merchant deleted successfully' });
+        } else {
+          res.status(404).json({ success: false, error: 'Merchant not found' });
+        }
+      } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
       }
     });
 
@@ -1121,196 +967,16 @@ class GloriaFoodWebhookServer {
       }
     });
 
-    // Delete single order endpoint
-    this.app.delete('/orders/:orderId', async (req: Request, res: Response) => {
-      try {
-        const orderId = req.params.orderId;
-        const deleted = await this.handleAsync(this.database.deleteOrder(orderId));
-        
-        if (deleted) {
-          res.json({ success: true, message: `Order ${orderId} deleted successfully` });
-        } else {
-          res.status(404).json({ success: false, error: 'Order not found' });
-        }
-      } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
-      }
-    });
-
-    // Delete multiple orders endpoint
-    this.app.delete('/orders', async (req: Request, res: Response) => {
-      try {
-        const { orderIds } = req.body;
-        
-        if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
-          return res.status(400).json({ success: false, error: 'orderIds array is required' });
-        }
-        
-        const deletedCount = await this.handleAsync(this.database.deleteOrders(orderIds));
-        res.json({ 
-          success: true, 
-          message: `Deleted ${deletedCount} order(s)`,
-          deletedCount 
-        });
-      } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
-      }
-    });
-
-    // Create new order endpoint (connected to GloriaFood format)
-    this.app.post('/orders', async (req: Request, res: Response) => {
-      try {
-        const {
-          customerName,
-          customerPhone,
-          customerEmail,
-          deliveryAddress,
-          totalAmount,
-          orderType,
-          currency = 'USD',
-          items = [],
-          notes = '',
-          storeId
-        } = req.body;
-        
-        // Validate required fields
-        if (!customerName || !customerPhone || !totalAmount || !orderType) {
-          return res.status(400).json({ 
-            success: false, 
-            error: 'Missing required fields: customerName, customerPhone, totalAmount, orderType' 
-          });
-        }
-        
-        // Generate a temporary order ID (will be replaced if synced with GloriaFood)
-        const tempOrderId = `MANUAL-${Date.now()}`;
-        
-        // Format order data in GloriaFood structure
-        const orderData: any = {
-          id: tempOrderId,
-          order_id: tempOrderId,
-          gloriafood_order_id: tempOrderId,
-          store_id: storeId || process.env.GLORIAFOOD_STORE_ID || '',
-          restaurant_id: storeId || process.env.GLORIAFOOD_STORE_ID || '',
-          customer_name: customerName,
-          client_name: customerName,
-          client_first_name: customerName.split(' ')[0] || customerName,
-          client_last_name: customerName.split(' ').slice(1).join(' ') || '',
-          customer_phone: customerPhone,
-          client_phone: customerPhone,
-          customer_email: customerEmail || '',
-          client_email: customerEmail || '',
-          delivery_address: deliveryAddress || '',
-          client_address: deliveryAddress || '',
-          total_price: parseFloat(totalAmount),
-          total: parseFloat(totalAmount),
-          currency: currency,
-          status: 'ACCEPTED',
-          order_status: 'ACCEPTED',
-          order_type: orderType,
-          type: orderType,
-          items: Array.isArray(items) ? items : [],
-          order_items: Array.isArray(items) ? items : [],
-          note: notes,
-          notes: notes,
-          special_instructions: notes,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          fetched_at: new Date().toISOString(),
-          order_date: new Date().toISOString()
-        };
-        
-        // Save order to database
-        const savedOrder = await this.handleAsync(this.database.insertOrUpdateOrder(orderData));
-        
-        if (savedOrder) {
-          console.log(chalk.green(`✅ Manual order created: #${savedOrder.gloriafood_order_id}`));
-          res.json({ 
-            success: true, 
-            message: 'Order created successfully',
-            order: savedOrder
-          });
-        } else {
-          res.status(500).json({ success: false, error: 'Failed to save order to database' });
-        }
-      } catch (error: any) {
-        console.error(chalk.red('Error creating order:'), error);
-        res.status(500).json({ success: false, error: error.message });
-      }
-    });
-
-    // Update ready for pickup endpoint
-    this.app.patch('/orders/:orderId/ready-for-pickup', async (req: Request, res: Response) => {
-      try {
-        const orderId = req.params.orderId;
-        const { ready } = req.body;
-        
-        if (typeof ready !== 'boolean') {
-          return res.status(400).json({ success: false, error: 'ready must be a boolean value' });
-        }
-
-        // Check if database has updateReadyForPickup method
-        if (typeof (this.database as any).updateReadyForPickup === 'function') {
-          const updated = await this.handleAsync((this.database as any).updateReadyForPickup(orderId, ready));
-          
-          if (updated) {
-            res.json({ 
-              success: true, 
-              message: `Order ${orderId} ${ready ? 'marked as ready' : 'unmarked'} for pickup` 
-            });
-          } else {
-            res.status(404).json({ success: false, error: 'Order not found' });
-          }
-        } else {
-          // Fallback: update raw_data manually
-          const order = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId));
-          if (!order) {
-            return res.status(404).json({ success: false, error: 'Order not found' });
-          }
-
-          // Parse and update raw_data
-          let rawData: any = {};
-          try {
-            rawData = JSON.parse((order as any).raw_data || '{}');
-          } catch (e) {
-            rawData = {};
-          }
-
-          if (ready) {
-            rawData.ready_for_pickup = new Date().toISOString();
-          } else {
-            delete rawData.ready_for_pickup;
-          }
-
-          // Update order using insertOrUpdateOrder with updated raw_data
-          const updatedOrder = {
-            ...rawData,
-            id: orderId,
-            ready_for_pickup: ready ? new Date().toISOString() : undefined
-          };
-          
-          await this.handleAsync(this.database.insertOrUpdateOrder(updatedOrder));
-          res.json({ 
-            success: true, 
-            message: `Order ${orderId} ${ready ? 'marked as ready' : 'unmarked'} for pickup` 
-          });
-        }
-      } catch (error: any) {
-        console.error('Error updating ready for pickup:', error);
-        res.status(500).json({ success: false, error: error.message });
-      }
-    });
-
     // Authentication endpoints
     this.app.post('/api/auth/signup', async (req: Request, res: Response) => {
       try {
-        const { email, password, fullName, full_name } = req.body;
-        const name = fullName || full_name;
+        const { email, password, fullName } = req.body;
         
-        if (!email || !password || !name) {
+        if (!email || !password || !fullName) {
           return res.status(400).json({ success: false, error: 'Email, password, and full name are required' });
         }
         
-        const user = await this.handleAsync(this.database.createUser(email, password, name));
+        const user = await this.handleAsync(this.database.createUser(email, password, fullName));
         
         if (!user) {
           return res.status(500).json({ success: false, error: 'Failed to create user' });
@@ -1350,13 +1016,12 @@ class GloriaFoodWebhookServer {
         
         const userResult = await this.handleAsync(this.database.verifyPassword(email, password));
         
-        // verifyPassword can return boolean | User | null
-        if (!userResult || typeof userResult === 'boolean') {
+        // verifyPassword can return boolean or User
+        if (!userResult || userResult === true || typeof userResult === 'boolean') {
           return res.status(401).json({ success: false, error: 'Invalid email or password' });
         }
         
-        // At this point, userResult is User
-        const user = userResult as any;
+        const user = userResult as User;
         
         // Create session
         const sessionId = crypto.randomBytes(32).toString('hex');
@@ -1390,7 +1055,7 @@ class GloriaFoodWebhookServer {
       res.json({ success: true });
     });
 
-    this.app.get('/api/auth/me', async (req: Request, res: Response) => {
+    this.app.get('/api/auth/me', (req: Request, res: Response) => {
       const sessionId = req.headers['x-session-id'] as string;
       if (!sessionId) {
         return res.status(401).json({ success: false, error: 'Not authenticated' });
@@ -1402,24 +1067,6 @@ class GloriaFoodWebhookServer {
         return res.status(401).json({ success: false, error: 'Session expired' });
       }
       
-      // Get full user info from database
-      try {
-        const user = await this.handleAsync(this.database.getUserByEmail(session.email));
-        if (user) {
-          return res.json({ 
-            success: true, 
-            user: {
-              id: user.id,
-              email: user.email,
-              full_name: user.full_name,
-              role: user.role
-            }
-          });
-        }
-      } catch (error) {
-        console.error('Error getting user info:', error);
-      }
-      
       res.json({ 
         success: true, 
         user: {
@@ -1429,191 +1076,11 @@ class GloriaFoodWebhookServer {
       });
     });
 
-    // Change password endpoint
-    this.app.post('/api/auth/change-password', async (req: Request, res: Response) => {
-      try {
-        const sessionId = req.headers['x-session-id'] as string;
-        if (!sessionId) {
-          return res.status(401).json({ success: false, error: 'Not authenticated' });
-        }
-        
-        const session = this.sessions.get(sessionId);
-        if (!session || session.expires < Date.now()) {
-          this.sessions.delete(sessionId);
-          return res.status(401).json({ success: false, error: 'Session expired' });
-        }
-        
-        const { currentPassword, newPassword } = req.body;
-        
-        if (!currentPassword || !newPassword) {
-          return res.status(400).json({ success: false, error: 'Current password and new password are required' });
-        }
-        
-        if (newPassword.length < 6) {
-          return res.status(400).json({ success: false, error: 'New password must be at least 6 characters' });
-        }
-        
-        // Verify current password
-        const userResult = await this.handleAsync(this.database.verifyPassword(session.email, currentPassword));
-        if (!userResult || typeof userResult === 'boolean') {
-          return res.status(401).json({ success: false, error: 'Current password is incorrect' });
-        }
-        
-        // Update password
-        const hashedPassword = this.hashPassword(newPassword);
-        await this.handleAsync(this.database.updateUserPassword(session.email, hashedPassword));
-        
-        res.json({ success: true, message: 'Password changed successfully' });
-      } catch (error: any) {
-        console.error('Change password error:', error);
-        res.status(500).json({ success: false, error: 'Failed to change password' });
-      }
-    });
-
-    // Forgot password endpoint
-    this.app.post('/api/auth/forgot-password', async (req: Request, res: Response) => {
-      try {
-        const { email } = req.body;
-        
-        if (!email) {
-          return res.status(400).json({ success: false, error: 'Email is required' });
-        }
-        
-        // Check if user exists
-        const user = await this.handleAsync(this.database.getUserByEmail(email));
-        if (!user) {
-          // Don't reveal if user exists or not for security
-          return res.json({ success: true, message: 'If the email exists, a password reset link has been sent' });
-        }
-        
-        // Generate reset token
-        const resetToken = crypto.randomBytes(32).toString('hex');
-        const resetExpires = Date.now() + 3600000; // 1 hour
-        
-        // Store reset token
-        this.resetTokens.set(resetToken, {
-          email: email,
-          expires: resetExpires
-        });
-        
-        // Clean up expired tokens (simple cleanup)
-        this.cleanupExpiredTokens();
-        
-        // Build reset URL
-        const baseUrl = req.protocol + '://' + req.get('host');
-        const resetUrl = `${baseUrl}/reset-password?token=${resetToken}`;
-        
-        // Send email with reset link
-        try {
-          if (this.emailService && this.emailService.isTransporterAvailable()) {
-            await this.emailService.sendPasswordResetEmail(email, resetToken, resetUrl);
-            console.log(chalk.green(`✅ Password reset email sent to ${email}`));
-          } else {
-            console.log(chalk.yellow(`⚠️  Email service not available`));
-            if (!this.emailService) {
-              console.log(chalk.gray(`   Email service not initialized`));
-            } else if (!this.emailService.isTransporterAvailable()) {
-              console.log(chalk.gray(`   Email transporter not available`));
-            }
-            console.log(chalk.gray(`   Reset token: ${resetToken}`));
-            console.log(chalk.gray(`   Reset URL: ${resetUrl}`));
-            console.log(chalk.gray(`   Note: Make sure SMTP_HOST, SMTP_USER, and SMTP_PASS are set in your .env file`));
-          }
-        } catch (error: any) {
-          console.error(chalk.red(`❌ Error sending password reset email to ${email}:`));
-          console.error(chalk.red(`   ${error.message}`));
-          if (error.stack) {
-            console.error(chalk.gray(`   Stack: ${error.stack}`));
-          }
-          // Still return success to not reveal if email exists
-        }
-        
-        res.json({ 
-          success: true, 
-          message: 'If the email exists, a password reset link has been sent' 
-        });
-      } catch (error: any) {
-        console.error('Forgot password error:', error);
-        res.status(500).json({ success: false, error: 'Failed to process password reset request' });
-      }
-    });
-
-    // Reset password endpoint (with token)
-    this.app.post('/api/auth/reset-password', async (req: Request, res: Response) => {
-      try {
-        const { token, newPassword } = req.body;
-        
-        if (!token || !newPassword) {
-          return res.status(400).json({ success: false, error: 'Token and new password are required' });
-        }
-        
-        if (newPassword.length < 6) {
-          return res.status(400).json({ success: false, error: 'Password must be at least 6 characters' });
-        }
-        
-        // Check if token exists and is valid
-        const tokenData = this.resetTokens.get(token);
-        if (!tokenData) {
-          return res.status(400).json({ success: false, error: 'Invalid or expired reset token' });
-        }
-        
-        // Check if token is expired
-        if (tokenData.expires < Date.now()) {
-          this.resetTokens.delete(token);
-          return res.status(400).json({ success: false, error: 'Reset token has expired' });
-        }
-        
-        // Update password
-        const hashedPassword = this.hashPassword(newPassword);
-        const updated = await this.handleAsync(this.database.updateUserPassword(tokenData.email, hashedPassword));
-        
-        if (!updated) {
-          return res.status(500).json({ success: false, error: 'Failed to update password' });
-        }
-        
-        // Delete used token
-        this.resetTokens.delete(token);
-        
-        res.json({ 
-          success: true, 
-          message: 'Password reset successfully. You can now login with your new password.' 
-        });
-      } catch (error: any) {
-        console.error('Reset password error:', error);
-        res.status(500).json({ success: false, error: 'Failed to reset password' });
-      }
-    });
-
     // Dashboard stats endpoint
     this.app.get('/api/dashboard/stats', async (req: Request, res: Response) => {
       try {
         const stats = await this.handleAsync(this.database.getDashboardStats());
         res.json({ success: true, stats });
-      } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
-      }
-    });
-
-    // Restaurant coordinates endpoint (for distance calculation)
-    this.app.get('/api/restaurant/coordinates', (req: Request, res: Response) => {
-      try {
-        const lat = process.env.RESTAURANT_LAT || process.env.RESTAURANT_LATITUDE;
-        const lng = process.env.RESTAURANT_LNG || process.env.RESTAURANT_LONGITUDE;
-        
-        if (lat && lng) {
-          res.json({ 
-            success: true, 
-            coordinates: {
-              lat: parseFloat(lat),
-              lng: parseFloat(lng)
-            }
-          });
-        } else {
-          res.json({ 
-            success: false, 
-            message: 'Restaurant coordinates not configured. Set RESTAURANT_LAT and RESTAURANT_LNG in .env file.' 
-          });
-        }
       } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
       }
@@ -1776,10 +1243,9 @@ class GloriaFoodWebhookServer {
     // Authentication endpoints
     this.app.post('/api/auth/signup', async (req: Request, res: Response) => {
       try {
-        const { email, password, full_name, fullName } = req.body;
-        const name = full_name || fullName;
+        const { email, password, full_name } = req.body;
         
-        if (!email || !password || !name) {
+        if (!email || !password || !full_name) {
           return res.status(400).json({ success: false, error: 'Email, password, and full name are required' });
         }
 
@@ -1792,20 +1258,14 @@ class GloriaFoodWebhookServer {
           // MySQL database
           const [rows]: any = await db.query(
             'INSERT INTO users (email, password, full_name) VALUES (?, ?, ?)',
-            [email, hashedPassword, name]
+            [email, hashedPassword, full_name]
           );
           
           const sessionToken = this.createSession(rows.insertId, email);
-          res.json({ success: true, sessionId: sessionToken, token: sessionToken, user: { id: rows.insertId, email, full_name: name } });
+          res.json({ success: true, token: sessionToken, user: { id: rows.insertId, email, full_name } });
         } else {
-          // SQLite - use database method
-          const user = await this.handleAsync(this.database.createUser(email, password, name));
-          if (!user) {
-            return res.status(500).json({ success: false, error: 'Failed to create user' });
-          }
-          
-          const sessionToken = this.createSession(user.id, email);
-          res.json({ success: true, sessionId: sessionToken, token: sessionToken, user });
+          // SQLite - use a simple approach
+          res.status(500).json({ success: false, error: 'User registration not supported with SQLite. Please use MySQL.' });
         }
       } catch (error: any) {
         if (error.code === 'ER_DUP_ENTRY' || error.message.includes('UNIQUE')) {
@@ -1844,29 +1304,11 @@ class GloriaFoodWebhookServer {
           const sessionToken = this.createSession(user.id, user.email);
           res.json({ 
             success: true, 
-            sessionId: sessionToken,
             token: sessionToken, 
             user: { id: user.id, email: user.email, full_name: user.full_name, role: user.role } 
           });
         } else {
-          // SQLite - use database method
-          const dbUserResult = await this.handleAsync(this.database.verifyPassword(email, password));
-          
-          // verifyPassword can return boolean | User | null
-          if (!dbUserResult || typeof dbUserResult === 'boolean') {
-            return res.status(401).json({ success: false, error: 'Invalid email or password' });
-          }
-          
-          // At this point, dbUserResult is User
-          const dbUser = dbUserResult as any;
-          
-          const sessionToken = this.createSession(dbUser.id, dbUser.email);
-          res.json({ 
-            success: true, 
-            sessionId: sessionToken,
-            token: sessionToken, 
-            user: { id: dbUser.id, email: dbUser.email, full_name: dbUser.full_name, role: dbUser.role } 
-          });
+          res.status(500).json({ success: false, error: 'Login not supported with SQLite. Please use MySQL.' });
         }
       } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
@@ -1991,15 +1433,6 @@ class GloriaFoodWebhookServer {
     return this.hashPassword(password) === hashedPassword;
   }
 
-  private cleanupExpiredTokens(): void {
-    const now = Date.now();
-    for (const [token, data] of this.resetTokens.entries()) {
-      if (data.expires < now) {
-        this.resetTokens.delete(token);
-      }
-    }
-  }
-
   private createSession(userId: number, email: string): string {
     const token = crypto.randomBytes(32).toString('hex');
     this.sessions.set(token, {
@@ -2013,47 +1446,25 @@ class GloriaFoodWebhookServer {
   private extractOrderData(body: any): GloriaFoodOrder | null {
     // Handle null/undefined body
     if (!body) {
-      console.log(chalk.gray('   extractOrderData: Body is null/undefined'));
       return null;
     }
     
-    console.log(chalk.gray(`   extractOrderData: Checking body structure...`));
-    console.log(chalk.gray(`   Body type: ${typeof body}`));
-    console.log(chalk.gray(`   Body keys: ${Object.keys(body).join(', ')}`));
-    
     // Handle different possible webhook payload structures
     if (body.order) {
-      console.log(chalk.green('   ✅ Found order in body.order'));
       return body.order;
     }
     if (body.data && body.data.order) {
-      console.log(chalk.green('   ✅ Found order in body.data.order'));
       return body.data.order;
     }
-    if (body.id || body.order_id || body.gloriafood_order_id) {
-      console.log(chalk.green(`   ✅ Found order with ID: ${body.id || body.order_id || body.gloriafood_order_id}`));
+    if (body.id || body.order_id) {
       return body;
     }
     if (Array.isArray(body) && body.length > 0) {
-      console.log(chalk.green(`   ✅ Found array with ${body.length} items, using first item`));
       return body[0];
     }
     if (body.orders && Array.isArray(body.orders) && body.orders.length > 0) {
-      console.log(chalk.green(`   ✅ Found orders array with ${body.orders.length} items, using first item`));
       return body.orders[0];
     }
-    
-    // Try to find any object that looks like an order
-    if (typeof body === 'object' && !Array.isArray(body)) {
-      // Check if body itself might be an order (has common order fields)
-      const hasOrderFields = body.customer_name || body.client_name || body.total_price || body.total;
-      if (hasOrderFields) {
-        console.log(chalk.green('   ✅ Body itself appears to be an order'));
-        return body;
-      }
-    }
-    
-    console.log(chalk.yellow('   ⚠️  Could not extract order data from body'));
     return null;
   }
 
@@ -2363,7 +1774,9 @@ class GloriaFoodWebhookServer {
     return colorizer(status.toUpperCase());
   }
 
-  public start(): void {
+  public async start(): Promise<void> {
+    // Initialize merchants
+    await this.merchantManager.initialize();
     try {
       // Bind to 0.0.0.0 to allow external connections (required for Render)
       const server = this.app.listen(this.config.port, '0.0.0.0', () => {
@@ -2458,19 +1871,26 @@ async function main() {
   console.log(chalk.blue('🔵 Checking environment variables...'));
   const apiKey = process.env.GLORIAFOOD_API_KEY;
   const storeId = process.env.GLORIAFOOD_STORE_ID;
+  const merchantsJson = process.env.GLORIAFOOD_MERCHANTS;
   
-  console.log(chalk.gray(`   GLORIAFOOD_API_KEY: ${apiKey ? '✅ SET' : '❌ NOT SET'}`));
-  console.log(chalk.gray(`   GLORIAFOOD_STORE_ID: ${storeId ? '✅ SET' : '❌ NOT SET'}`));
+  console.log(chalk.gray(`   GLORIAFOOD_API_KEY: ${apiKey ? '✅ SET' : '❌ NOT SET (optional if using GLORIAFOOD_MERCHANTS)'}`));
+  console.log(chalk.gray(`   GLORIAFOOD_STORE_ID: ${storeId ? '✅ SET' : '❌ NOT SET (optional if using GLORIAFOOD_MERCHANTS)'}`));
+  console.log(chalk.gray(`   GLORIAFOOD_MERCHANTS: ${merchantsJson ? '✅ SET (multi-merchant mode)' : '❌ NOT SET'}`));
   console.log(chalk.gray(`   PORT: ${process.env.PORT || 'NOT SET (will use 3000)'}`));
 
-  if (!apiKey || !storeId) {
-    console.error(chalk.red.bold('\n❌ Error: Missing required environment variables!\n'));
-    console.error(chalk.yellow('Please add these environment variables in Render Dashboard:'));
+  // Check if we have at least one merchant configuration method
+  if (!merchantsJson && (!apiKey || !storeId)) {
+    console.error(chalk.red.bold('\n❌ Error: Missing merchant configuration!\n'));
+    console.error(chalk.yellow('Please configure merchants using one of these methods:'));
+    console.error(chalk.gray('\n  Option 1: Multi-merchant (recommended)'));
+    console.error(chalk.gray('  GLORIAFOOD_MERCHANTS=[{"store_id":"123","merchant_name":"Restaurant 1","api_key":"key1","api_url":"https://api.example.com"},{"store_id":"456","merchant_name":"Restaurant 2","api_key":"key2"}]'));
+    console.error(chalk.gray('\n  Option 2: Single merchant (legacy)'));
     console.error(chalk.gray('  GLORIAFOOD_API_KEY=your_api_key'));
     console.error(chalk.gray('  GLORIAFOOD_STORE_ID=your_store_id'));
-    console.error(chalk.gray('  WEBHOOK_PORT=3000 (optional)'));
-    console.error(chalk.gray('  WEBHOOK_PATH=/webhook (optional)'));
-    console.error(chalk.gray('  DATABASE_PATH=./orders.db (optional)'));
+    console.error(chalk.gray('\n  Optional:'));
+    console.error(chalk.gray('  WEBHOOK_PORT=3000'));
+    console.error(chalk.gray('  WEBHOOK_PATH=/webhook'));
+    console.error(chalk.gray('  DATABASE_PATH=./orders.db'));
     console.error(chalk.gray('\n  For MySQL/XAMPP:'));
     console.error(chalk.gray('  DB_TYPE=mysql'));
     console.error(chalk.gray('  DB_HOST=localhost'));
@@ -2489,8 +1909,8 @@ async function main() {
   const config: WebhookConfig = {
     port,
     webhookPath: process.env.WEBHOOK_PATH || '/webhook',
-    apiKey,
-    storeId,
+    apiKey: apiKey || undefined, // Optional for multi-merchant mode
+    storeId: storeId || undefined, // Optional for multi-merchant mode
     masterKey: process.env.GLORIAFOOD_MASTER_KEY,
     protocolVersion: process.env.GLORIAFOOD_PROTOCOL_VERSION || 'v2',
     databasePath: process.env.DATABASE_PATH || './orders.db',
@@ -2514,7 +1934,7 @@ async function main() {
 
   // Start the server
   console.log(chalk.blue('🔵 Starting server...\n'));
-  server.start();
+  await server.start();
 }
 
 // Run the application

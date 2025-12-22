@@ -1,5 +1,6 @@
 import mysql from 'mysql2/promise';
 import chalk from 'chalk';
+import { Merchant } from './database-factory';
 
 export interface Order {
   id: string;
@@ -114,6 +115,23 @@ export class OrderDatabaseMySQL {
         }
       }
 
+      // Create merchants table if not exists
+      await connection.query(`
+        CREATE TABLE IF NOT EXISTS merchants (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          store_id VARCHAR(255) UNIQUE NOT NULL,
+          merchant_name VARCHAR(255) NOT NULL,
+          api_key VARCHAR(500),
+          api_url VARCHAR(500),
+          master_key VARCHAR(500),
+          is_active TINYINT(1) DEFAULT 1,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          INDEX idx_store_id (store_id),
+          INDEX idx_is_active (is_active)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      `);
+
       // Release connection
       connection.release();
       console.log('✅ Database table initialized successfully!');
@@ -225,46 +243,6 @@ export class OrderDatabaseMySQL {
       connection.release();
     } catch (error) {
       console.error('Error updating sent_to_doordash in MySQL:', error);
-    }
-  }
-
-  async updateReadyForPickup(gloriafoodOrderId: string, ready: boolean): Promise<boolean> {
-    try {
-      // Get the current order
-      const order = await this.getOrderByGloriaFoodId(gloriafoodOrderId);
-      if (!order) {
-        return false;
-      }
-
-      // Parse raw_data
-      let rawData: any = {};
-      try {
-        rawData = JSON.parse((order as any).raw_data || '{}');
-      } catch (e) {
-        rawData = {};
-      }
-
-      // Update ready_for_pickup in raw_data
-      if (ready) {
-        rawData.ready_for_pickup = new Date().toISOString();
-      } else {
-        delete rawData.ready_for_pickup;
-      }
-
-      // Update the order
-      const connection = await this.pool.getConnection();
-      await connection.query(
-        `UPDATE orders
-         SET raw_data = ?,
-             updated_at = NOW()
-         WHERE gloriafood_order_id = ?`,
-        [JSON.stringify(rawData), gloriafoodOrderId]
-      );
-      connection.release();
-      return true;
-    } catch (error) {
-      console.error('Error updating ready_for_pickup in MySQL:', error);
-      return false;
     }
   }
 
@@ -484,43 +462,6 @@ export class OrderDatabaseMySQL {
     }
   }
 
-  async deleteOrder(gloriafoodOrderId: string): Promise<boolean> {
-    try {
-      const connection = await this.pool.getConnection();
-      const [result] = await connection.query(
-        'DELETE FROM orders WHERE gloriafood_order_id = ?',
-        [gloriafoodOrderId]
-      ) as [any, any];
-      
-      connection.release();
-      return (result.affectedRows || 0) > 0;
-    } catch (error) {
-      console.error('Error deleting order:', error);
-      return false;
-    }
-  }
-
-  async deleteOrders(gloriafoodOrderIds: string[]): Promise<number> {
-    try {
-      if (!gloriafoodOrderIds || gloriafoodOrderIds.length === 0) {
-        return 0;
-      }
-      
-      const connection = await this.pool.getConnection();
-      const placeholders = gloriafoodOrderIds.map(() => '?').join(',');
-      const [result] = await connection.query(
-        `DELETE FROM orders WHERE gloriafood_order_id IN (${placeholders})`,
-        gloriafoodOrderIds
-      ) as [any, any];
-      
-      connection.release();
-      return result.affectedRows || 0;
-    } catch (error) {
-      console.error('Error deleting orders:', error);
-      return 0;
-    }
-  }
-
   async getAllOrders(limit: number = 50): Promise<Order[]> {
     try {
       const connection = await this.pool.getConnection();
@@ -668,19 +609,6 @@ export class OrderDatabaseMySQL {
     } catch (error) {
       console.error('Error verifying password:', error);
       return null;
-    }
-  }
-
-  async updateUserPassword(email: string, hashedPassword: string): Promise<boolean> {
-    try {
-      const [result] = await this.pool.execute(
-        'UPDATE users SET password = ? WHERE email = ?',
-        [hashedPassword, email]
-      ) as any;
-      return result.affectedRows > 0;
-    } catch (error) {
-      console.error('Error updating password:', error);
-      return false;
     }
   }
 
@@ -836,6 +764,128 @@ export class OrderDatabaseMySQL {
         revenue: { total: 0 },
         drivers: { total: 0, active: 0 }
       };
+    }
+  }
+
+  // Merchant methods
+  async getAllMerchants(): Promise<Merchant[]> {
+    try {
+      const connection = await this.pool.getConnection();
+      const [rows] = await connection.query(`
+        SELECT * FROM merchants WHERE is_active = 1 ORDER BY merchant_name
+      `) as any[];
+      connection.release();
+      
+      return (rows as any[]).map(m => ({
+        id: m.id,
+        store_id: m.store_id,
+        merchant_name: m.merchant_name,
+        api_key: m.api_key,
+        api_url: m.api_url,
+        master_key: m.master_key,
+        is_active: m.is_active === 1 || m.is_active === true,
+        created_at: m.created_at,
+        updated_at: m.updated_at
+      }));
+    } catch (error) {
+      console.error('Error getting merchants:', error);
+      return [];
+    }
+  }
+
+  async getMerchantByStoreId(storeId: string): Promise<Merchant | null> {
+    try {
+      const connection = await this.pool.getConnection();
+      const [rows] = await connection.query(
+        `SELECT * FROM merchants WHERE store_id = ?`,
+        [storeId]
+      ) as any[];
+      connection.release();
+      
+      if (!rows || rows.length === 0) return null;
+      
+      const merchant = rows[0];
+      return {
+        id: merchant.id,
+        store_id: merchant.store_id,
+        merchant_name: merchant.merchant_name,
+        api_key: merchant.api_key,
+        api_url: merchant.api_url,
+        master_key: merchant.master_key,
+        is_active: merchant.is_active === 1 || merchant.is_active === true,
+        created_at: merchant.created_at,
+        updated_at: merchant.updated_at
+      };
+    } catch (error) {
+      console.error('Error getting merchant:', error);
+      return null;
+    }
+  }
+
+  async insertOrUpdateMerchant(merchant: Partial<Merchant>): Promise<Merchant | null> {
+    try {
+      if (!merchant.store_id || !merchant.merchant_name) {
+        throw new Error('store_id and merchant_name are required');
+      }
+
+      const connection = await this.pool.getConnection();
+      const existing = await this.getMerchantByStoreId(merchant.store_id);
+      
+      if (existing) {
+        // Update existing merchant
+        await connection.query(`
+          UPDATE merchants 
+          SET merchant_name = ?,
+              api_key = COALESCE(?, api_key),
+              api_url = COALESCE(?, api_url),
+              master_key = COALESCE(?, master_key),
+              is_active = COALESCE(?, is_active),
+              updated_at = NOW()
+          WHERE store_id = ?
+        `, [
+          merchant.merchant_name,
+          merchant.api_key || null,
+          merchant.api_url || null,
+          merchant.master_key || null,
+          merchant.is_active !== undefined ? (merchant.is_active ? 1 : 0) : null,
+          merchant.store_id
+        ]);
+      } else {
+        // Insert new merchant
+        await connection.query(`
+          INSERT INTO merchants (store_id, merchant_name, api_key, api_url, master_key, is_active)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `, [
+          merchant.store_id,
+          merchant.merchant_name,
+          merchant.api_key || null,
+          merchant.api_url || null,
+          merchant.master_key || null,
+          merchant.is_active !== undefined ? (merchant.is_active ? 1 : 0) : 1
+        ]);
+      }
+      
+      connection.release();
+      return await this.getMerchantByStoreId(merchant.store_id);
+    } catch (error) {
+      console.error('Error inserting/updating merchant:', error);
+      return null;
+    }
+  }
+
+  async deleteMerchant(storeId: string): Promise<boolean> {
+    try {
+      const connection = await this.pool.getConnection();
+      const [result] = await connection.query(
+        `DELETE FROM merchants WHERE store_id = ?`,
+        [storeId]
+      ) as any[];
+      connection.release();
+      
+      return (result.affectedRows || 0) > 0;
+    } catch (error) {
+      console.error('Error deleting merchant:', error);
+      return false;
     }
   }
 

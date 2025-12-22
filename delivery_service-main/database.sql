@@ -74,6 +74,21 @@ CREATE TABLE IF NOT EXISTS reviews (
   FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Create merchants table for multi-merchant support
+CREATE TABLE IF NOT EXISTS merchants (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  store_id VARCHAR(255) UNIQUE NOT NULL,
+  merchant_name VARCHAR(255) NOT NULL,
+  api_key VARCHAR(500),
+  api_url VARCHAR(500),
+  master_key VARCHAR(500),
+  is_active TINYINT(1) DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_store_id (store_id),
+  INDEX idx_is_active (is_active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Show success message
 SELECT 'Database and tables created successfully!' AS Status;
 

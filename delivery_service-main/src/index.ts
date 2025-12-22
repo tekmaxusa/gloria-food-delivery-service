@@ -1,45 +1,75 @@
 import * as dotenv from 'dotenv';
 import { GloriaFoodClient, GloriaFoodOrder } from './gloriafood-client';
-import { OrderDatabase, Order } from './database';
+import { DatabaseFactory, IDatabase, Order } from './database-factory';
+import { MerchantManager, Merchant } from './merchant-manager';
 import chalk from 'chalk';
 
 // Load environment variables
 dotenv.config();
 
 interface AppConfig {
-  apiKey: string;
-  storeId: string;
-  apiUrl?: string;
-  masterKey?: string;
   databasePath: string;
   pollIntervalMs: number;
 }
 
+interface MerchantClient {
+  merchant: Merchant;
+  client: GloriaFoodClient;
+}
+
 class GloriaFoodOrderFetcher {
-  private client: GloriaFoodClient;
-  private database: OrderDatabase;
+  private database: IDatabase;
+  private merchantManager: MerchantManager;
+  private merchantClients: Map<string, MerchantClient> = new Map();
   private config: AppConfig;
   private pollInterval?: NodeJS.Timeout;
   private isRunning: boolean = false;
 
   constructor(config: AppConfig) {
     this.config = config;
-    this.client = new GloriaFoodClient({
-      apiKey: config.apiKey,
-      storeId: config.storeId,
-      apiUrl: config.apiUrl,
-      masterKey: config.masterKey,
-    });
-    this.database = new OrderDatabase(config.databasePath);
+    this.database = DatabaseFactory.createDatabase();
+    this.merchantManager = new MerchantManager(this.database);
   }
 
   async start(): Promise<void> {
     console.log(chalk.blue.bold('\n🚀 GloriaFood Order Fetcher Started\n'));
     
-    // Display configuration (masking sensitive data)
+    // Initialize merchants
+    await this.merchantManager.initialize();
+    
+    if (!this.merchantManager.hasMerchants()) {
+      console.error(chalk.red('❌ No active merchants configured!'));
+      console.error(chalk.yellow('Please configure merchants in .env file or database.'));
+      process.exit(1);
+    }
+
+    // Create clients for each merchant
+    const merchants = this.merchantManager.getAllMerchants();
+    for (const merchant of merchants) {
+      if (!merchant.api_key) {
+        console.warn(chalk.yellow(`⚠️  Merchant "${merchant.merchant_name}" (${merchant.store_id}) has no API key, skipping`));
+        continue;
+      }
+
+      const client = new GloriaFoodClient({
+        apiKey: merchant.api_key,
+        storeId: merchant.store_id,
+        apiUrl: merchant.api_url,
+        masterKey: merchant.master_key,
+      });
+
+      this.merchantClients.set(merchant.store_id, {
+        merchant,
+        client
+      });
+    }
+
+    // Display configuration
     console.log(chalk.gray('Configuration:'));
-    console.log(chalk.gray(`  Store ID: ${this.config.storeId}`));
-    console.log(chalk.gray(`  API URL: ${this.config.apiUrl || 'https://api.gloriafood.com'}`));
+    console.log(chalk.gray(`  Active Merchants: ${this.merchantClients.size}`));
+    this.merchantClients.forEach((mc) => {
+      console.log(chalk.gray(`    • ${mc.merchant.merchant_name} (${mc.merchant.store_id})`));
+    });
     console.log(chalk.gray(`  Database: ${this.config.databasePath}`));
     console.log(chalk.gray(`  Poll Interval: ${this.config.pollIntervalMs / 1000}s\n`));
 
@@ -62,74 +92,103 @@ class GloriaFoodOrderFetcher {
     if (this.pollInterval) {
       clearInterval(this.pollInterval);
     }
-    this.database.close();
+    const closeResult = this.database.close();
+    if (closeResult instanceof Promise) {
+      await closeResult;
+    }
     console.log(chalk.yellow('\n\n🛑 Stopped fetching orders. Goodbye!\n'));
   }
 
   async fetchAndStoreOrders(): Promise<void> {
-    try {
-      const timestamp = new Date().toISOString();
-      console.log(chalk.cyan(`\n[${timestamp}] Fetching orders...`));
+    const timestamp = new Date().toISOString();
+    console.log(chalk.cyan(`\n[${timestamp}] Fetching orders from ${this.merchantClients.size} merchant(s)...`));
 
-      // Fetch orders from GloriaFood
-      const orders = await this.client.fetchOrders(50);
-      
-      if (orders.length === 0) {
-        console.log(chalk.gray('  No new orders found.'));
-        this.displayStats();
-        return;
-      }
+    let totalNewCount = 0;
+    let totalUpdatedCount = 0;
+    let totalOrdersFound = 0;
 
-      console.log(chalk.green(`  Found ${orders.length} order(s)`));
+    // Fetch orders from all merchants
+    for (const [storeId, merchantClient] of this.merchantClients.entries()) {
+      try {
+        console.log(chalk.blue(`\n  📦 Fetching from: ${merchantClient.merchant.merchant_name} (${storeId})`));
+        
+        const orders = await merchantClient.client.fetchOrders(50);
+        totalOrdersFound += orders.length;
 
-      // Store orders in database
-      let newCount = 0;
-      let updatedCount = 0;
+        if (orders.length === 0) {
+          console.log(chalk.gray(`    No new orders found.`));
+          continue;
+        }
 
-      for (const order of orders) {
-        const existing = this.database.getOrderByGloriaFoodId(order.id?.toString() || '');
-        const saved = this.database.insertOrUpdateOrder(order);
+        console.log(chalk.green(`    Found ${orders.length} order(s)`));
 
-        if (saved) {
-          if (existing) {
-            updatedCount++;
-          } else {
-            newCount++;
-            this.displayOrder(saved, true);
+        // Store orders in database
+        let newCount = 0;
+        let updatedCount = 0;
+
+        for (const order of orders) {
+          const existing = await this.handleAsync(this.database.getOrderByGloriaFoodId(order.id?.toString() || ''));
+          const saved = await this.handleAsync(this.database.insertOrUpdateOrder(order));
+
+          if (saved) {
+            if (existing) {
+              updatedCount++;
+            } else {
+              newCount++;
+              this.displayOrder(saved, true, merchantClient.merchant);
+            }
           }
         }
-      }
 
-      if (newCount > 0 || updatedCount > 0) {
-        console.log(chalk.green(`  ✓ Stored: ${newCount} new, ${updatedCount} updated`));
-      }
+        totalNewCount += newCount;
+        totalUpdatedCount += updatedCount;
 
-      this.displayStats();
-    } catch (error: any) {
-      console.error(chalk.red(`  ✗ Error fetching orders: ${error.message}`));
-      
-      // Show helpful error message
-      if (error.message.includes('401') || error.message.includes('403')) {
-        console.error(chalk.yellow('  ⚠ Check your API credentials in .env file'));
-        console.error(chalk.yellow('  ⚠ Your API may only support webhooks. Try: npm run webhook'));
-      } else if (error.message.includes('404') || error.message.includes('webhooks')) {
-        console.error(chalk.yellow('  ⚠ API endpoint not found. Your GloriaFood may only support webhooks.'));
-        console.error(chalk.green('  → Use webhook mode instead: npm run webhook'));
-        console.error(chalk.gray('  → Configure GloriaFood webhook to: https://tekmaxllc.com/webhook'));
-      } else if (error.message.includes('timeout')) {
-        console.error(chalk.yellow('  ⚠ Request timeout. Check your internet connection'));
-      } else {
-        console.error(chalk.yellow('  💡 Tip: Your setup uses webhooks (https://tekmaxllc.com/webhook)'));
-        console.error(chalk.green('  → Try webhook mode: npm run webhook'));
+        if (newCount > 0 || updatedCount > 0) {
+          console.log(chalk.green(`    ✓ Stored: ${newCount} new, ${updatedCount} updated`));
+        }
+      } catch (error: any) {
+        console.error(chalk.red(`  ✗ Error fetching orders from ${merchantClient.merchant.merchant_name}: ${error.message}`));
+        
+        // Show helpful error message
+        if (error.message.includes('401') || error.message.includes('403')) {
+          console.error(chalk.yellow(`    ⚠ Check API credentials for merchant "${merchantClient.merchant.merchant_name}"`));
+        } else if (error.message.includes('404') || error.message.includes('webhooks')) {
+          console.error(chalk.yellow(`    ⚠ API endpoint not found for merchant "${merchantClient.merchant.merchant_name}"`));
+          console.error(chalk.gray(`    💡 This merchant may only support webhooks. Use webhook mode instead.`));
+        } else if (error.message.includes('timeout')) {
+          console.error(chalk.yellow(`    ⚠ Request timeout for merchant "${merchantClient.merchant.merchant_name}"`));
+        }
       }
     }
+
+    if (totalOrdersFound === 0) {
+      console.log(chalk.gray('\n  No new orders found from any merchant.'));
+    } else if (totalNewCount > 0 || totalUpdatedCount > 0) {
+      console.log(chalk.green(`\n  ✓ Total: ${totalNewCount} new, ${totalUpdatedCount} updated`));
+    }
+
+    this.displayStats();
   }
 
-  displayOrder(order: Order, isNew: boolean = false): void {
+  private async handleAsync<T>(result: T | Promise<T>): Promise<T> {
+    return result instanceof Promise ? await result : result;
+  }
+
+  displayOrder(order: Order, isNew: boolean = false, merchant?: Merchant): void {
     const prefix = isNew ? chalk.green('🆕 NEW ORDER') : chalk.blue('📦 ORDER');
     
     console.log(`\n${prefix} ${chalk.bold(`#${order.gloriafood_order_id}`)}`);
     console.log(chalk.gray('  ──────────────────────────────────────────'));
+    if (merchant) {
+      console.log(`  ${chalk.bold('Merchant:')} ${chalk.cyan(merchant.merchant_name)} (${merchant.store_id})`);
+    } else if (order.store_id) {
+      const merchantInfo = this.merchantManager.getMerchantByStoreId(order.store_id);
+      if (merchantInfo) {
+        console.log(`  ${chalk.bold('Merchant:')} ${chalk.cyan(merchantInfo.merchant_name)} (${merchantInfo.store_id})`);
+      } else {
+        console.log(`  ${chalk.bold('Store ID:')} ${order.store_id}`);
+      }
+    }
     console.log(`  ${chalk.bold('Customer:')} ${order.customer_name}`);
     
     if (order.customer_phone) {
@@ -188,15 +247,15 @@ class GloriaFoodOrderFetcher {
     return colorizer(status.toUpperCase());
   }
 
-  displayStats(): void {
-    const totalOrders = this.database.getOrderCount();
-    const recentOrders = this.database.getRecentOrders(60);
+  async displayStats(): Promise<void> {
+    const totalOrders = await this.handleAsync(this.database.getOrderCount());
+    const recentOrders = await this.handleAsync(this.database.getRecentOrders(60));
     
     console.log(chalk.gray(`\n  📊 Total Orders: ${totalOrders} | Recent (1h): ${recentOrders.length}`));
   }
 
-  displayAllOrders(): void {
-    const orders = this.database.getAllOrders(20);
+  async displayAllOrders(): Promise<void> {
+    const orders = await this.handleAsync(this.database.getAllOrders(20));
     
     console.log(chalk.blue.bold('\n\n📋 Recent Orders in Database:\n'));
     
@@ -205,35 +264,41 @@ class GloriaFoodOrderFetcher {
       return;
     }
 
-    orders.forEach(order => {
-      this.displayOrder(order, false);
-    });
+    for (const order of orders) {
+      const merchant = order.store_id 
+        ? await this.handleAsync(this.database.getMerchantByStoreId(order.store_id))
+        : null;
+      this.displayOrder(order, false, merchant || undefined);
+    }
   }
 }
 
 // Main execution
 async function main() {
-  // Validate environment variables
+  console.log(chalk.blue.bold('\n🚀 GloriaFood Multi-Merchant Order Fetcher\n'));
+
+  // Check for merchant configuration
+  const merchantsJson = process.env.GLORIAFOOD_MERCHANTS;
   const apiKey = process.env.GLORIAFOOD_API_KEY;
   const storeId = process.env.GLORIAFOOD_STORE_ID;
 
-  if (!apiKey || !storeId) {
-    console.error(chalk.red.bold('\n❌ Error: Missing required environment variables!\n'));
-    console.error(chalk.yellow('Please create a .env file with the following variables:'));
+  if (!merchantsJson && (!apiKey || !storeId)) {
+    console.error(chalk.red.bold('\n❌ Error: Missing merchant configuration!\n'));
+    console.error(chalk.yellow('Please configure merchants using one of these methods:'));
+    console.error(chalk.gray('\n  Option 1: Multi-merchant (recommended)'));
+    console.error(chalk.gray('  GLORIAFOOD_MERCHANTS=[{"store_id":"123","merchant_name":"Restaurant 1","api_key":"key1","api_url":"https://api.example.com"},{"store_id":"456","merchant_name":"Restaurant 2","api_key":"key2"}]'));
+    console.error(chalk.gray('\n  Option 2: Single merchant (legacy)'));
     console.error(chalk.gray('  GLORIAFOOD_API_KEY=your_api_key'));
     console.error(chalk.gray('  GLORIAFOOD_STORE_ID=your_store_id'));
-    console.error(chalk.gray('  GLORIAFOOD_API_URL=https://api.gloriafood.com (optional)'));
-    console.error(chalk.gray('  GLORIAFOOD_MASTER_KEY=your_master_key (optional)'));
-    console.error(chalk.gray('  DATABASE_PATH=./orders.db (optional)'));
-    console.error(chalk.gray('  POLL_INTERVAL_MS=30000 (optional)\n'));
+    console.error(chalk.gray('\n  Optional:'));
+    console.error(chalk.gray('  GLORIAFOOD_API_URL=https://api.gloriafood.com'));
+    console.error(chalk.gray('  GLORIAFOOD_MASTER_KEY=your_master_key'));
+    console.error(chalk.gray('  DATABASE_PATH=./orders.db'));
+    console.error(chalk.gray('  POLL_INTERVAL_MS=30000\n'));
     process.exit(1);
   }
 
   const config: AppConfig = {
-    apiKey,
-    storeId,
-    apiUrl: process.env.GLORIAFOOD_API_URL,
-    masterKey: process.env.GLORIAFOOD_MASTER_KEY,
     databasePath: process.env.DATABASE_PATH || './orders.db',
     pollIntervalMs: parseInt(process.env.POLL_INTERVAL_MS || '30000', 10),
   };

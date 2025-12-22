@@ -52,10 +52,10 @@ export class EmailService {
             user: this.config.user,
             pass: this.config.pass,
           },
-          // Reduced timeouts for faster failure detection (cloud platforms often block SMTP)
-          connectionTimeout: 15000, // 15 seconds
-          greetingTimeout: 15000,   // 15 seconds
-          socketTimeout: 15000,     // 15 seconds
+          // Increased timeouts for Render/cloud environments
+          connectionTimeout: 30000, // 30 seconds
+          greetingTimeout: 30000,   // 30 seconds
+          socketTimeout: 30000,     // 30 seconds
           // Additional options for better reliability
           requireTLS: !this.config.secure && (this.config.port === 587 || !this.config.port),
           tls: {
@@ -66,13 +66,6 @@ export class EmailService {
           pool: true,
           maxConnections: 1,
           maxMessages: 3,
-        });
-        
-        // Verify transporter connection (async, non-blocking - runs in background)
-        // Don't block server startup if verification fails (common on cloud platforms)
-        this.verifyConnection().catch(err => {
-          // Silently handle - verification is just a check, not required for operation
-          // The actual email send will handle errors properly
         });
         
         // Merchant emails enabled if merchant email is set (checks MERCHANT_EMAIL, API_VENDOR_CONTACT_EMAIL, VENDOR_CONTACT_EMAIL, or VENDOR_EMAIL)
@@ -132,41 +125,6 @@ export class EmailService {
     return this.customerEmailsEnabled && !!this.transporter;
   }
 
-  isTransporterAvailable(): boolean {
-    return !!this.transporter;
-  }
-
-  private async verifyConnection(): Promise<void> {
-    if (!this.transporter) return;
-    
-    try {
-      // Use a shorter timeout for verification (5 seconds - just a quick check)
-      const verifyPromise = this.transporter.verify();
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Connection verification timed out after 5 seconds')), 5000);
-      });
-      
-      await Promise.race([verifyPromise, timeoutPromise]);
-      console.log(chalk.green('✅ SMTP connection verified successfully'));
-    } catch (error: any) {
-      // Don't show as error - just a warning since verification is optional
-      // Many cloud platforms block SMTP during verification but allow actual sends
-      console.log(chalk.yellow('⚠️  SMTP connection verification timed out (this is common on cloud platforms)'));
-      console.log(chalk.gray('   The server will still attempt to send emails when needed.'));
-      
-      // Only show detailed error if it's not a timeout
-      if (!error.message.includes('timeout') && !error.code?.includes('TIMEDOUT')) {
-        console.log(chalk.gray(`   Verification error: ${error.message}`));
-      }
-      
-      // Provide helpful suggestions
-      if (error.code === 'ETIMEDOUT' || error.message.includes('timeout')) {
-        console.log(chalk.gray('\n   💡 Note: Connection verification may fail on cloud platforms, but emails may still work.'));
-        console.log(chalk.gray('      If emails fail to send, consider using SendGrid, Mailgun, or AWS SES.'));
-      }
-    }
-  }
-
   async sendOrderUpdate(orderData: any, context: MerchantEmailContext): Promise<void> {
     if (!this.enabled || !this.transporter || !this.config.to) {
       if (!this.enabled) {
@@ -200,9 +158,9 @@ export class EmailService {
         html,
       });
 
-      // Reduced timeout to 20 seconds for faster failure detection (cloud platforms often block SMTP)
+      // Wrap with timeout
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Email send operation timed out after 20 seconds')), 20000);
+        setTimeout(() => reject(new Error('Email send operation timed out after 60 seconds')), 60000);
       });
 
       const result = await Promise.race([sendMailPromise, timeoutPromise]) as any;
@@ -237,14 +195,10 @@ export class EmailService {
       // Check if it's a connection timeout issue
       if (error.message && (error.message.includes('timeout') || error.message.includes('ETIMEDOUT') || error.code === 'ETIMEDOUT')) {
         console.error(chalk.yellow(`   ⚠️  Connection timeout detected. This might be due to:`));
-        console.error(chalk.yellow(`      - Network restrictions on Render (free tier blocks SMTP)`));
+        console.error(chalk.yellow(`      - Network restrictions on Render (free tier may block SMTP)`));
         console.error(chalk.yellow(`      - Firewall blocking outbound SMTP connections`));
         console.error(chalk.yellow(`      - Gmail blocking connections from Render's IP`));
-        console.error(chalk.yellow(`\n   💡 Solutions:`));
-        console.error(chalk.yellow(`      • Use SendGrid, Mailgun, or AWS SES (work better with cloud platforms)`));
-        console.error(chalk.yellow(`      • Upgrade to Render paid tier (allows SMTP)`));
-        console.error(chalk.yellow(`      • Try port 465 with SMTP_SECURE=true`));
-        console.error(chalk.yellow(`      • Use a different email service provider`));
+        console.error(chalk.yellow(`      - Try using a different SMTP service (SendGrid, Mailgun, etc.)`));
       }
       
       // Don't re-throw - allow the webhook to continue processing
@@ -473,110 +427,6 @@ export class EmailService {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
-  }
-
-  async sendPasswordResetEmail(email: string, resetToken: string, resetUrl: string): Promise<void> {
-    if (!this.transporter) {
-      console.log(chalk.yellow('⚠️  Email transporter not initialized, cannot send password reset email'));
-      console.log(chalk.gray('   Make sure SMTP_HOST, SMTP_USER, and SMTP_PASS are configured in your .env file'));
-      throw new Error('Email transporter not initialized');
-    }
-
-    const subject = 'Reset Your Password - TekMax Delivery Management';
-    const text = this.buildPasswordResetText(email, resetToken, resetUrl);
-    const html = this.buildPasswordResetHtml(email, resetToken, resetUrl);
-
-    try {
-      console.log(chalk.blue(`📧 Sending password reset email to ${email}...`));
-      console.log(chalk.gray(`   From: ${this.config.from || this.config.user}`));
-      console.log(chalk.gray(`   To: ${email}`));
-      console.log(chalk.gray(`   SMTP Host: ${this.config.host}:${this.config.port || 587}`));
-      
-      const sendMailPromise = this.transporter.sendMail({
-        from: this.config.from || this.config.user,
-        to: email,
-        subject,
-        text,
-        html,
-      });
-
-      // Reduced timeout to 20 seconds for faster failure detection (cloud platforms often block SMTP)
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Email send operation timed out after 20 seconds')), 20000);
-      });
-
-      const result = await Promise.race([sendMailPromise, timeoutPromise]) as any;
-      
-      console.log(chalk.green(`✅ Password reset email sent successfully to ${email}`));
-      console.log(chalk.gray(`   Message ID: ${result.messageId || 'N/A'}`));
-    } catch (error: any) {
-      console.error(chalk.red(`❌ Failed to send password reset email to ${email}`));
-      console.error(chalk.red(`   Error: ${error.message}`));
-      
-      // Provide helpful suggestions for timeout errors
-      if (error.message && (error.message.includes('timeout') || error.message.includes('ETIMEDOUT'))) {
-        console.error(chalk.yellow('\n⚠️  Email Timeout - Common causes:'));
-        console.error(chalk.yellow('   • Gmail blocking connections from cloud platforms (Render, Heroku)'));
-        console.error(chalk.yellow('   • Render free tier blocking outbound SMTP'));
-        console.error(chalk.yellow('   • Network/firewall restrictions'));
-        console.error(chalk.yellow('\n💡 Solutions:'));
-        console.error(chalk.yellow('   • Use SendGrid, Mailgun, or AWS SES instead of Gmail'));
-        console.error(chalk.yellow('   • Upgrade to Render paid tier'));
-        console.error(chalk.yellow('   • Try port 465 with SMTP_SECURE=true'));
-      }
-      
-      throw error;
-    }
-  }
-
-  private buildPasswordResetText(email: string, resetToken: string, resetUrl: string): string {
-    return `
-Reset Your Password - TekMax Delivery Management
-
-Hello,
-
-You requested to reset your password for your TekMax account.
-
-Click the link below to reset your password:
-${resetUrl}
-
-Or copy and paste this token if the link doesn't work:
-${resetToken}
-
-This link will expire in 1 hour.
-
-If you didn't request this password reset, please ignore this email.
-
-Best regards,
-TekMax Team
-    `.trim();
-  }
-
-  private buildPasswordResetHtml(email: string, resetToken: string, resetUrl: string): string {
-    return `
-      <div style="font-family: Arial, sans-serif; line-height: 1.6; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <div style="background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-          <h1 style="color: white; margin: 0;">TekMax</h1>
-          <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0;">Delivery Management System</p>
-        </div>
-        <div style="background: #ffffff; padding: 30px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 10px 10px;">
-          <h2 style="color: #0f172a; margin-top: 0;">Reset Your Password</h2>
-          <p style="color: #475569;">Hello,</p>
-          <p style="color: #475569;">You requested to reset your password for your TekMax account (${this.escapeHtml(email)}).</p>
-          <div style="text-align: center; margin: 30px 0;">
-            <a href="${resetUrl}" style="display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">Reset Password</a>
-          </div>
-          <p style="color: #64748b; font-size: 14px; margin-top: 30px;">Or copy and paste this link into your browser:</p>
-          <p style="color: #3b82f6; word-break: break-all; font-size: 12px; background: #f1f5f9; padding: 10px; border-radius: 6px;">${resetUrl}</p>
-          <p style="color: #64748b; font-size: 14px; margin-top: 20px;"><strong>Reset Token:</strong></p>
-          <p style="color: #1e293b; font-size: 14px; background: #f8fafc; padding: 10px; border-radius: 6px; font-family: monospace; word-break: break-all;">${resetToken}</p>
-          <p style="color: #ef4444; font-size: 13px; margin-top: 20px;"><strong>⚠️ This link will expire in 1 hour.</strong></p>
-          <p style="color: #64748b; font-size: 14px; margin-top: 30px;">If you didn't request this password reset, please ignore this email. Your password will remain unchanged.</p>
-          <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 30px 0;">
-          <p style="color: #94a3b8; font-size: 12px; text-align: center; margin: 0;">Best regards,<br>TekMax Team</p>
-        </div>
-      </div>
-    `.trim();
   }
 }
 

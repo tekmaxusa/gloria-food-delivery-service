@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { Merchant } from './database-factory';
 
 export interface Order {
   id: string;
@@ -61,6 +62,21 @@ export class OrderDatabase {
       CREATE INDEX IF NOT EXISTS idx_store_id ON orders(store_id);
       CREATE INDEX IF NOT EXISTS idx_status ON orders(status);
       CREATE INDEX IF NOT EXISTS idx_fetched_at ON orders(fetched_at);
+
+      CREATE TABLE IF NOT EXISTS merchants (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        store_id TEXT UNIQUE NOT NULL,
+        merchant_name TEXT NOT NULL,
+        api_key TEXT,
+        api_url TEXT,
+        master_key TEXT,
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_merchants_store_id ON merchants(store_id);
+      CREATE INDEX IF NOT EXISTS idx_merchants_is_active ON merchants(is_active);
     `);
 
     // Attempt to add new columns for existing installations (ignore errors if already exist)
@@ -148,155 +164,29 @@ export class OrderDatabase {
     }
   }
 
-  updateReadyForPickup(gloriafoodOrderId: string, ready: boolean): boolean {
-    try {
-      // Get the current order
-      const order = this.getOrderByGloriaFoodId(gloriafoodOrderId);
-      if (!order) {
-        return false;
-      }
-
-      // Parse raw_data
-      let rawData: any = {};
-      try {
-        rawData = JSON.parse(order.raw_data || '{}');
-      } catch (e) {
-        rawData = {};
-      }
-
-      // Update ready_for_pickup in raw_data
-      if (ready) {
-        rawData.ready_for_pickup = new Date().toISOString();
-      } else {
-        delete rawData.ready_for_pickup;
-      }
-
-      // Update the order
-      const stmt = this.db.prepare(`
-        UPDATE orders
-        SET raw_data = ?,
-            updated_at = ?
-        WHERE gloriafood_order_id = ?
-      `);
-      const now = new Date().toISOString();
-      stmt.run(JSON.stringify(rawData), now, gloriafoodOrderId);
-      return true;
-    } catch (error) {
-      console.error('Error updating ready_for_pickup:', error);
-      return false;
-    }
-  }
-
   private extractCustomerName(orderData: any): string {
-    // Try root level client_* fields first (GloriaFood format)
-    if (orderData.client_first_name || orderData.client_last_name) {
-      const name = `${orderData.client_first_name || ''} ${orderData.client_last_name || ''}`.trim();
-      if (name) return name;
+    if (orderData.client?.first_name || orderData.client?.last_name) {
+      return `${orderData.client.first_name || ''} ${orderData.client.last_name || ''}`.trim();
     }
-    if (orderData.client_name && String(orderData.client_name).trim()) return String(orderData.client_name).trim();
-    
-    // Try client object (nested format)
-    if (orderData.client) {
-      if (orderData.client.first_name || orderData.client.last_name) {
-        const name = `${orderData.client.first_name || ''} ${orderData.client.last_name || ''}`.trim();
-        if (name) return name;
-      }
-      if (orderData.client.name) return String(orderData.client.name);
-      if (orderData.client.full_name) return String(orderData.client.full_name);
-      if (orderData.client.firstName) return String(orderData.client.firstName);
-      if (orderData.client.lastName) return String(orderData.client.lastName);
-    }
-    
-    // Try customer object
-    if (orderData.customer) {
-      if (orderData.customer.name) return String(orderData.customer.name);
-      if (orderData.customer.first_name || orderData.customer.last_name) {
-        const name = `${orderData.customer.first_name || ''} ${orderData.customer.last_name || ''}`.trim();
-        if (name) return name;
-      }
-      if (orderData.customer.full_name) return String(orderData.customer.full_name);
-      if (orderData.customer.firstName || orderData.customer.lastName) {
-        const name = `${orderData.customer.firstName || ''} ${orderData.customer.lastName || ''}`.trim();
-        if (name) return name;
-      }
-    }
-    
-    // Try root level fields (check for string and not empty)
-    if (orderData.customer_name && String(orderData.customer_name).trim()) return String(orderData.customer_name).trim();
-    if (orderData.name && String(orderData.name).trim()) return String(orderData.name).trim();
-    if (orderData.first_name || orderData.last_name) {
-      const name = `${orderData.first_name || ''} ${orderData.last_name || ''}`.trim();
-      if (name) return name;
-    }
-    
-    // Try nested in order object (if webhook structure wraps it)
-    if (orderData.order?.client?.first_name || orderData.order?.client?.last_name) {
-      const name = `${orderData.order.client.first_name || ''} ${orderData.order.client.last_name || ''}`.trim();
-      if (name) return name;
-    }
-    if (orderData.order?.customer?.name) return String(orderData.order.customer.name);
-    if (orderData.order?.customer_name) return String(orderData.order.customer_name);
-    if (orderData.order?.client?.name) return String(orderData.order.client.name);
-    
+    if (orderData.customer?.name) return orderData.customer.name;
+    if (orderData.customer_name) return orderData.customer_name;
     return 'Unknown';
   }
 
   private extractCustomerPhone(orderData: any): string {
-    // Try root level client_* fields first (GloriaFood format)
-    if (orderData.client_phone && String(orderData.client_phone).trim()) return String(orderData.client_phone).trim();
-    if (orderData.client_phone_number && String(orderData.client_phone_number).trim()) return String(orderData.client_phone_number).trim();
-    
-    // Try client object (nested format)
-    if (orderData.client?.phone && String(orderData.client.phone).trim()) return String(orderData.client.phone).trim();
-    if (orderData.client?.phone_number && String(orderData.client.phone_number).trim()) return String(orderData.client.phone_number).trim();
-    if (orderData.client?.mobile && String(orderData.client.mobile).trim()) return String(orderData.client.mobile).trim();
-    if (orderData.client?.tel && String(orderData.client.tel).trim()) return String(orderData.client.tel).trim();
-    if (orderData.client?.telephone && String(orderData.client.telephone).trim()) return String(orderData.client.telephone).trim();
-    
-    // Try customer object
-    if (orderData.customer?.phone && String(orderData.customer.phone).trim()) return String(orderData.customer.phone).trim();
-    if (orderData.customer?.phone_number && String(orderData.customer.phone_number).trim()) return String(orderData.customer.phone_number).trim();
-    if (orderData.customer?.mobile && String(orderData.customer.mobile).trim()) return String(orderData.customer.mobile).trim();
-    if (orderData.customer?.tel && String(orderData.customer.tel).trim()) return String(orderData.customer.tel).trim();
-    
-    // Try root level fields
-    if (orderData.customer_phone && String(orderData.customer_phone).trim()) return String(orderData.customer_phone).trim();
-    if (orderData.phone && String(orderData.phone).trim()) return String(orderData.phone).trim();
-    if (orderData.phone_number && String(orderData.phone_number).trim()) return String(orderData.phone_number).trim();
-    if (orderData.mobile && String(orderData.mobile).trim()) return String(orderData.mobile).trim();
-    if (orderData.tel && String(orderData.tel).trim()) return String(orderData.tel).trim();
-    
-    // Try nested in order object
-    if (orderData.order?.client?.phone && String(orderData.order.client.phone).trim()) return String(orderData.order.client.phone).trim();
-    if (orderData.order?.customer?.phone && String(orderData.order.customer.phone).trim()) return String(orderData.order.customer.phone).trim();
-    if (orderData.order?.phone && String(orderData.order.phone).trim()) return String(orderData.order.phone).trim();
-    
-    return '';
+    return orderData.client?.phone ||
+           orderData.customer?.phone ||
+           orderData.customer_phone ||
+           orderData.phone ||
+           '';
   }
 
   private extractCustomerEmail(orderData: any): string {
-    // Try root level client_* fields first (GloriaFood format)
-    if (orderData.client_email && String(orderData.client_email).trim()) return String(orderData.client_email).trim();
-    
-    // Try client object (nested format)
-    if (orderData.client?.email && String(orderData.client.email).trim()) return String(orderData.client.email).trim();
-    if (orderData.client?.email_address && String(orderData.client.email_address).trim()) return String(orderData.client.email_address).trim();
-    
-    // Try customer object
-    if (orderData.customer?.email && String(orderData.customer.email).trim()) return String(orderData.customer.email).trim();
-    if (orderData.customer?.email_address && String(orderData.customer.email_address).trim()) return String(orderData.customer.email_address).trim();
-    
-    // Try root level fields
-    if (orderData.customer_email && String(orderData.customer_email).trim()) return String(orderData.customer_email).trim();
-    if (orderData.email && String(orderData.email).trim()) return String(orderData.email).trim();
-    if (orderData.email_address && String(orderData.email_address).trim()) return String(orderData.email_address).trim();
-    
-    // Try nested in order object
-    if (orderData.order?.client?.email && String(orderData.order.client.email).trim()) return String(orderData.order.client.email).trim();
-    if (orderData.order?.customer?.email && String(orderData.order.customer.email).trim()) return String(orderData.order.customer.email).trim();
-    if (orderData.order?.email && String(orderData.order.email).trim()) return String(orderData.order.email).trim();
-    
-    return '';
+    return orderData.client?.email ||
+           orderData.customer?.email ||
+           orderData.customer_email ||
+           orderData.email ||
+           '';
   }
 
   private extractDeliveryAddress(orderData: any): string {
@@ -317,33 +207,6 @@ export class OrderDatabase {
   getOrderByGloriaFoodId(orderId: string): Order | null {
     const stmt = this.db.prepare('SELECT * FROM orders WHERE gloriafood_order_id = ?');
     return stmt.get(orderId) as Order | null;
-  }
-
-  deleteOrder(gloriafoodOrderId: string): boolean {
-    try {
-      const stmt = this.db.prepare('DELETE FROM orders WHERE gloriafood_order_id = ?');
-      const result = stmt.run(gloriafoodOrderId);
-      return (result.changes || 0) > 0;
-    } catch (error) {
-      console.error('Error deleting order:', error);
-      return false;
-    }
-  }
-
-  deleteOrders(gloriafoodOrderIds: string[]): number {
-    try {
-      if (!gloriafoodOrderIds || gloriafoodOrderIds.length === 0) {
-        return 0;
-      }
-      
-      const placeholders = gloriafoodOrderIds.map(() => '?').join(',');
-      const stmt = this.db.prepare(`DELETE FROM orders WHERE gloriafood_order_id IN (${placeholders})`);
-      const result = stmt.run(...gloriafoodOrderIds);
-      return result.changes || 0;
-    } catch (error) {
-      console.error('Error deleting orders:', error);
-      return 0;
-    }
   }
 
   getAllOrders(limit: number = 50): Order[] {
@@ -442,17 +305,6 @@ export class OrderDatabase {
     } catch (error) {
       console.error('Error verifying password:', error);
       return null;
-    }
-  }
-
-  updateUserPassword(email: string, hashedPassword: string): boolean {
-    try {
-      const stmt = this.db.prepare('UPDATE users SET password = ? WHERE email = ?');
-      const result = stmt.run(hashedPassword, email);
-      return result.changes > 0;
-    } catch (error) {
-      console.error('Error updating password:', error);
-      return false;
     }
   }
 
@@ -583,6 +435,117 @@ export class OrderDatabase {
         revenue: { total: 0 },
         drivers: { total: 0, active: 0 }
       };
+    }
+  }
+
+  // Merchant methods
+  getAllMerchants(): Merchant[] {
+    try {
+      const merchants = this.db.prepare(`
+        SELECT * FROM merchants WHERE is_active = 1 ORDER BY merchant_name
+      `).all() as any[];
+      
+      return merchants.map(m => ({
+        id: m.id,
+        store_id: m.store_id,
+        merchant_name: m.merchant_name,
+        api_key: m.api_key,
+        api_url: m.api_url,
+        master_key: m.master_key,
+        is_active: m.is_active === 1,
+        created_at: m.created_at,
+        updated_at: m.updated_at
+      }));
+    } catch (error) {
+      console.error('Error getting merchants:', error);
+      return [];
+    }
+  }
+
+  getMerchantByStoreId(storeId: string): Merchant | null {
+    try {
+      const merchant = this.db.prepare(`
+        SELECT * FROM merchants WHERE store_id = ?
+      `).get(storeId) as any;
+      
+      if (!merchant) return null;
+      
+      return {
+        id: merchant.id,
+        store_id: merchant.store_id,
+        merchant_name: merchant.merchant_name,
+        api_key: merchant.api_key,
+        api_url: merchant.api_url,
+        master_key: merchant.master_key,
+        is_active: merchant.is_active === 1,
+        created_at: merchant.created_at,
+        updated_at: merchant.updated_at
+      };
+    } catch (error) {
+      console.error('Error getting merchant:', error);
+      return null;
+    }
+  }
+
+  insertOrUpdateMerchant(merchant: Partial<Merchant>): Merchant | null {
+    try {
+      if (!merchant.store_id || !merchant.merchant_name) {
+        throw new Error('store_id and merchant_name are required');
+      }
+
+      const existing = this.getMerchantByStoreId(merchant.store_id);
+      
+      if (existing) {
+        // Update existing merchant
+        this.db.prepare(`
+          UPDATE merchants 
+          SET merchant_name = ?,
+              api_key = COALESCE(?, api_key),
+              api_url = COALESCE(?, api_url),
+              master_key = COALESCE(?, master_key),
+              is_active = COALESCE(?, is_active),
+              updated_at = CURRENT_TIMESTAMP
+          WHERE store_id = ?
+        `).run(
+          merchant.merchant_name,
+          merchant.api_key || null,
+          merchant.api_url || null,
+          merchant.master_key || null,
+          merchant.is_active !== undefined ? (merchant.is_active ? 1 : 0) : null,
+          merchant.store_id
+        );
+      } else {
+        // Insert new merchant
+        this.db.prepare(`
+          INSERT INTO merchants (store_id, merchant_name, api_key, api_url, master_key, is_active)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(
+          merchant.store_id,
+          merchant.merchant_name,
+          merchant.api_key || null,
+          merchant.api_url || null,
+          merchant.master_key || null,
+          merchant.is_active !== undefined ? (merchant.is_active ? 1 : 0) : 1
+        );
+      }
+      
+      return this.getMerchantByStoreId(merchant.store_id);
+    } catch (error) {
+      console.error('Error inserting/updating merchant:', error);
+      return null;
+    }
+  }
+
+  deleteMerchant(storeId: string): boolean {
+    try {
+      const result = this.db.prepare(`
+        DELETE FROM merchants WHERE store_id = ?
+      `).run(storeId);
+      
+      return result.changes > 0;
+    } catch (error) {
+      console.error('Error deleting merchant:', error);
+      return false;
     }
   }
 
