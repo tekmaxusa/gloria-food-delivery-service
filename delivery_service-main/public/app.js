@@ -149,23 +149,14 @@ function setupDashboardUI() {
         newOrderBtn.addEventListener('click', handleNewOrder);
     }
     
-    // Profile button
-    const profileBtn = document.getElementById('profileBtn');
-    if (profileBtn) {
-        profileBtn.addEventListener('click', handleProfile);
-    }
-    
-    // Notifications button
-    const notificationsBtn = document.getElementById('notificationsBtn');
-    if (notificationsBtn) {
-        notificationsBtn.addEventListener('click', handleNotifications);
-    }
-    
     // Help button
     const helpBtn = document.querySelector('.icon-btn[title="Help"]');
     if (helpBtn) {
         helpBtn.addEventListener('click', handleHelp);
     }
+    
+    // Re-setup header buttons to ensure they're clickable
+    setupHeaderButtons();
 }
 
 // Initialize
@@ -176,9 +167,59 @@ document.addEventListener('DOMContentLoaded', () => {
     // Setup navigation links
     setupNavigation();
     
+    // Setup header buttons (always available)
+    setupHeaderButtons();
+    
     // Check authentication - this will show login or dashboard
     checkAuth();
 });
+
+// Setup header buttons (profile, notifications, logout)
+function setupHeaderButtons() {
+    // Profile button
+    const profileBtn = document.getElementById('profileBtn');
+    if (profileBtn) {
+        // Remove existing listeners
+        const newProfileBtn = profileBtn.cloneNode(true);
+        profileBtn.parentNode.replaceChild(newProfileBtn, profileBtn);
+        newProfileBtn.addEventListener('click', handleProfile);
+    }
+    
+    // Notifications button
+    const notificationsBtn = document.getElementById('notificationsBtn');
+    if (notificationsBtn) {
+        // Remove existing listeners
+        const newNotificationsBtn = notificationsBtn.cloneNode(true);
+        notificationsBtn.parentNode.replaceChild(newNotificationsBtn, notificationsBtn);
+        newNotificationsBtn.addEventListener('click', handleNotifications);
+    }
+    
+    // Logout button (already in setupAuth, but ensure it's set up)
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn && !logoutBtn.hasAttribute('data-listener-attached')) {
+        logoutBtn.setAttribute('data-listener-attached', 'true');
+        logoutBtn.addEventListener('click', async () => {
+            // Show confirmation dialog
+            const confirmed = confirm('Are you sure you want to log out?');
+            if (!confirmed) {
+                return;
+            }
+            
+            try {
+                await authenticatedFetch(`${API_BASE}/api/auth/logout`, {
+                    method: 'POST'
+                });
+            } catch (error) {
+                console.error('Logout error:', error);
+            }
+            
+            currentUser = null;
+            sessionId = null;
+            saveSessionId(null);
+            showLogin();
+        });
+    }
+}
 
 // Setup authentication handlers
 function setupAuth() {
@@ -284,30 +325,7 @@ function setupAuth() {
         });
     }
     
-    // Logout button
-    const logoutBtn = document.getElementById('logoutBtn');
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', async () => {
-            // Show confirmation dialog
-            const confirmed = confirm('Are you sure you want to log out?');
-            if (!confirmed) {
-                return;
-            }
-            
-            try {
-                await authenticatedFetch(`${API_BASE}/api/auth/logout`, {
-                    method: 'POST'
-                });
-            } catch (error) {
-                console.error('Logout error:', error);
-            }
-            
-            currentUser = null;
-            sessionId = null;
-            saveSessionId(null);
-            showLogin();
-        });
-    }
+    // Logout button is handled in setupHeaderButtons()
 }
 
 // Setup navigation links
