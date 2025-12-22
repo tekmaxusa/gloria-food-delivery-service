@@ -1,6 +1,7 @@
 import * as dotenv from 'dotenv';
 import { OrderDatabase } from './database';
 import { OrderDatabaseMySQL } from './database-mysql';
+import { OrderDatabasePostgreSQL } from './database-postgresql';
 import { Order } from './database';
 
 // Load environment variables
@@ -67,13 +68,24 @@ export class DatabaseFactory {
     console.log(`   DB_HOST: "${process.env.DB_HOST}"`);
     console.log(`   DB_NAME: "${process.env.DB_NAME}"`);
     
-    // Check if MySQL config is provided (even if DB_TYPE is not set)
-    const hasMySQLConfig = 
+    // Check database type and config
+    const hasDBConfig = 
       process.env.DB_HOST || 
       process.env.DB_USER || 
       process.env.DB_NAME;
     
-    if (dbType === 'mysql' || (hasMySQLConfig && dbType !== 'sqlite')) {
+    if (dbType === 'postgresql' || dbType === 'postgres') {
+      // Use PostgreSQL
+      console.log('   ✅ Selecting PostgreSQL database\n');
+      return new OrderDatabasePostgreSQL({
+        host: process.env.DB_HOST || 'localhost',
+        port: parseInt(process.env.DB_PORT || '5432'),
+        user: process.env.DB_USER || 'postgres',
+        password: process.env.DB_PASSWORD || '',
+        database: process.env.DB_NAME || 'gloriafood_orders',
+        ssl: process.env.DB_SSL === 'true' || process.env.DB_SSL === '1',
+      });
+    } else if (dbType === 'mysql' || (hasDBConfig && dbType !== 'sqlite' && dbType !== 'postgresql' && dbType !== 'postgres')) {
       // Use MySQL
       console.log('   ✅ Selecting MySQL database\n');
       return new OrderDatabaseMySQL({
@@ -85,12 +97,12 @@ export class DatabaseFactory {
       });
     } else {
       // Use SQLite (default)
-      console.log('   ⚠️  Selecting SQLite database (MySQL config not found)\n');
+      console.log('   ⚠️  Selecting SQLite database (no database config found)\n');
       const dbPath = process.env.DATABASE_PATH || './orders.db';
       return new OrderDatabase(dbPath);
     }
   }
 }
 
-export { Order, OrderDatabase, OrderDatabaseMySQL };
+export { Order, OrderDatabase, OrderDatabaseMySQL, OrderDatabasePostgreSQL };
 
