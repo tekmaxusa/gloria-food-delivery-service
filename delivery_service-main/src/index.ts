@@ -1,7 +1,7 @@
 import * as dotenv from 'dotenv';
 import { GloriaFoodClient, GloriaFoodOrder } from './gloriafood-client';
-import { DatabaseFactory, IDatabase, Order } from './database-factory';
-import { MerchantManager, Merchant } from './merchant-manager';
+import { DatabaseFactory, IDatabase, Order, Merchant } from './database-factory';
+import { MerchantManager } from './merchant-manager';
 import chalk from 'chalk';
 
 // Load environment variables

@@ -92,5 +92,5 @@ export class DatabaseFactory {
   }
 }
 
-export { Order, OrderDatabase, OrderDatabaseMySQL, Merchant, User };
+export { Order, OrderDatabase, OrderDatabaseMySQL };
 
