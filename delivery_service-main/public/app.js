@@ -744,12 +744,12 @@ function showMerchantsPage() {
         
         <!-- Merchant Modal -->
         <div id="merchantModal" class="modal hidden">
-            <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-content merchant-modal-content">
                 <div class="modal-header">
                     <h2 id="merchantModalTitle">Add New Merchant</h2>
                     <button class="modal-close" id="closeMerchantModal">&times;</button>
                 </div>
-                <form id="merchantForm">
+                <form id="merchantForm" class="modal-body">
                     <div class="form-group">
                         <label>Store ID <span style="color: red;">*</span></label>
                         <input type="text" id="merchantStoreId" required placeholder="Enter Store ID" 
@@ -774,11 +774,11 @@ function showMerchantsPage() {
                         <input type="password" id="merchantMasterKey" placeholder="Enter Master Key">
                         <small style="color: #666; font-size: 12px;">Optional: Master key for API authentication</small>
                     </div>
-                    <div class="form-group">
-                        <label>
+                    <div class="form-group checkbox-group">
+                        <label class="checkbox-label">
                             <input type="checkbox" id="merchantIsActive" checked> Active
                         </label>
-                        <small style="color: #666; font-size: 12px;">Inactive merchants will not be polled for orders</small>
+                        <small style="color: #666; font-size: 12px; display: block; margin-top: 4px;">Inactive merchants will not be polled for orders</small>
                     </div>
                     <div class="modal-actions">
                         <button type="button" class="btn-secondary" id="cancelMerchantBtn">Cancel</button>

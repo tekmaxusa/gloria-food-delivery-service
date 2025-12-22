@@ -567,12 +567,17 @@ body {
     background: white;
     border-radius: 16px;
     width: 90%;
-    max-width: 600px;
+    max-width: 520px;
     max-height: 90vh;
     overflow-y: auto;
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
     animation: slideUp 0.3s ease;
     border: 1px solid #e2e8f0;
+}
+
+.merchant-modal-content {
+    max-width: 500px;
+    margin: 20px;
 }
 
 @keyframes slideUp {
@@ -590,7 +595,7 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 20px 24px;
+    padding: 24px 28px;
     border-bottom: 1px solid #e2e8f0;
 }
 
@@ -623,11 +628,11 @@ body {
 }
 
 .modal-body {
-    padding: 24px;
+    padding: 28px;
 }
 
 .form-group {
-    margin-bottom: 20px;
+    margin-bottom: 24px;
 }
 
 .form-group label {
@@ -642,7 +647,7 @@ body {
 .form-group textarea,
 .form-group select {
     width: 100%;
-    padding: 11px 14px;
+    padding: 12px 16px;
     border: 1px solid #e2e8f0;
     border-radius: 8px;
     font-size: 14px;
@@ -665,20 +670,32 @@ body {
     min-height: 100px;
 }
 
-.form-group small {
-    display: block;
-    margin-top: 6px;
-    color: #64748b;
-    font-size: 12px;
-    line-height: 1.4;
+/* Checkbox group styling - left align checkbox */
+.checkbox-group {
+    margin-bottom: 24px;
+}
+
+.checkbox-group .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+    cursor: pointer;
+}
+
+.checkbox-group .checkbox-label input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+    cursor: pointer;
+    flex-shrink: 0;
 }
 
 .modal-actions {
     display: flex;
     gap: 12px;
     justify-content: flex-end;
-    margin-top: 24px;
-    padding-top: 20px;
+    margin-top: 28px;
+    padding-top: 24px;
     border-top: 1px solid #e2e8f0;
 }
 
