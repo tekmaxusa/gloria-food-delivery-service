@@ -1499,7 +1499,7 @@ function clearAllNotifications() {
     notifications = [];
     renderNotifications();
     updateNotificationBadge();
-    showNotification('Success', 'All notifications cleared');
+    // Don't show notification when clearing (would create a new notification)
 }
 
 // Format notification time
@@ -1746,13 +1746,10 @@ function checkForNewOrders(orders) {
             const orderId = order.gloriafood_order_id || order.id;
             const message = `${order.customer_name || 'Customer'} - ${formatCurrency(order.total_price || 0, order.currency || 'USD')}`;
             
-            // Add to notification panel
+            // Add to notification panel only (no pop-up)
             addNotification(`New Order #${orderId}`, message, 'info', orderId);
             
-            // Show toast notification
-            showNotification(`New Order #${orderId}`, message);
-            
-            // Show browser notification
+            // Show browser notification (optional - system notification)
             showBrowserNotification(order);
         });
         
@@ -1761,24 +1758,11 @@ function checkForNewOrders(orders) {
     }
 }
 
-// Show notification
+// Show notification (now only adds to notification panel, no pop-up)
 function showNotification(title, message, isError = false) {
-    let notification = document.getElementById('notification');
-    
-    if (!notification) {
-        notification = document.createElement('div');
-        notification.id = 'notification';
-        notification.className = 'notification hidden';
-        document.body.appendChild(notification);
-    }
-    
-    notification.innerHTML = `<strong>${title}</strong>: ${message}`;
-    notification.className = `notification ${isError ? 'error' : 'success'}`;
-    notification.classList.remove('hidden');
-    
-    setTimeout(() => {
-        notification.classList.add('hidden');
-    }, 5000);
+    // Add to notification panel instead of showing pop-up
+    const type = isError ? 'error' : 'success';
+    addNotification(title, message, type);
 }
 
 // Show browser notification

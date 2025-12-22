@@ -507,46 +507,9 @@ body {
     font-weight: 500;
 }
 
-/* Notification - Modern Toast */
+/* Notification - Modern Toast (removed - using notification panel only) */
 .notification {
-    position: fixed;
-    top: 24px;
-    right: 24px;
-    background: #ffffff;
-    color: #1e293b;
-    padding: 16px 24px;
-    border-radius: 12px;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
-    z-index: 1000;
-    animation: slideInRight 0.3s ease-out;
-    max-width: 400px;
-    border: 1px solid #e2e8f0;
-    border-left: 4px solid #3b82f6;
-}
-
-.notification.hidden {
-    display: none;
-}
-
-.notification.error {
-    border-left-color: #ef4444;
-    background: #fef2f2;
-}
-
-.notification.success {
-    border-left-color: #10b981;
-    background: #f0fdf4;
-}
-
-@keyframes slideInRight {
-    from {
-        transform: translateX(400px);
-        opacity: 0;
-    }
-    to {
-        transform: translateX(0);
-        opacity: 1;
-    }
+    display: none; /* Disabled - notifications only in panel */
 }
 
 /* Action buttons in table */
