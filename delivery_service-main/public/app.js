@@ -561,9 +561,16 @@ function initializeOrdersPage() {
     // Setup status tabs
     document.querySelectorAll('.status-tab').forEach(tab => {
         tab.addEventListener('click', (e) => {
+            // Remove active class from all tabs
             document.querySelectorAll('.status-tab').forEach(t => t.classList.remove('active'));
+            // Add active class to clicked tab
             e.target.classList.add('active');
-            currentStatusFilter = e.target.dataset.status;
+            
+            // Get status from data attribute or text content
+            const status = e.target.dataset.status || e.target.textContent.trim().toLowerCase();
+            currentStatusFilter = status;
+            
+            // Filter and display orders
             filterAndDisplayOrders();
         });
     });
@@ -2241,22 +2248,23 @@ function filterAndDisplayOrders() {
     // Apply status filter
     if (currentStatusFilter && currentStatusFilter !== 'current') {
         const statusMap = {
-            'scheduled': ['SCHEDULED'],
-            'completed': ['DELIVERED'],
-            'incomplete': ['CANCELLED', 'FAILED'],
-            'history': ['DELIVERED', 'CANCELLED']
+            'scheduled': ['SCHEDULED', 'SCHEDULE'],
+            'completed': ['DELIVERED', 'COMPLETED', 'FULFILLED'],
+            'incomplete': ['CANCELLED', 'FAILED', 'REJECTED', 'CANCELED'],
+            'history': ['DELIVERED', 'COMPLETED', 'CANCELLED', 'CANCELED', 'FAILED']
         };
         
         if (statusMap[currentStatusFilter]) {
-            filtered = filtered.filter(order => 
-                statusMap[currentStatusFilter].includes(order.status?.toUpperCase())
-            );
+            filtered = filtered.filter(order => {
+                const status = (order.status || '').toUpperCase();
+                return statusMap[currentStatusFilter].includes(status);
+            });
         }
     } else if (currentStatusFilter === 'current') {
-        // Current = all active orders (not delivered or cancelled)
+        // Current = all active orders (not delivered, completed, or cancelled)
         filtered = filtered.filter(order => {
-            const status = order.status?.toUpperCase();
-            return status && !['DELIVERED', 'CANCELLED'].includes(status);
+            const status = (order.status || '').toUpperCase();
+            return status && !['DELIVERED', 'COMPLETED', 'CANCELLED', 'CANCELED', 'FAILED'].includes(status);
         });
     }
     
@@ -2269,7 +2277,8 @@ function filterAndDisplayOrders() {
                 order.customer_phone,
                 order.customer_email,
                 order.delivery_address,
-                order.status
+                order.status,
+                order.merchant_name || order.store_id
             ].join(' ').toLowerCase();
             
             return searchableText.includes(searchQuery);
@@ -2343,14 +2352,68 @@ function createOrderRow(order) {
     const orderId = order.gloriafood_order_id || order.id || 'N/A';
     const status = (order.status || 'UNKNOWN').toUpperCase();
     const customerName = escapeHtml(order.customer_name || 'N/A');
-    const customerAddress = escapeHtml(order.delivery_address || 'N/A');
+    const customerAddress = escapeHtml(order.delivery_address || order.customer_address || 'N/A');
     const merchantName = escapeHtml(order.merchant_name || order.store_id || 'N/A');
     const amount = formatCurrency(order.total_price || 0, order.currency || 'USD');
     const orderPlaced = formatDate(order.fetched_at || order.created_at || order.updated_at);
-    const pickupTime = order.pickup_time ? formatDate(order.pickup_time) : 'N/A';
-    const deliveryTime = order.delivery_time ? formatDate(order.delivery_time) : 'N/A';
-    const readyForPickup = order.ready_for_pickup ? formatDate(order.ready_for_pickup) : 'N/A';
-    const driver = order.driver_name || 'N/A';
+    
+    // Extract fields from raw_data if available
+    let rawData = {};
+    try {
+        if (order.raw_data) {
+            rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+        }
+    } catch (e) {
+        console.error('Error parsing raw_data:', e);
+    }
+    
+    // Get pickup time from various possible fields
+    const pickupTime = order.pickup_time || 
+                      order.pickupTime || 
+                      rawData.pickup_time || 
+                      rawData.pickupTime || 
+                      rawData.requested_pickup_time ||
+                      rawData.requestedPickupTime ||
+                      rawData.scheduled_pickup_time ||
+                      null;
+    
+    // Get delivery time from various possible fields
+    const deliveryTime = order.delivery_time || 
+                        order.deliveryTime || 
+                        rawData.delivery_time || 
+                        rawData.deliveryTime || 
+                        rawData.requested_delivery_time ||
+                        rawData.requestedDeliveryTime ||
+                        rawData.scheduled_delivery_time ||
+                        null;
+    
+    // Get ready for pickup time
+    const readyForPickup = order.ready_for_pickup || 
+                           order.readyForPickup || 
+                           rawData.ready_for_pickup || 
+                           rawData.readyForPickup ||
+                           rawData.ready_for_pick_up ||
+                           rawData.readyForPickUp ||
+                           null;
+    
+    // Get driver name from various possible fields
+    const driver = order.driver_name || 
+                  order.driverName || 
+                  order.driver || 
+                  rawData.driver_name || 
+                  rawData.driverName || 
+                  rawData.driver ||
+                  rawData.assigned_driver ||
+                  rawData.assignedDriver ||
+                  (rawData.delivery && rawData.delivery.driver_name) ||
+                  null;
+    
+    // Format times
+    const formattedPickupTime = pickupTime ? formatDate(pickupTime) : 'N/A';
+    const formattedDeliveryTime = deliveryTime ? formatDate(deliveryTime) : 'N/A';
+    const formattedReadyForPickup = readyForPickup ? formatDate(readyForPickup) : 'N/A';
+    const formattedDriver = driver ? escapeHtml(String(driver)) : 'N/A';
+    
     const tracking = order.doordash_tracking_url 
         ? `<a href="${escapeHtml(order.doordash_tracking_url)}" target="_blank" style="color: #22c55e; text-decoration: underline;">Track</a>`
         : 'N/A';
@@ -2361,17 +2424,17 @@ function createOrderRow(order) {
                 <input type="checkbox" class="order-checkbox" value="${escapeHtml(String(orderId))}">
             </td>
             <td><strong>#${escapeHtml(String(orderId))}</strong></td>
-            <td><span style="color: #3b82f6; font-weight: 500;">${merchantName}</span></td>
             <td>${customerName}</td>
+            <td><span style="color: #3b82f6; font-weight: 500;">${merchantName}</span></td>
             <td>${customerAddress}</td>
             <td>${amount}</td>
             <td>${order.distance ? order.distance + ' km' : 'N/A'}</td>
             <td>${orderPlaced}</td>
-            <td>${pickupTime}</td>
-            <td>${deliveryTime}</td>
-            <td>${readyForPickup}</td>
-            <td>${escapeHtml(driver)}</td>
-            <td><span class="status-badge status-${status}">${escapeHtml(status)}</span></td>
+            <td>${formattedPickupTime}</td>
+            <td>${formattedDeliveryTime}</td>
+            <td>${formattedReadyForPickup}</td>
+            <td>${formattedDriver}</td>
+            <td><span class="status-badge status-${status.toLowerCase()}">${escapeHtml(status)}</span></td>
             <td>${tracking}</td>
         </tr>
     `;
