@@ -152,8 +152,14 @@ function setupDashboardUI() {
         newOrderBtn.addEventListener('click', handleNewOrder);
     }
     
+    // Profile button
+    const profileBtn = document.getElementById('profileBtn');
+    if (profileBtn) {
+        profileBtn.addEventListener('click', handleProfile);
+    }
+    
     // Notifications button
-    const notificationsBtn = document.querySelector('.icon-btn[title="Notifications"]');
+    const notificationsBtn = document.getElementById('notificationsBtn');
     if (notificationsBtn) {
         notificationsBtn.addEventListener('click', handleNotifications);
     }
@@ -285,10 +291,16 @@ function setupAuth() {
     const logoutBtn = document.getElementById('logoutBtn');
     if (logoutBtn) {
         logoutBtn.addEventListener('click', async () => {
-        try {
-            await authenticatedFetch(`${API_BASE}/api/auth/logout`, {
-                method: 'POST'
-            });
+            // Show confirmation dialog
+            const confirmed = confirm('Are you sure you want to log out?');
+            if (!confirmed) {
+                return;
+            }
+            
+            try {
+                await authenticatedFetch(`${API_BASE}/api/auth/logout`, {
+                    method: 'POST'
+                });
             } catch (error) {
                 console.error('Logout error:', error);
             }
@@ -1056,9 +1068,163 @@ function handleNewOrder() {
     });
 }
 
+// Notification storage
+let notifications = [];
+
 // Handle Notifications button
 function handleNotifications() {
-    showNotification('Notifications', 'You have no new notifications');
+    const panel = document.getElementById('notificationsPanel');
+    if (panel) {
+        if (panel.classList.contains('hidden')) {
+            panel.classList.remove('hidden');
+        } else {
+            panel.classList.add('hidden');
+        }
+    } else {
+        createNotificationsPanel();
+    }
+}
+
+// Create notifications panel
+function createNotificationsPanel() {
+    // Remove existing panel if any
+    const existing = document.getElementById('notificationsPanel');
+    if (existing) {
+        existing.remove();
+    }
+    
+    const panel = document.createElement('div');
+    panel.id = 'notificationsPanel';
+    panel.className = 'notifications-panel';
+    
+    panel.innerHTML = `
+        <div class="notifications-header">
+            <h3>Notifications</h3>
+            <div class="notifications-actions">
+                <button class="clear-all-btn" id="clearAllNotifications">Clear All</button>
+                <button class="close-notifications-btn" id="closeNotificationsPanel">×</button>
+            </div>
+        </div>
+        <div class="notifications-list" id="notificationsList">
+            ${notifications.length === 0 ? '<div class="no-notifications">No notifications</div>' : ''}
+        </div>
+    `;
+    
+    document.body.appendChild(panel);
+    
+    // Render notifications
+    renderNotifications();
+    
+    // Setup event listeners
+    document.getElementById('clearAllNotifications')?.addEventListener('click', clearAllNotifications);
+    document.getElementById('closeNotificationsPanel')?.addEventListener('click', () => {
+        panel.classList.add('hidden');
+    });
+    
+    // Close when clicking outside
+    document.addEventListener('click', function closeOnOutsideClick(e) {
+        if (!panel.contains(e.target) && !e.target.closest('#notificationsBtn')) {
+            panel.classList.add('hidden');
+            document.removeEventListener('click', closeOnOutsideClick);
+        }
+    });
+}
+
+// Add notification to list
+function addNotification(title, message, type = 'info', orderId = null) {
+    const notification = {
+        id: Date.now(),
+        title,
+        message,
+        type,
+        orderId,
+        timestamp: new Date()
+    };
+    
+    notifications.unshift(notification); // Add to beginning
+    
+    // Keep only last 50 notifications
+    if (notifications.length > 50) {
+        notifications = notifications.slice(0, 50);
+    }
+    
+    // Update panel if it exists
+    const panel = document.getElementById('notificationsPanel');
+    if (panel && !panel.classList.contains('hidden')) {
+        renderNotifications();
+    }
+    
+    // Update notification badge
+    updateNotificationBadge();
+}
+
+// Render notifications in panel
+function renderNotifications() {
+    const list = document.getElementById('notificationsList');
+    if (!list) return;
+    
+    if (notifications.length === 0) {
+        list.innerHTML = '<div class="no-notifications">No notifications</div>';
+        return;
+    }
+    
+    list.innerHTML = notifications.map(notif => `
+        <div class="notification-item ${notif.type}" data-id="${notif.id}">
+            <div class="notification-content">
+                <div class="notification-title">${notif.title}</div>
+                <div class="notification-message">${notif.message}</div>
+                <div class="notification-time">${formatNotificationTime(notif.timestamp)}</div>
+            </div>
+            <button class="remove-notification-btn" onclick="removeNotification(${notif.id})">×</button>
+        </div>
+    `).join('');
+}
+
+// Remove single notification
+window.removeNotification = function(id) {
+    notifications = notifications.filter(n => n.id !== id);
+    renderNotifications();
+    updateNotificationBadge();
+};
+
+// Clear all notifications
+function clearAllNotifications() {
+    notifications = [];
+    renderNotifications();
+    updateNotificationBadge();
+    showNotification('Success', 'All notifications cleared');
+}
+
+// Format notification time
+function formatNotificationTime(timestamp) {
+    const now = new Date();
+    const time = new Date(timestamp);
+    const diff = now - time;
+    
+    if (diff < 60000) return 'Just now';
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+    return time.toLocaleDateString();
+}
+
+// Update notification badge
+function updateNotificationBadge() {
+    const btn = document.getElementById('notificationsBtn');
+    if (!btn) return;
+    
+    const count = notifications.length;
+    let badge = btn.querySelector('.notification-badge');
+    
+    if (count > 0) {
+        if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'notification-badge';
+            btn.appendChild(badge);
+        }
+        badge.textContent = count > 99 ? '99+' : count;
+    } else if (badge) {
+        badge.remove();
+    }
 }
 
 // Handle Help button
@@ -1072,8 +1238,7 @@ function handleHelp() {
         <p><strong>Status Tabs:</strong> Filter orders by status (Current, Scheduled, Completed, etc.)</p>
         <p style="margin-top: 20px;"><strong>Need more help?</strong> Contact support at support@tekmax.com</p>
     `;
-    
-    alert(helpContent);
+    showNotification('Help', helpContent);
 }
 
 // Load orders
@@ -1269,11 +1434,16 @@ function checkForNewOrders(orders) {
     });
     
     if (newOrders.length > 0) {
-        // Show notification for each new order
+        // Add notification for each new order
         newOrders.forEach(order => {
             const orderId = order.gloriafood_order_id || order.id;
-            showNotification(`New Order #${orderId}`, 
-                `${order.customer_name || 'Customer'} - ${formatCurrency(order.total_price || 0, order.currency || 'USD')}`);
+            const message = `${order.customer_name || 'Customer'} - ${formatCurrency(order.total_price || 0, order.currency || 'USD')}`;
+            
+            // Add to notification panel
+            addNotification(`New Order #${orderId}`, message, 'info', orderId);
+            
+            // Show toast notification
+            showNotification(`New Order #${orderId}`, message);
             
             // Show browser notification
             showBrowserNotification(order);
