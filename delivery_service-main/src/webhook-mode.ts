@@ -1072,7 +1072,8 @@ class GloriaFoodWebhookServer {
         user: {
           id: session.userId,
           email: session.email
-        }
+        },
+        sessionId: sessionId
       });
     });
 

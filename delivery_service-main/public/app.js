@@ -12,66 +12,241 @@ if ('Notification' in window && Notification.permission === 'default') {
     Notification.requestPermission();
 }
 
+// Authentication state
+let currentUser = null;
+let sessionId = null;
+
+// Get session ID from localStorage
+function getSessionId() {
+    return localStorage.getItem('sessionId');
+}
+
+// Save session ID to localStorage
+function saveSessionId(sessionId) {
+    if (sessionId) {
+        localStorage.setItem('sessionId', sessionId);
+    } else {
+        localStorage.removeItem('sessionId');
+    }
+}
+
+// Helper function for authenticated fetch requests
+function authenticatedFetch(url, options = {}) {
+    const sessionId = getSessionId();
+    const headers = {
+        'Content-Type': 'application/json',
+        ...(options.headers || {})
+    };
+    
+    if (sessionId) {
+        headers['X-Session-Id'] = sessionId;
+    }
+    
+    return fetch(url, {
+        ...options,
+        headers: headers,
+        credentials: 'include'
+    });
+}
+
+// Check authentication on page load
+async function checkAuth() {
+    const savedSessionId = getSessionId();
+    if (!savedSessionId) {
+        showLogin();
+        return false;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/api/auth/me`, {
+            method: 'GET',
+            headers: {
+                'X-Session-Id': savedSessionId
+            },
+            credentials: 'include'
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.user) {
+                currentUser = data.user;
+                sessionId = savedSessionId;
+                showDashboard();
+                return true;
+            }
+        }
+    } catch (error) {
+        console.log('Not authenticated:', error);
+    }
+    
+    // Clear invalid session
+    saveSessionId(null);
+    showLogin();
+    return false;
+}
+
+// Show login screen
+function showLogin() {
+    const authContainer = document.getElementById('authContainer');
+    const dashboardContainer = document.getElementById('dashboardContainer');
+    
+    if (authContainer) authContainer.classList.remove('hidden');
+    if (dashboardContainer) dashboardContainer.classList.add('hidden');
+}
+
+// Show dashboard
+function showDashboard() {
+    const authContainer = document.getElementById('authContainer');
+    const dashboardContainer = document.getElementById('dashboardContainer');
+    
+    if (authContainer) authContainer.classList.add('hidden');
+    if (dashboardContainer) dashboardContainer.classList.remove('hidden');
+    
+    // Setup UI elements when dashboard is shown
+    setupDashboardUI();
+    
+    // Load orders when dashboard is shown
+    loadOrders();
+    
+    // Start auto-refresh only when authenticated
+    startAutoRefresh();
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    loadOrders();
+    // Setup authentication handlers first
+    setupAuth();
     
     // Setup navigation links
     setupNavigation();
     
-    // Setup status tabs
-    document.querySelectorAll('.status-tab').forEach(tab => {
-        tab.addEventListener('click', (e) => {
-            // Remove active class from all tabs
-            document.querySelectorAll('.status-tab').forEach(t => t.classList.remove('active'));
-            // Add active class to clicked tab
-            e.target.classList.add('active');
-            
-            const status = e.target.dataset.status;
-            currentStatusFilter = status;
-            filterAndDisplayOrders();
-        });
-    });
-    
-    // Setup search
-    const searchInput = document.getElementById('searchInput');
-    if (searchInput) {
-        searchInput.addEventListener('input', (e) => {
-            searchQuery = e.target.value.toLowerCase();
-            filterAndDisplayOrders();
-        });
-    }
-    
-    // Setup select all checkbox
-    const selectAllCheckbox = document.querySelector('.select-all-checkbox');
-    if (selectAllCheckbox) {
-        selectAllCheckbox.addEventListener('change', (e) => {
-            const checkboxes = document.querySelectorAll('.order-checkbox');
-            checkboxes.forEach(cb => cb.checked = e.target.checked);
-        });
-    }
-    
-    // New order button
-    const newOrderBtn = document.getElementById('newOrderBtn');
-    if (newOrderBtn) {
-        newOrderBtn.addEventListener('click', handleNewOrder);
-    }
-    
-    // Notifications button
-    const notificationsBtn = document.querySelector('.icon-btn[title="Notifications"]');
-    if (notificationsBtn) {
-        notificationsBtn.addEventListener('click', handleNotifications);
-    }
-    
-    // Help button
-    const helpBtn = document.querySelector('.icon-btn[title="Help"]');
-    if (helpBtn) {
-        helpBtn.addEventListener('click', handleHelp);
-    }
-    
-    // Start auto-refresh
-    startAutoRefresh();
+    // Check authentication - this will show login or dashboard
+    checkAuth();
 });
+
+// Setup authentication handlers
+function setupAuth() {
+    // Login form
+    const loginForm = document.getElementById('loginFormElement');
+    if (loginForm) {
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('loginEmail')?.value;
+            const password = document.getElementById('loginPassword')?.value;
+            
+            if (!email || !password) {
+                showError('Please enter email and password');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success && data.user) {
+                    currentUser = data.user;
+                    sessionId = data.sessionId;
+                    saveSessionId(data.sessionId);
+                    showNotification('Success', 'Login successful!');
+                    showDashboard();
+                } else {
+                    showError(data.error || 'Invalid email or password');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                showError('Error connecting to server: ' + error.message);
+            }
+        });
+    }
+    
+    // Signup form
+    const signupForm = document.getElementById('signupFormElement');
+    if (signupForm) {
+        signupForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('signupName')?.value;
+            const email = document.getElementById('signupEmail')?.value;
+            const password = document.getElementById('signupPassword')?.value;
+            
+            if (!name || !email || !password) {
+                showError('Please fill in all fields');
+                return;
+            }
+            
+            if (password.length < 6) {
+                showError('Password must be at least 6 characters');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/signup`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password, fullName: name })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success && data.user) {
+                    currentUser = data.user;
+                    sessionId = data.sessionId;
+                    saveSessionId(data.sessionId);
+                    showNotification('Success', 'Account created successfully!');
+                    showDashboard();
+                } else {
+                    showError(data.error || 'Failed to create account');
+                }
+            } catch (error) {
+                console.error('Signup error:', error);
+                showError('Error connecting to server: ' + error.message);
+            }
+        });
+    }
+    
+    // Show signup form
+    const showSignupLink = document.getElementById('showSignup');
+    if (showSignupLink) {
+        showSignupLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            document.getElementById('loginForm')?.classList.remove('active');
+            document.getElementById('signupForm')?.classList.add('active');
+        });
+    }
+    
+    // Show login form
+    const showLoginLink = document.getElementById('showLogin');
+    if (showLoginLink) {
+        showLoginLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            document.getElementById('signupForm')?.classList.remove('active');
+            document.getElementById('loginForm')?.classList.add('active');
+        });
+    }
+    
+    // Logout button
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', async () => {
+        try {
+            await authenticatedFetch(`${API_BASE}/api/auth/logout`, {
+                method: 'POST'
+            });
+            } catch (error) {
+                console.error('Logout error:', error);
+            }
+            
+            currentUser = null;
+            sessionId = null;
+            saveSessionId(null);
+            showLogin();
+        });
+    }
+}
 
 // Setup navigation links
 function setupNavigation() {
@@ -515,7 +690,7 @@ function initializeMerchantsPage() {
 // Load merchants from API
 async function loadMerchants() {
     try {
-        const response = await fetch(`${API_BASE}/merchants`);
+        const response = await authenticatedFetch(`${API_BASE}/merchants`);
         const data = await response.json();
         
         if (data.success) {
@@ -660,9 +835,8 @@ async function handleMerchantSubmit(e) {
         let response;
         if (editingStoreId) {
             // Update existing merchant
-            response = await fetch(`${API_BASE}/merchants/${editingStoreId}`, {
+            response = await authenticatedFetch(`${API_BASE}/merchants/${editingStoreId}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(merchantData)
             });
         } else {
@@ -671,9 +845,8 @@ async function handleMerchantSubmit(e) {
                 showError('API Key is required when creating a new merchant');
                 return;
             }
-            response = await fetch(`${API_BASE}/merchants`, {
+            response = await authenticatedFetch(`${API_BASE}/merchants`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(merchantData)
             });
         }
@@ -696,7 +869,7 @@ async function handleMerchantSubmit(e) {
 // Edit merchant
 async function editMerchant(storeId) {
     try {
-        const response = await fetch(`${API_BASE}/merchants/${storeId}`);
+        const response = await authenticatedFetch(`${API_BASE}/merchants/${storeId}`);
         const data = await response.json();
         
         if (data.success && data.merchant) {
@@ -717,7 +890,7 @@ async function deleteMerchant(storeId, merchantName) {
     }
     
     try {
-        const response = await fetch(`${API_BASE}/merchants/${storeId}`, {
+        const response = await authenticatedFetch(`${API_BASE}/merchants/${storeId}`, {
             method: 'DELETE'
         });
         
@@ -857,7 +1030,7 @@ async function loadOrders() {
         
         console.log('Fetching orders from:', url);
         
-        const response = await fetch(url);
+        const response = await authenticatedFetch(url);
         
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
@@ -1152,7 +1325,7 @@ async function deleteOrder(orderId) {
     }
     
     try {
-        const response = await fetch(`${API_BASE}/orders/${orderId}`, {
+        const response = await authenticatedFetch(`${API_BASE}/orders/${orderId}`, {
             method: 'DELETE'
         });
         
