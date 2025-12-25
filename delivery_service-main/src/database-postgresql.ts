@@ -65,14 +65,31 @@ export class OrderDatabasePostgreSQL {
       };
     } else {
       // Get config from environment or use defaults
+      let host = config?.host || process.env.DB_HOST || 'localhost';
+      
+      // Fix Render PostgreSQL hostname if incomplete (missing domain)
+      // Render hostnames like "dpg-xxxxx-a" need ".render.com" suffix
+      if (host && host.startsWith('dpg-') && !host.includes('.')) {
+        console.log(chalk.yellow(`   ⚠️  Incomplete hostname detected: ${host}`));
+        console.log(chalk.yellow(`   💡 Adding .render.com suffix for Render PostgreSQL...`));
+        host = `${host}.render.com`;
+        console.log(chalk.green(`   ✅ Using hostname: ${host}`));
+      }
+      
       this.config = {
-        host: config?.host || process.env.DB_HOST || 'localhost',
+        host: host,
         port: config?.port || parseInt(process.env.DB_PORT || '5432'),
         user: config?.user || process.env.DB_USER || 'postgres',
         password: config?.password || process.env.DB_PASSWORD || '',
         database: config?.database || process.env.DB_NAME || 'gloriafood_orders',
         ssl: process.env.DB_SSL === 'true' || process.env.DB_SSL === '1' || config?.ssl || false,
       };
+
+      // For Render PostgreSQL, always use SSL
+      if (this.config.host.includes('.render.com')) {
+        this.config.ssl = true;
+        console.log(chalk.blue('   🔒 SSL enabled for Render PostgreSQL connection'));
+      }
 
       // Create connection pool
       this.pool = new Pool({
@@ -208,7 +225,16 @@ export class OrderDatabasePostgreSQL {
     } catch (error: any) {
       console.error('❌ Error initializing database tables:', error);
       console.error(`   Error message: ${error.message}`);
-      if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
+      if (error.code === 'ENOTFOUND' || error.message.includes('getaddrinfo ENOTFOUND')) {
+        console.error('   ⚠️  Cannot resolve database hostname!');
+        console.error('   💡 For Render PostgreSQL, use one of these options:');
+        console.error('      Option 1 (Recommended): Set DATABASE_URL environment variable');
+        console.error('         DATABASE_URL=postgresql://user:password@host:5432/dbname');
+        console.error('      Option 2: Use full hostname with .render.com suffix');
+        console.error('         DB_HOST=dpg-xxxxx-a.render.com');
+        console.error('      Option 3: Use connection pooler hostname from Render dashboard');
+        console.error('   📝 Check your Render PostgreSQL dashboard for the correct connection details.');
+      } else if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
         console.error('   ⚠️  Cannot connect to PostgreSQL. Check your connection settings!');
         console.error('   ⚠️  Make sure the database host is accessible and credentials are correct.');
       } else if (error.code === '3D000') {
