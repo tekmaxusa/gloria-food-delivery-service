@@ -40,21 +40,66 @@ export class OrderDatabasePostgreSQL {
 
   constructor(config?: Partial<PostgreSQLConfig>) {
     // Check if DATABASE_URL is provided (common in cloud platforms like Render)
-    // DATABASE_URL is ALWAYS preferred for Render PostgreSQL
     const databaseUrl = process.env.DATABASE_URL;
     
     if (databaseUrl) {
       // Use connection string (common in Render, Heroku, etc.)
-      console.log(chalk.green('   ✅ Using DATABASE_URL connection string (recommended for Render)'));
+      console.log('   Using DATABASE_URL connection string');
+      
+      // Fix incomplete Render PostgreSQL URLs
+      // Render sometimes provides URLs without port or domain
+      let fixedUrl = databaseUrl;
+      
+      // Check if it's a Render database (contains dpg-)
+      const isRenderDb = databaseUrl.includes('dpg-');
+      
+      if (isRenderDb) {
+        // Fix incomplete URLs like: postgresql://user:pass@dpg-xxxxx-a/dbname
+        // Should be: postgresql://user:pass@dpg-xxxxx-a-pooler.render.com:5432/dbname
+        
+        // Check if hostname is incomplete (no .render.com and no port)
+        const hostnameMatch = databaseUrl.match(/@(dpg-[^\/:]+)/);
+        if (hostnameMatch) {
+          const hostname = hostnameMatch[1];
+          
+          // If hostname doesn't have domain, add pooler domain and port
+          if (!hostname.includes('.render.com') && !hostname.includes('.')) {
+            const poolerHost = `${hostname}-pooler.render.com`;
+            // Replace @dpg-xxxxx-a/ with @dpg-xxxxx-a-pooler.render.com:5432/
+            fixedUrl = databaseUrl.replace(`@${hostname}/`, `@${poolerHost}:5432/`);
+            console.log(chalk.yellow(`   ⚠️  Incomplete hostname detected: ${hostname}`));
+            console.log(chalk.green(`   ✅ Fixed to: ${poolerHost}:5432`));
+          } else if (!databaseUrl.includes(':5432') && databaseUrl.includes('.render.com')) {
+            // Has domain but missing port - add port before database name
+            fixedUrl = databaseUrl.replace(/(@[^\/]+)\/([^?]+)/, '$1:5432/$2');
+            console.log(chalk.blue('   🔧 Added port :5432'));
+          }
+        }
+        
+        // Add SSL parameter if missing
+        if (!fixedUrl.includes('sslmode=') && !fixedUrl.includes('?ssl=')) {
+          const separator = fixedUrl.includes('?') ? '&' : '?';
+          fixedUrl = `${fixedUrl}${separator}sslmode=require`;
+          console.log(chalk.blue('   🔒 Added SSL parameter (sslmode=require)'));
+        }
+      }
+      
+      // For Render PostgreSQL, always enable SSL
+      const needsSSL = isRenderDb || 
+                       fixedUrl.includes('sslmode=require') || 
+                       fixedUrl.includes('ssl=true') ||
+                       fixedUrl.includes('?ssl=true');
+      
+      console.log(chalk.gray(`   Final connection string: ${fixedUrl.replace(/:[^:@]+@/, ':****@')}`));
+      
       this.pool = new Pool({
-        connectionString: databaseUrl,
-        ssl: databaseUrl.includes('sslmode=require') || databaseUrl.includes('ssl=true') || databaseUrl.includes('render.com')
-          ? { rejectUnauthorized: false } 
-          : false,
+        connectionString: fixedUrl,
+        ssl: needsSSL ? { rejectUnauthorized: false } : false,
         max: 10,
         idleTimeoutMillis: 30000,
         connectionTimeoutMillis: 30000, // Increased timeout for cloud databases
       });
+      
       // Set dummy config for logging
       this.config = {
         host: 'from-url',
@@ -65,31 +110,32 @@ export class OrderDatabasePostgreSQL {
         ssl: true
       };
     } else {
-      // Warn if using individual variables instead of DATABASE_URL
-      console.log(chalk.yellow('   ⚠️  DATABASE_URL not set - using individual environment variables'));
-      console.log(chalk.yellow('   💡 For Render PostgreSQL, DATABASE_URL is recommended!'));
-      console.log(chalk.gray('   💡 Get it from: Render Dashboard → PostgreSQL → Internal Database URL'));
+      // Warn if DATABASE_URL is not set (especially for Render)
+      if (process.env.DB_HOST && process.env.DB_HOST.includes('dpg-')) {
+        console.log(chalk.red(`   ⚠️  WARNING: DATABASE_URL is not set!`));
+        console.log(chalk.yellow(`   💡 For Render PostgreSQL, DATABASE_URL is REQUIRED and more reliable.`));
+        console.log(chalk.yellow(`   📝 Get it from: Render Dashboard → PostgreSQL → "Internal Database URL"`));
+        console.log(chalk.gray(`   ⏳ Attempting connection with individual variables (may fail)...`));
+      }
       
       // Get config from environment or use defaults
       let host = config?.host || process.env.DB_HOST || 'localhost';
       
       // Fix Render PostgreSQL hostname if incomplete (missing domain)
-      // Render hostnames like "dpg-xxxxx-a" need ".render.com" suffix
-      // BUT: Render also uses connection poolers with different formats
+      // Render hostnames like "dpg-xxxxx-a" need connection pooler format
       if (host && host.startsWith('dpg-') && !host.includes('.')) {
         console.log(chalk.yellow(`   ⚠️  Incomplete hostname detected: ${host}`));
-        console.log(chalk.yellow(`   💡 Attempting to add .render.com suffix...`));
-        console.log(chalk.yellow(`   ⚠️  WARNING: This may not work if database doesn't exist or uses different format!`));
-        console.log(chalk.yellow(`   💡 RECOMMENDED: Use DATABASE_URL from Render dashboard instead!`));
-        host = `${host}.render.com`;
+        console.log(chalk.yellow(`   💡 Trying connection pooler format for Render PostgreSQL...`));
+        // Try pooler format first (more reliable for Render)
+        host = `${host}-pooler.render.com`;
         console.log(chalk.green(`   ✅ Using hostname: ${host}`));
-      }
-      
-      // Check for connection pooler format (Render uses these for better performance)
-      // Format: dpg-xxxxx-a.oregon-postgres.render.com or similar
-      if (host && host.includes('render.com') && !host.includes('pooler')) {
-        console.log(chalk.blue('   💡 Tip: Consider using connection pooler for better performance'));
-        console.log(chalk.gray('   💡 Check Render dashboard for "Connection Pooling" option'));
+        console.log(chalk.gray(`   💡 If this fails, use DATABASE_URL from Render dashboard instead`));
+      } else if (host && host.includes('dpg-') && host.includes('.render.com') && !host.includes('pooler')) {
+        // If direct hostname doesn't work, try pooler
+        console.log(chalk.yellow(`   ⚠️  Direct hostname detected. Trying pooler format...`));
+        const poolerHost = host.replace('.render.com', '-pooler.render.com');
+        console.log(chalk.blue(`   🔄 Switching to pooler: ${poolerHost}`));
+        host = poolerHost;
       }
       
       this.config = {
@@ -127,9 +173,27 @@ export class OrderDatabasePostgreSQL {
   private async initializeTables(): Promise<void> {
     try {
       console.log('🔌 Connecting to PostgreSQL database...');
-      console.log(`   Host: ${this.config.host}:${this.config.port}`);
-      console.log(`   Database: ${this.config.database}`);
-      console.log(`   User: ${this.config.user}`);
+      
+      // If using DATABASE_URL, show that we're using it (don't show credentials)
+      if (this.config.host === 'from-url') {
+        console.log('   Using DATABASE_URL connection string');
+        const dbUrl = process.env.DATABASE_URL || '';
+        if (dbUrl) {
+          // Show hostname from URL without credentials
+          try {
+            const url = new URL(dbUrl.replace('postgresql://', 'http://'));
+            console.log(`   Host: ${url.hostname}:${url.port || '5432'}`);
+            console.log(`   Database: ${url.pathname.replace('/', '') || 'default'}`);
+            console.log(`   User: ${url.username || 'default'}`);
+          } catch (e) {
+            console.log('   Connection string format detected');
+          }
+        }
+      } else {
+        console.log(`   Host: ${this.config.host}:${this.config.port}`);
+        console.log(`   Database: ${this.config.database}`);
+        console.log(`   User: ${this.config.user}`);
+      }
       
       const client = await this.pool.connect();
       console.log('✅ PostgreSQL connection successful!');
@@ -242,21 +306,20 @@ export class OrderDatabasePostgreSQL {
       console.error('❌ Error initializing database tables:', error);
       console.error(`   Error message: ${error.message}`);
       if (error.code === 'ENOTFOUND' || error.message.includes('getaddrinfo ENOTFOUND')) {
-        console.error(chalk.red.bold('\n   ⚠️  CRITICAL: Cannot resolve database hostname!'));
-        console.error(chalk.yellow('   🔍 This usually means:'));
-        console.error(chalk.yellow('      1. Database doesn\'t exist or was deleted'));
-        console.error(chalk.yellow('      2. Hostname format is incorrect'));
-        console.error(chalk.yellow('      3. Database is in a different region'));
-        console.error(chalk.yellow('\n   ✅ SOLUTION: Use DATABASE_URL from Render Dashboard'));
-        console.error(chalk.green('\n   📋 Steps to Fix:'));
-        console.error(chalk.green('      1. Go to Render Dashboard → Your PostgreSQL Database'));
-        console.error(chalk.green('      2. Click "Connect" or look for "Internal Database URL"'));
-        console.error(chalk.green('      3. Copy the ENTIRE connection string'));
-        console.error(chalk.green('      4. Set it as DATABASE_URL in your Web Service environment variables'));
-        console.error(chalk.green('         Example: DATABASE_URL=postgresql://user:pass@host:5432/dbname'));
-        console.error(chalk.gray('\n   💡 The Internal Database URL is the correct one for Render services'));
-        console.error(chalk.gray('   💡 It includes the correct hostname, credentials, and SSL settings'));
-        console.error(chalk.gray('   💡 Format: postgresql://user:password@dpg-xxxxx-a.region-postgres.render.com:5432/dbname'));
+        console.error('   ⚠️  Cannot resolve database hostname!');
+        console.error('   💡 For Render PostgreSQL, you MUST use DATABASE_URL (recommended):');
+        console.error('      Step 1: Go to Render Dashboard → Your PostgreSQL Database');
+        console.error('      Step 2: Find "Internal Database URL" (for Render services)');
+        console.error('      Step 3: Copy the entire connection string');
+        console.error('      Step 4: Set as environment variable:');
+        console.error('         DATABASE_URL=postgresql://user:password@host:5432/dbname');
+        console.error('');
+        console.error('   📝 Alternative: Use connection pooler hostname:');
+        console.error('      DB_HOST=dpg-xxxxx-a-pooler.render.com');
+        console.error('      (Replace xxxxx with your actual database ID)');
+        console.error('');
+        console.error('   ⚠️  Direct hostnames (dpg-xxxxx-a.render.com) may not work.');
+        console.error('   ✅ Always use DATABASE_URL or connection pooler for Render PostgreSQL.');
       } else if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
         console.error('   ⚠️  Cannot connect to PostgreSQL. Check your connection settings!');
         console.error('   ⚠️  Make sure the database host is accessible and credentials are correct.');
