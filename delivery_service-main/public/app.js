@@ -2242,30 +2242,102 @@ async function loadOrders() {
     }
 }
 
+// Helper function to check if order has scheduled delivery time
+function hasScheduledDeliveryTime(order) {
+    let rawData = {};
+    try {
+        if (order.raw_data) {
+            rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+        }
+    } catch (e) {
+        // Ignore parsing errors
+    }
+    
+    // Check for scheduled delivery time in various possible fields
+    const scheduledTime = order.scheduled_delivery_time || 
+                         order.scheduledDeliveryTime ||
+                         order.delivery_time ||
+                         order.deliveryTime ||
+                         rawData.scheduled_delivery_time ||
+                         rawData.scheduledDeliveryTime ||
+                         rawData.delivery_time ||
+                         rawData.deliveryTime ||
+                         rawData.requested_delivery_time ||
+                         rawData.requestedDeliveryTime ||
+                         null;
+    
+    if (!scheduledTime) return false;
+    
+    // Check if scheduled time is in the future (not "as soon as possible")
+    try {
+        const scheduledDate = new Date(scheduledTime);
+        const orderDate = new Date(order.created_at || order.fetched_at || Date.now());
+        const now = new Date();
+        
+        // If scheduled time is more than 30 minutes in the future from order time, it's scheduled
+        // If scheduled time is in the past or very close (less than 30 min), it's "as soon as possible"
+        const timeDiff = scheduledDate.getTime() - orderDate.getTime();
+        const minutesDiff = timeDiff / (1000 * 60);
+        
+        // Scheduled if: time is in the future AND more than 30 minutes from order time
+        return scheduledDate > now && minutesDiff > 30;
+    } catch (e) {
+        return false;
+    }
+}
+
+// Helper function to get order category
+function getOrderCategory(order) {
+    const status = (order.status || '').toUpperCase();
+    const isCompleted = ['DELIVERED', 'COMPLETED', 'FULFILLED'].includes(status);
+    const isIncomplete = ['CANCELLED', 'FAILED', 'REJECTED', 'CANCELED'].includes(status);
+    const isScheduled = hasScheduledDeliveryTime(order) && !isCompleted && !isIncomplete;
+    
+    if (isCompleted) return 'completed';
+    if (isIncomplete) return 'incomplete';
+    if (isScheduled) return 'scheduled';
+    return 'current';
+}
+
 // Filter and display orders
 function filterAndDisplayOrders() {
     let filtered = [...allOrders];
     
     // Apply status filter
     if (currentStatusFilter && currentStatusFilter !== 'current') {
-        const statusMap = {
-            'scheduled': ['SCHEDULED', 'SCHEDULE'],
-            'completed': ['DELIVERED', 'COMPLETED', 'FULFILLED'],
-            'incomplete': ['CANCELLED', 'FAILED', 'REJECTED', 'CANCELED'],
-            'history': ['DELIVERED', 'COMPLETED', 'CANCELLED', 'CANCELED', 'FAILED']
-        };
-        
-        if (statusMap[currentStatusFilter]) {
+        if (currentStatusFilter === 'scheduled') {
+            // Scheduled = orders with scheduled delivery time that are not completed/incomplete
+            filtered = filtered.filter(order => {
+                const category = getOrderCategory(order);
+                return category === 'scheduled';
+            });
+        } else if (currentStatusFilter === 'completed') {
+            // Completed = delivered, completed, fulfilled orders
             filtered = filtered.filter(order => {
                 const status = (order.status || '').toUpperCase();
-                return statusMap[currentStatusFilter].includes(status);
+                return ['DELIVERED', 'COMPLETED', 'FULFILLED'].includes(status);
+            });
+        } else if (currentStatusFilter === 'incomplete') {
+            // Incomplete = cancelled, failed, rejected orders
+            filtered = filtered.filter(order => {
+                const status = (order.status || '').toUpperCase();
+                return ['CANCELLED', 'FAILED', 'REJECTED', 'CANCELED'].includes(status);
+            });
+        } else if (currentStatusFilter === 'history') {
+            // History = all completed and incomplete orders (old orders)
+            filtered = filtered.filter(order => {
+                const status = (order.status || '').toUpperCase();
+                return ['DELIVERED', 'COMPLETED', 'FULFILLED', 'CANCELLED', 'CANCELED', 'FAILED', 'REJECTED'].includes(status);
             });
         }
     } else if (currentStatusFilter === 'current') {
-        // Current = all active orders (not delivered, completed, or cancelled)
+        // Current = all active orders (not delivered, completed, or cancelled) AND not scheduled
         filtered = filtered.filter(order => {
             const status = (order.status || '').toUpperCase();
-            return status && !['DELIVERED', 'COMPLETED', 'CANCELLED', 'CANCELED', 'FAILED'].includes(status);
+            const isActive = status && !['DELIVERED', 'COMPLETED', 'CANCELLED', 'CANCELED', 'FAILED', 'REJECTED'].includes(status);
+            const isScheduled = hasScheduledDeliveryTime(order);
+            // Current = active orders that are NOT scheduled
+            return isActive && !isScheduled;
         });
     }
     
