@@ -3048,6 +3048,17 @@ function createOrderRow(order) {
     const status = (order.status || 'UNKNOWN').toUpperCase();
     const customerName = escapeHtml(order.customer_name || 'N/A');
     const customerAddress = escapeHtml(order.delivery_address || order.customer_address || 'N/A');
+    
+    // Extract fields from raw_data if available (MUST be done before using rawData)
+    let rawData = {};
+    try {
+        if (order.raw_data) {
+            rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+        }
+    } catch (e) {
+        console.error('Error parsing raw_data:', e);
+    }
+    
     // Use merchant_name from backend (already enriched), fallback to store_id only if not available
     // Also check raw_data for merchant/restaurant name
     let merchantName = order.merchant_name;
@@ -3061,23 +3072,13 @@ function createOrderRow(order) {
                       (rawData.merchant && rawData.merchant.name) ||
                       null;
     }
-    // Final fallback
+    // Final fallback - only show store_id number if no merchant name found
     if (!merchantName) {
         merchantName = order.store_id ? `Store ${order.store_id}` : 'N/A';
     }
     merchantName = escapeHtml(merchantName);
     const amount = formatCurrency(order.total_price || 0, order.currency || 'USD');
     const orderPlaced = formatDate(order.fetched_at || order.created_at || order.updated_at);
-    
-    // Extract fields from raw_data if available
-    let rawData = {};
-    try {
-        if (order.raw_data) {
-            rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
-        }
-    } catch (e) {
-        console.error('Error parsing raw_data:', e);
-    }
     
     // Get distance from various possible fields (more comprehensive)
     const distance = order.distance || 
