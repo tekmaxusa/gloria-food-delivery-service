@@ -44,6 +44,14 @@ body {
     object-fit: contain;
 }
 
+.tekmax-company-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: #0f172a;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, sans-serif;
+    letter-spacing: -0.3px;
+}
+
 .tekmax-text {
     font-size: 26px;
     font-weight: 700;
@@ -840,8 +848,30 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background-image: url('https://media.licdn.com/dms/image/v2/D560BAQHPtxnF-6ws_w/company-logo_200_200/company-logo_200_200/0/1730509053465/hellotekmax_logo?e=2147483647&v=beta&t=1Ztf8UScfnTQjphAVDFVwr9Ket7fhIUFP2PSz43nyJE');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    position: relative;
     padding: 20px;
+}
+
+/* Add overlay for better readability */
+.auth-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.85);
+    z-index: 0;
+}
+
+.auth-container > * {
+    position: relative;
+    z-index: 1;
 }
 
 .auth-box {
@@ -858,11 +888,26 @@ body {
     margin-bottom: 32px;
 }
 
+.auth-logo-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
 .auth-logo {
     width: 80px;
     height: 80px;
-    margin-bottom: 16px;
     border-radius: 12px;
+}
+
+.auth-company-name {
+    font-size: 28px;
+    font-weight: 700;
+    color: #0f172a;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, sans-serif;
+    letter-spacing: -0.5px;
 }
 
 .auth-header h1 {
