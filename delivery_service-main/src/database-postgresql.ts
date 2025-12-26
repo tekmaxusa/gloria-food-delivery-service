@@ -54,31 +54,38 @@ export class OrderDatabasePostgreSQL {
       const isRenderDb = databaseUrl.includes('dpg-');
       
       if (isRenderDb) {
-        // Fix incomplete URLs like: postgresql://user:pass@dpg-xxxxx-a/dbname
-        // Try direct connection format first (dpg-xxxxx-a.render.com), then pooler if needed
-        
-        // Check if hostname is incomplete (no .render.com and no port)
+        // Use Render Internal Database URL exactly as provided
+        // Only add missing port and SSL parameter if needed
         const hostnameMatch = databaseUrl.match(/@(dpg-[^\/:]+)/);
+        
         if (hostnameMatch) {
           const hostname = hostnameMatch[1];
           
-          // If hostname doesn't have domain, try direct connection format first
-          if (!hostname.includes('.render.com') && !hostname.includes('.')) {
-            // Try direct connection format: dpg-xxxxx-a.render.com (more common)
-            const directHost = `${hostname}.render.com`;
-            // Replace @dpg-xxxxx-a/ with @dpg-xxxxx-a.render.com:5432/
-            fixedUrl = databaseUrl.replace(`@${hostname}/`, `@${directHost}:5432/`);
-            console.log(chalk.yellow(`   ⚠️  Incomplete hostname detected: ${hostname}`));
-            console.log(chalk.green(`   ✅ Trying direct connection: ${directHost}:5432`));
-            console.log(chalk.gray(`   💡 If this fails, the database may need connection pooler enabled in Render`));
-          } else if (!databaseUrl.includes(':5432') && databaseUrl.includes('.render.com')) {
-            // Has domain but missing port - add port before database name
-            fixedUrl = databaseUrl.replace(/(@[^\/]+)\/([^?]+)/, '$1:5432/$2');
-            console.log(chalk.blue('   🔧 Added port :5432'));
+          // Add port if missing (before database name)
+          if (!databaseUrl.includes(':5432') && !databaseUrl.match(/@[^:]+:\d+\//)) {
+            fixedUrl = databaseUrl.replace(`@${hostname}/`, `@${hostname}:5432/`);
+            console.log(chalk.blue(`   🔧 Added port :5432 to connection string`));
+          }
+          
+          // Log hostname format
+          if (!hostname.includes('.')) {
+            console.log(chalk.yellow(`   ⚠️  Hostname without domain: ${hostname}`));
+            console.log(chalk.blue(`   💡 Trying as-is first (Render internal network format)`));
+            console.log(chalk.gray(`   💡 If this fails, will try with .render.com domain`));
+            
+            // Store original URL for fallback
+            const urlWithPort = fixedUrl;
+            
+            // If connection fails later, we'll try with domain
+            // For now, use as-is (Render internal network should resolve it)
+          } else if (hostname.includes('.render.com') && !hostname.includes('pooler')) {
+            console.log(chalk.blue(`   ✅ Using direct connection: ${hostname}`));
+          } else if (hostname.includes('pooler')) {
+            console.log(chalk.blue(`   ✅ Using connection pooler: ${hostname}`));
           }
         }
         
-        // Add SSL parameter if missing
+        // Add SSL parameter if missing (required for Render PostgreSQL)
         if (!fixedUrl.includes('sslmode=') && !fixedUrl.includes('?ssl=')) {
           const separator = fixedUrl.includes('?') ? '&' : '?';
           fixedUrl = `${fixedUrl}${separator}sslmode=require`;
@@ -173,31 +180,35 @@ export class OrderDatabasePostgreSQL {
   }
 
   private async initializeTables(): Promise<void> {
-    try {
-      console.log('🔌 Connecting to PostgreSQL database...');
-      
-      // If using DATABASE_URL, show that we're using it (don't show credentials)
-      if (this.config.host === 'from-url') {
-        console.log('   Using DATABASE_URL connection string');
-        const dbUrl = process.env.DATABASE_URL || '';
-        if (dbUrl) {
-          // Show hostname from URL without credentials
-          try {
-            const url = new URL(dbUrl.replace('postgresql://', 'http://'));
-            console.log(`   Host: ${url.hostname}:${url.port || '5432'}`);
-            console.log(`   Database: ${url.pathname.replace('/', '') || 'default'}`);
-            console.log(`   User: ${url.username || 'default'}`);
-          } catch (e) {
-            console.log('   Connection string format detected');
+    const maxRetries = 3;
+    let attempt = 0;
+    
+    while (attempt < maxRetries) {
+      try {
+        console.log('🔌 Connecting to PostgreSQL database...');
+        
+        // If using DATABASE_URL, show that we're using it (don't show credentials)
+        if (this.config.host === 'from-url') {
+          console.log('   Using DATABASE_URL connection string');
+          const dbUrl = process.env.DATABASE_URL || '';
+          if (dbUrl) {
+            // Show hostname from URL without credentials
+            try {
+              const url = new URL(dbUrl.replace('postgresql://', 'http://'));
+              console.log(`   Host: ${url.hostname}:${url.port || '5432'}`);
+              console.log(`   Database: ${url.pathname.replace('/', '') || 'default'}`);
+              console.log(`   User: ${url.username || 'default'}`);
+            } catch (e) {
+              console.log('   Connection string format detected');
+            }
           }
+        } else {
+          console.log(`   Host: ${this.config.host}:${this.config.port}`);
+          console.log(`   Database: ${this.config.database}`);
+          console.log(`   User: ${this.config.user}`);
         }
-      } else {
-        console.log(`   Host: ${this.config.host}:${this.config.port}`);
-        console.log(`   Database: ${this.config.database}`);
-        console.log(`   User: ${this.config.user}`);
-      }
-      
-      const client = await this.pool.connect();
+        
+        const client = await this.pool.connect();
       console.log('✅ PostgreSQL connection successful!');
       
       // Create orders table if not exists
@@ -304,45 +315,141 @@ export class OrderDatabasePostgreSQL {
 
       client.release();
       console.log('✅ Database table initialized successfully!');
+      return; // Success - exit retry loop
     } catch (error: any) {
-      console.error('❌ Error initializing database tables:', error);
-      console.error(`   Error message: ${error.message}`);
-      if (error.code === 'ENOTFOUND' || error.message.includes('getaddrinfo ENOTFOUND')) {
-        console.error('   ⚠️  Cannot resolve database hostname!');
+      attempt++;
+      const isLastAttempt = attempt >= maxRetries;
+      
+      // If ENOTFOUND and using DATABASE_URL without domain, try adding domain
+      if ((error.code === 'ENOTFOUND' || error.message.includes('getaddrinfo ENOTFOUND')) && 
+          this.config.host === 'from-url' && 
+          !isLastAttempt) {
+        const dbUrl = process.env.DATABASE_URL || '';
+        if (dbUrl && dbUrl.includes('dpg-')) {
+          const hostnameMatch = dbUrl.match(/@(dpg-[^\/:]+)/);
+          if (hostnameMatch && !hostnameMatch[1].includes('.')) {
+            const hostname = hostnameMatch[1];
+            console.error(`   ⚠️  Attempt ${attempt} failed: Hostname without domain`);
+            
+            // Try with .render.com domain
+            if (attempt === 1) {
+              console.log(chalk.blue(`   🔄 Retrying with .render.com domain...`));
+              const newUrl = dbUrl.replace(`@${hostname}/`, `@${hostname}.render.com:5432/`);
+              const sslUrl = newUrl.includes('sslmode=') ? newUrl : `${newUrl}?sslmode=require`;
+              
+              // Recreate pool with new URL
+              this.pool.end().catch(() => {});
+              this.pool = new Pool({
+                connectionString: sslUrl,
+                ssl: { rejectUnauthorized: false },
+                max: 10,
+                idleTimeoutMillis: 30000,
+                connectionTimeoutMillis: 30000,
+              });
+              continue; // Retry connection
+            }
+            // Try with -pooler.render.com domain
+            else if (attempt === 2) {
+              console.log(chalk.blue(`   🔄 Retrying with -pooler.render.com domain...`));
+              const newUrl = dbUrl.replace(`@${hostname}/`, `@${hostname}-pooler.render.com:5432/`);
+              const sslUrl = newUrl.includes('sslmode=') ? newUrl : `${newUrl}?sslmode=require`;
+              
+              // Recreate pool with new URL
+              this.pool.end().catch(() => {});
+              this.pool = new Pool({
+                connectionString: sslUrl,
+                ssl: { rejectUnauthorized: false },
+                max: 10,
+                idleTimeoutMillis: 30000,
+                connectionTimeoutMillis: 30000,
+              });
+              continue; // Retry connection
+            }
+          }
+        }
+      }
+      
+      // If last attempt or not retryable error, show full error message
+      if (isLastAttempt || !(error.code === 'ENOTFOUND' || error.message.includes('getaddrinfo ENOTFOUND'))) {
+        console.error('❌ Error initializing database tables:', error);
+        console.error(`   Error message: ${error.message}`);
+        
+        // Check if DATABASE_URL is set
+        const dbUrl = process.env.DATABASE_URL;
+        if (dbUrl) {
+          try {
+            const url = new URL(dbUrl.replace('postgresql://', 'http://'));
+            console.error('');
+            console.error('   📊 Current DATABASE_URL Configuration:');
+            console.error(`      Host: ${url.hostname}`);
+            console.error(`      Port: ${url.port || '5432'}`);
+            console.error(`      Database: ${url.pathname.replace('/', '') || 'default'}`);
+            console.error(`      User: ${url.username || 'default'}`);
+          } catch (e) {
+            console.error(`   Current DATABASE_URL: ${dbUrl.substring(0, 50)}...`);
+          }
+        } else {
+          console.error('');
+          console.error('   ⚠️  DATABASE_URL is NOT SET!');
+        }
+        
+        if (error.code === 'ENOTFOUND' || error.message.includes('getaddrinfo ENOTFOUND')) {
         console.error('');
-        console.error('   🔍 The hostname in your DATABASE_URL cannot be resolved.');
-        console.error('   💡 Possible solutions:');
+        console.error('   🚨 CRITICAL: Database hostname cannot be resolved!');
         console.error('');
-        console.error('   Solution 1: Check Render Dashboard for correct Internal Database URL');
-        console.error('      - Go to Render Dashboard → PostgreSQL Database');
-        console.error('      - Find "Internal Database URL" (NOT External)');
-        console.error('      - Copy the ENTIRE URL exactly as shown');
-        console.error('      - Make sure it includes the full hostname with domain');
+        console.error('   💡 This usually means:');
+        console.error('      • You created a NEW database (old one expired)');
+        console.error('      • DATABASE_URL still points to OLD database hostname');
+        console.error('      • Need to update DATABASE_URL with NEW database URL');
         console.error('');
-        console.error('   Solution 2: Enable Connection Pooling in Render');
-        console.error('      - Some Render databases require connection pooling');
-        console.error('      - Check if your database has pooler enabled');
-        console.error('      - Pooler URL format: dpg-xxxxx-a-pooler.render.com');
+        console.error('   📋 STEP-BY-STEP FIX:');
         console.error('');
-        console.error('   Solution 3: Verify Database Status');
-        console.error('      - Check if database is running (not paused)');
-        console.error('      - Verify database region matches web service region');
-        console.error('      - Check if database was deleted or recreated');
+        console.error('   1. ✅ Go to Render Dashboard → PostgreSQL Database');
+        console.error('      - Click on your NEW database (not the old one)');
+        console.error('      - Check database status is "Available"');
         console.error('');
-        console.error('   📝 Your current DATABASE_URL format:');
+        console.error('   2. ✅ Copy "Internal Database URL"');
+        console.error('      - Look for "Internal Database URL" (NOT External)');
+        console.error('      - Copy the ENTIRE connection string');
+        console.error('      - Should look like:');
+        console.error('        postgresql://user:pass@dpg-NEW-xxxxx-a.render.com:5432/dbname');
+        console.error('');
+        console.error('   3. ✅ Update DATABASE_URL in Web Service');
+        console.error('      - Go to Render Dashboard → Web Service → Environment');
+        console.error('      - Find DATABASE_URL variable');
+        console.error('      - Replace with NEW database URL from step 2');
+        console.error('      - Save (Render will auto-restart)');
+        console.error('');
+        console.error('   4. ✅ Verify Connection');
+        console.error('      - Check logs after restart');
+        console.error('      - Should see: "✅ PostgreSQL connection successful!"');
+        console.error('');
+        console.error('   ⚠️  If you still see errors:');
+        console.error('      - Make sure database and web service are in SAME region');
+        console.error('      - Try using "-pooler.render.com" format if available');
+        console.error('      - Check if database is paused (free tier may pause after inactivity)');
+        console.error('      - If different, recreate database in same region');
+        console.error('');
+        console.error('   📝 Your current DATABASE_URL:');
         const dbUrl = process.env.DATABASE_URL || '';
         if (dbUrl) {
           try {
             const url = new URL(dbUrl.replace('postgresql://', 'http://'));
-          console.error(`      Host: ${url.hostname || 'N/A'}`);
-          console.error(`      Port: ${url.port || '5432'}`);
-          console.error(`      Database: ${url.pathname.replace('/', '') || 'N/A'}`);
+            console.error(`      Host: ${url.hostname || 'N/A'} ${url.hostname && !url.hostname.includes('.') ? '⚠️ (NO DOMAIN!)' : ''}`);
+            console.error(`      Port: ${url.port || '5432'}`);
+            console.error(`      Database: ${url.pathname.replace('/', '') || 'N/A'}`);
+            if (url.hostname && !url.hostname.includes('.')) {
+              console.error('');
+              console.error('   ❌ PROBLEM: Hostname has no domain!');
+              console.error('   💡 The Internal Database URL from Render should include .render.com');
+              console.error('   💡 Get the COMPLETE URL from Render Dashboard (not just the hostname)');
+            }
           } catch (e) {
-            console.error(`      ${dbUrl.substring(0, 50)}...`);
+            console.error(`      ${dbUrl.substring(0, 80)}...`);
           }
         }
         console.error('');
-        console.error('   ✅ Recommended: Get the exact Internal Database URL from Render Dashboard');
+        console.error('   ⚠️  If database was recreated, the hostname changed - get new URL!');
       } else if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
         console.error('   ⚠️  Cannot connect to PostgreSQL. Check your connection settings!');
         console.error('   ⚠️  Make sure the database host is accessible and credentials are correct.');
@@ -351,7 +458,11 @@ export class OrderDatabasePostgreSQL {
       } else if (error.code === '28P01') {
         console.error('   ⚠️  Access denied. Check your PostgreSQL username and password!');
       }
-      throw error;
+      
+      // If last attempt, throw error; otherwise continue retry loop
+      if (isLastAttempt) {
+        throw error;
+      }
     }
   }
 
