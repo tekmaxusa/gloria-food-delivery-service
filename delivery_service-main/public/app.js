@@ -233,9 +233,21 @@ function setupAuth() {
             e.preventDefault();
             const email = document.getElementById('loginEmail')?.value;
             const password = document.getElementById('loginPassword')?.value;
+            const errorDiv = document.getElementById('loginError');
+            
+            // Hide previous errors
+            if (errorDiv) {
+                errorDiv.style.display = 'none';
+                errorDiv.textContent = '';
+            }
             
             if (!email || !password) {
-                showError('Please enter email and password');
+                const errorMsg = 'Please enter email and password';
+                if (errorDiv) {
+                    errorDiv.textContent = errorMsg;
+                    errorDiv.style.display = 'block';
+                }
+                showError(errorMsg);
                 return;
             }
             
@@ -255,11 +267,21 @@ function setupAuth() {
                     showNotification('Success', 'Login successful!');
                     showDashboard();
                 } else {
-                    showError(data.error || 'Invalid email or password');
+                    const errorMsg = data.error || 'Invalid email or password';
+                    if (errorDiv) {
+                        errorDiv.textContent = errorMsg;
+                        errorDiv.style.display = 'block';
+                    }
+                    showError(errorMsg);
                 }
             } catch (error) {
                 console.error('Login error:', error);
-                showError('Error connecting to server: ' + error.message);
+                const errorMsg = 'Error connecting to server: ' + error.message;
+                if (errorDiv) {
+                    errorDiv.textContent = errorMsg;
+                    errorDiv.style.display = 'block';
+                }
+                showError(errorMsg);
             }
         });
     }
@@ -272,14 +294,31 @@ function setupAuth() {
             const name = document.getElementById('signupName')?.value;
             const email = document.getElementById('signupEmail')?.value;
             const password = document.getElementById('signupPassword')?.value;
+            const errorDiv = document.getElementById('signupError');
+            
+            // Hide previous errors
+            if (errorDiv) {
+                errorDiv.style.display = 'none';
+                errorDiv.textContent = '';
+            }
             
             if (!name || !email || !password) {
-                showError('Please fill in all fields');
+                const errorMsg = 'Please fill in all fields';
+                if (errorDiv) {
+                    errorDiv.textContent = errorMsg;
+                    errorDiv.style.display = 'block';
+                }
+                showError(errorMsg);
                 return;
             }
             
             if (password.length < 6) {
-                showError('Password must be at least 6 characters');
+                const errorMsg = 'Password must be at least 6 characters';
+                if (errorDiv) {
+                    errorDiv.textContent = errorMsg;
+                    errorDiv.style.display = 'block';
+                }
+                showError(errorMsg);
                 return;
             }
             
@@ -299,11 +338,21 @@ function setupAuth() {
                     showNotification('Success', 'Account created successfully!');
                     showDashboard();
                 } else {
-                    showError(data.error || 'Failed to create account');
+                    const errorMsg = data.error || 'Failed to create account';
+                    if (errorDiv) {
+                        errorDiv.textContent = errorMsg;
+                        errorDiv.style.display = 'block';
+                    }
+                    showError(errorMsg);
                 }
             } catch (error) {
                 console.error('Signup error:', error);
-                showError('Error connecting to server: ' + error.message);
+                const errorMsg = 'Error connecting to server: ' + error.message;
+                if (errorDiv) {
+                    errorDiv.textContent = errorMsg;
+                    errorDiv.style.display = 'block';
+                }
+                showError(errorMsg);
             }
         });
     }
@@ -1852,7 +1901,6 @@ function exportOrdersToExcel() {
             // Extract fields same way as createOrderRow
             const orderId = order.gloriafood_order_id || order.id || 'N/A';
             const customerName = order.customer_name || 'N/A';
-            const merchantName = order.merchant_name || (order.store_id ? `Store ${order.store_id}` : 'N/A');
             const customerAddress = order.delivery_address || order.customer_address || 'N/A';
             const amount = order.total_price || 0;
             const currency = order.currency || 'USD';
@@ -1873,15 +1921,55 @@ function exportOrdersToExcel() {
                 // Ignore parsing errors
             }
             
-            // Get distance
+            // Get merchant name (same logic as createOrderRow)
+            let merchantName = order.merchant_name;
+            if (!merchantName && rawData) {
+                merchantName = rawData.merchant_name || 
+                              rawData.merchantName ||
+                              rawData.restaurant_name ||
+                              rawData.restaurantName ||
+                              (rawData.restaurant && rawData.restaurant.name) ||
+                              (rawData.restaurant && rawData.restaurant.restaurant_name) ||
+                              (rawData.merchant && rawData.merchant.name) ||
+                              null;
+            }
+            if (!merchantName) {
+                merchantName = order.store_id ? `Store ${order.store_id}` : 'N/A';
+            }
+            
+            // Get distance (same logic as createOrderRow)
             const distance = order.distance || 
                             rawData.distance || 
                             rawData.delivery_distance ||
+                            rawData.distance_km ||
+                            rawData.distance_miles ||
                             (rawData.delivery && rawData.delivery.distance) ||
-                            'N/A';
-            const formattedDistance = distance && distance !== 'N/A' ? (typeof distance === 'number' ? distance.toFixed(2) + ' km' : distance + ' km') : 'N/A';
+                            (rawData.delivery && rawData.delivery.delivery_distance) ||
+                            (rawData.delivery && rawData.delivery.distance_km) ||
+                            (rawData.location && rawData.location.distance) ||
+                            (rawData.restaurant && rawData.restaurant.distance) ||
+                            null;
+            let formattedDistance = 'N/A';
+            if (distance) {
+                if (typeof distance === 'number') {
+                    formattedDistance = distance.toFixed(2) + ' km';
+                } else if (typeof distance === 'string') {
+                    if (distance.includes('km') || distance.includes('miles') || distance.includes('mi')) {
+                        formattedDistance = distance;
+                    } else {
+                        const num = parseFloat(distance);
+                        if (!isNaN(num)) {
+                            formattedDistance = num.toFixed(2) + ' km';
+                        } else {
+                            formattedDistance = distance;
+                        }
+                    }
+                } else {
+                    formattedDistance = String(distance);
+                }
+            }
             
-            // Get pickup time
+            // Get pickup time (same logic as createOrderRow)
             const pickupTime = order.pickup_time || 
                               order.pickupTime || 
                               rawData.pickup_time || 
@@ -1892,13 +1980,27 @@ function exportOrdersToExcel() {
                               rawData.scheduledPickupTime ||
                               rawData.pickup_at ||
                               rawData.pickupAt ||
+                              rawData.pickup_datetime ||
+                              rawData.pickupDateTime ||
+                              rawData.requested_pickup_datetime ||
                               (rawData.delivery && rawData.delivery.pickup_time) ||
                               (rawData.delivery && rawData.delivery.requested_pickup_time) ||
+                              (rawData.delivery && rawData.delivery.pickup_at) ||
                               (rawData.schedule && rawData.schedule.pickup_time) ||
+                              (rawData.schedule && rawData.schedule.requested_pickup_time) ||
+                              (rawData.time && rawData.time.pickup) ||
+                              (rawData.times && rawData.times.pickup) ||
                               null;
-            const formattedPickupTime = pickupTime ? (typeof pickupTime === 'string' ? pickupTime : new Date(pickupTime).toISOString()) : 'N/A';
+            let formattedPickupTime = 'N/A';
+            if (pickupTime) {
+                try {
+                    formattedPickupTime = formatDate(pickupTime);
+                } catch (e) {
+                    formattedPickupTime = typeof pickupTime === 'string' ? pickupTime : new Date(pickupTime).toISOString();
+                }
+            }
             
-            // Get delivery time
+            // Get delivery time (same logic as createOrderRow)
             const deliveryTime = order.delivery_time || 
                                 order.deliveryTime || 
                                 rawData.delivery_time || 
@@ -1909,12 +2011,26 @@ function exportOrdersToExcel() {
                                 rawData.scheduledDeliveryTime ||
                                 rawData.delivery_at ||
                                 rawData.deliveryAt ||
+                                rawData.delivery_datetime ||
+                                rawData.deliveryDateTime ||
+                                rawData.requested_delivery_datetime ||
                                 (rawData.delivery && rawData.delivery.delivery_time) ||
                                 (rawData.delivery && rawData.delivery.requested_delivery_time) ||
                                 (rawData.delivery && rawData.delivery.scheduled_delivery_time) ||
+                                (rawData.delivery && rawData.delivery.delivery_at) ||
                                 (rawData.schedule && rawData.schedule.delivery_time) ||
+                                (rawData.schedule && rawData.schedule.requested_delivery_time) ||
+                                (rawData.time && rawData.time.delivery) ||
+                                (rawData.times && rawData.times.delivery) ||
                                 null;
-            const formattedDeliveryTime = deliveryTime ? (typeof deliveryTime === 'string' ? deliveryTime : new Date(deliveryTime).toISOString()) : 'N/A';
+            let formattedDeliveryTime = 'N/A';
+            if (deliveryTime) {
+                try {
+                    formattedDeliveryTime = formatDate(deliveryTime);
+                } catch (e) {
+                    formattedDeliveryTime = typeof deliveryTime === 'string' ? deliveryTime : new Date(deliveryTime).toISOString();
+                }
+            }
             
             // Get ready for pickup
             const readyForPickup = order.ready_for_pickup || 
@@ -2006,19 +2122,28 @@ function exportOrdersToExcel() {
         // Create download link
         const link = document.createElement('a');
         const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
+        link.href = url;
         
         // Generate filename with current date
         const now = new Date();
         const dateStr = now.toISOString().split('T')[0];
         const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
         const statusFilter = currentStatusFilter || 'all';
-        link.setAttribute('download', `orders_${statusFilter}_${dateStr}_${timeStr}.csv`);
+        link.download = `orders_${statusFilter}_${dateStr}_${timeStr}.csv`;
         
-        link.style.visibility = 'hidden';
+        // Ensure download works
+        link.style.display = 'none';
         document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        
+        // Trigger download
+        setTimeout(() => {
+            link.click();
+            // Clean up after a delay
+            setTimeout(() => {
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            }, 100);
+        }, 10);
         
         showNotification('Success', `Exported ${displayedOrders.length} orders to Excel`, 'success');
     } catch (error) {
@@ -2694,7 +2819,23 @@ function createOrderRow(order) {
     const customerName = escapeHtml(order.customer_name || 'N/A');
     const customerAddress = escapeHtml(order.delivery_address || order.customer_address || 'N/A');
     // Use merchant_name from backend (already enriched), fallback to store_id only if not available
-    const merchantName = escapeHtml(order.merchant_name || (order.store_id ? `Store ${order.store_id}` : 'N/A'));
+    // Also check raw_data for merchant/restaurant name
+    let merchantName = order.merchant_name;
+    if (!merchantName && rawData) {
+        merchantName = rawData.merchant_name || 
+                      rawData.merchantName ||
+                      rawData.restaurant_name ||
+                      rawData.restaurantName ||
+                      (rawData.restaurant && rawData.restaurant.name) ||
+                      (rawData.restaurant && rawData.restaurant.restaurant_name) ||
+                      (rawData.merchant && rawData.merchant.name) ||
+                      null;
+    }
+    // Final fallback
+    if (!merchantName) {
+        merchantName = order.store_id ? `Store ${order.store_id}` : 'N/A';
+    }
+    merchantName = escapeHtml(merchantName);
     const amount = formatCurrency(order.total_price || 0, order.currency || 'USD');
     const orderPlaced = formatDate(order.fetched_at || order.created_at || order.updated_at);
     
@@ -2708,14 +2849,39 @@ function createOrderRow(order) {
         console.error('Error parsing raw_data:', e);
     }
     
-    // Get distance from various possible fields
+    // Get distance from various possible fields (more comprehensive)
     const distance = order.distance || 
                     rawData.distance || 
                     rawData.delivery_distance ||
+                    rawData.distance_km ||
+                    rawData.distance_miles ||
                     (rawData.delivery && rawData.delivery.distance) ||
                     (rawData.delivery && rawData.delivery.delivery_distance) ||
+                    (rawData.delivery && rawData.delivery.distance_km) ||
+                    (rawData.location && rawData.location.distance) ||
+                    (rawData.restaurant && rawData.restaurant.distance) ||
                     null;
-    const formattedDistance = distance ? (typeof distance === 'number' ? distance.toFixed(2) + ' km' : distance + ' km') : 'N/A';
+    let formattedDistance = 'N/A';
+    if (distance) {
+        if (typeof distance === 'number') {
+            formattedDistance = distance.toFixed(2) + ' km';
+        } else if (typeof distance === 'string') {
+            // Check if already has unit
+            if (distance.includes('km') || distance.includes('miles') || distance.includes('mi')) {
+                formattedDistance = distance;
+            } else {
+                // Try to parse as number
+                const num = parseFloat(distance);
+                if (!isNaN(num)) {
+                    formattedDistance = num.toFixed(2) + ' km';
+                } else {
+                    formattedDistance = distance;
+                }
+            }
+        } else {
+            formattedDistance = String(distance);
+        }
+    }
     
     // Get pickup time from various possible fields (comprehensive search)
     const pickupTime = order.pickup_time || 
@@ -2728,9 +2894,16 @@ function createOrderRow(order) {
                       rawData.scheduledPickupTime ||
                       rawData.pickup_at ||
                       rawData.pickupAt ||
+                      rawData.pickup_datetime ||
+                      rawData.pickupDateTime ||
+                      rawData.requested_pickup_datetime ||
                       (rawData.delivery && rawData.delivery.pickup_time) ||
                       (rawData.delivery && rawData.delivery.requested_pickup_time) ||
+                      (rawData.delivery && rawData.delivery.pickup_at) ||
                       (rawData.schedule && rawData.schedule.pickup_time) ||
+                      (rawData.schedule && rawData.schedule.requested_pickup_time) ||
+                      (rawData.time && rawData.time.pickup) ||
+                      (rawData.times && rawData.times.pickup) ||
                       null;
     
     // Get delivery time from various possible fields (comprehensive search)
@@ -2744,10 +2917,17 @@ function createOrderRow(order) {
                         rawData.scheduledDeliveryTime ||
                         rawData.delivery_at ||
                         rawData.deliveryAt ||
+                        rawData.delivery_datetime ||
+                        rawData.deliveryDateTime ||
+                        rawData.requested_delivery_datetime ||
                         (rawData.delivery && rawData.delivery.delivery_time) ||
                         (rawData.delivery && rawData.delivery.requested_delivery_time) ||
                         (rawData.delivery && rawData.delivery.scheduled_delivery_time) ||
+                        (rawData.delivery && rawData.delivery.delivery_at) ||
                         (rawData.schedule && rawData.schedule.delivery_time) ||
+                        (rawData.schedule && rawData.schedule.requested_delivery_time) ||
+                        (rawData.time && rawData.time.delivery) ||
+                        (rawData.times && rawData.times.delivery) ||
                         null;
     
     // Get ready for pickup time (comprehensive search)
