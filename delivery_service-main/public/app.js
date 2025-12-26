@@ -6,6 +6,8 @@ let lastOrderIds = new Set();
 let allOrders = [];
 let currentStatusFilter = '';
 let searchQuery = '';
+let currentReportData = null;
+let currentReportType = null;
 
 // Request notification permission on load
 if ('Notification' in window && Notification.permission === 'default') {
@@ -1375,29 +1377,38 @@ async function showReportView(reportType) {
         let reportData = null;
         let reportHTML = '';
         
+        // Store current report data and type for export
+        currentReportType = reportType;
+        
         switch(reportType) {
             case 'sales':
                 reportData = await fetchSalesReport();
+                currentReportData = reportData;
                 reportHTML = renderSalesReport(reportData);
                 break;
             case 'orders':
                 reportData = await fetchOrdersReport();
+                currentReportData = reportData;
                 reportHTML = renderOrdersReport(reportData);
                 break;
             case 'revenue':
                 reportData = await fetchRevenueReport();
+                currentReportData = reportData;
                 reportHTML = renderRevenueReport(reportData);
                 break;
             case 'drivers':
                 reportData = await fetchDriversReport();
+                currentReportData = reportData;
                 reportHTML = renderDriversReport(reportData);
                 break;
             case 'customers':
                 reportData = await fetchCustomersReport();
+                currentReportData = reportData;
                 reportHTML = renderCustomersReport(reportData);
                 break;
             case 'merchants':
                 reportData = await fetchMerchantsReport();
+                currentReportData = reportData;
                 reportHTML = renderMerchantsReport(reportData);
                 break;
             default:
@@ -2194,10 +2205,229 @@ function getFilteredOrders() {
     return filtered;
 }
 
-// Export report (placeholder)
+// Export report to Excel
 window.exportReport = function(type) {
-    addNotification('Info', `Exporting ${getReportTitle(type)}...`, 'info');
-    // Add actual export functionality here (CSV, PDF, etc.)
+    try {
+        if (!currentReportData || currentReportType !== type) {
+            showNotification('Error', 'No report data available. Please reload the report.', 'error');
+            return;
+        }
+        
+        let headers = [];
+        let rows = [];
+        let filename = '';
+        
+        switch(type) {
+            case 'sales':
+                headers = ['Order No.', 'Customer', 'Merchant', 'Amount', 'Currency', 'Status', 'Date'];
+                rows = currentReportData.map(order => {
+                    const escapeCSV = (val) => {
+                        const str = String(val || 'N/A');
+                        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                            return '"' + str.replace(/"/g, '""') + '"';
+                        }
+                        return str;
+                    };
+                    return [
+                        escapeCSV(order.gloriafood_order_id || order.id),
+                        escapeCSV(order.customer_name),
+                        escapeCSV(order.merchant_name),
+                        escapeCSV(order.total_price || 0),
+                        escapeCSV(order.currency || 'USD'),
+                        escapeCSV(order.status),
+                        escapeCSV(formatDate(order.created_at || order.fetched_at))
+                    ];
+                });
+                filename = `sales_report_${new Date().toISOString().split('T')[0]}.csv`;
+                break;
+                
+            case 'orders':
+                headers = ['Order No.', 'Customer', 'Merchant', 'Address', 'Amount', 'Currency', 'Status', 'Date'];
+                rows = currentReportData.map(order => {
+                    const escapeCSV = (val) => {
+                        const str = String(val || 'N/A');
+                        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                            return '"' + str.replace(/"/g, '""') + '"';
+                        }
+                        return str;
+                    };
+                    return [
+                        escapeCSV(order.gloriafood_order_id || order.id),
+                        escapeCSV(order.customer_name),
+                        escapeCSV(order.merchant_name),
+                        escapeCSV(order.delivery_address || order.customer_address),
+                        escapeCSV(order.total_price || 0),
+                        escapeCSV(order.currency || 'USD'),
+                        escapeCSV(order.status),
+                        escapeCSV(formatDate(order.created_at || order.fetched_at))
+                    ];
+                });
+                filename = `orders_report_${new Date().toISOString().split('T')[0]}.csv`;
+                break;
+                
+            case 'revenue':
+                // Group by date - handle both {orders, stats} structure and array structure
+                const revenueOrders = currentReportData.orders || currentReportData || [];
+                const revenueByDate = {};
+                revenueOrders.forEach(order => {
+                    const date = new Date(order.created_at || order.fetched_at).toLocaleDateString();
+                    revenueByDate[date] = revenueByDate[date] || { revenue: 0, orders: 0 };
+                    revenueByDate[date].revenue += parseFloat(order.total_price) || 0;
+                    revenueByDate[date].orders++;
+                });
+                
+                headers = ['Date', 'Revenue', 'Orders', 'Average Order Value'];
+                rows = Object.entries(revenueByDate)
+                    .sort((a, b) => new Date(b[0]) - new Date(a[0]))
+                    .map(([date, data]) => {
+                        const escapeCSV = (val) => {
+                            const str = String(val || 'N/A');
+                            if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                                return '"' + str.replace(/"/g, '""') + '"';
+                            }
+                            return str;
+                        };
+                        const avgOrder = data.orders > 0 ? (data.revenue / data.orders).toFixed(2) : '0.00';
+                        return [
+                            escapeCSV(date),
+                            escapeCSV(data.revenue.toFixed(2)),
+                            escapeCSV(data.orders),
+                            escapeCSV(avgOrder)
+                        ];
+                    });
+                filename = `revenue_report_${new Date().toISOString().split('T')[0]}.csv`;
+                break;
+                
+            case 'drivers':
+                headers = ['Name', 'Phone', 'Email', 'Vehicle', 'Status', 'Rating'];
+                rows = currentReportData.map(driver => {
+                    const escapeCSV = (val) => {
+                        const str = String(val || 'N/A');
+                        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                            return '"' + str.replace(/"/g, '""') + '"';
+                        }
+                        return str;
+                    };
+                    return [
+                        escapeCSV(driver.name || driver.full_name),
+                        escapeCSV(driver.phone),
+                        escapeCSV(driver.email),
+                        escapeCSV(driver.vehicle),
+                        escapeCSV(driver.status || 'inactive'),
+                        escapeCSV(driver.rating ? driver.rating.toFixed(1) : 'N/A')
+                    ];
+                });
+                filename = `drivers_report_${new Date().toISOString().split('T')[0]}.csv`;
+                break;
+                
+            case 'customers':
+                // Group by customer (same logic as renderCustomersReport)
+                const customerData = {};
+                currentReportData.forEach(order => {
+                    const email = order.customer_email || order.customer_name || 'Unknown';
+                    if (!customerData[email]) {
+                        customerData[email] = {
+                            name: order.customer_name || 'Unknown',
+                            email: order.customer_email || '',
+                            phone: order.customer_phone || '',
+                            orders: 0,
+                            totalSpent: 0
+                        };
+                    }
+                    customerData[email].orders++;
+                    customerData[email].totalSpent += parseFloat(order.total_price) || 0;
+                });
+                
+                const customers = Object.values(customerData).sort((a, b) => b.totalSpent - a.totalSpent);
+                
+                headers = ['Customer Name', 'Email', 'Phone', 'Total Orders', 'Total Spent', 'Average Order Value'];
+                rows = customers.map(customer => {
+                    const escapeCSV = (val) => {
+                        const str = String(val || 'N/A');
+                        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                            return '"' + str.replace(/"/g, '""') + '"';
+                        }
+                        return str;
+                    };
+                    const avgOrder = customer.orders > 0 ? (customer.totalSpent / customer.orders).toFixed(2) : '0.00';
+                    return [
+                        escapeCSV(customer.name),
+                        escapeCSV(customer.email),
+                        escapeCSV(customer.phone),
+                        escapeCSV(customer.orders),
+                        escapeCSV(customer.totalSpent.toFixed(2)),
+                        escapeCSV(avgOrder)
+                    ];
+                });
+                filename = `customers_report_${new Date().toISOString().split('T')[0]}.csv`;
+                break;
+                
+            case 'merchants':
+                headers = ['Store ID', 'Merchant Name', 'API URL', 'Status', 'Created At'];
+                rows = currentReportData.map(merchant => {
+                    const escapeCSV = (val) => {
+                        const str = String(val || 'N/A');
+                        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                            return '"' + str.replace(/"/g, '""') + '"';
+                        }
+                        return str;
+                    };
+                    return [
+                        escapeCSV(merchant.store_id),
+                        escapeCSV(merchant.merchant_name),
+                        escapeCSV(merchant.api_url),
+                        escapeCSV(merchant.is_active ? 'Active' : 'Inactive'),
+                        escapeCSV(formatDate(merchant.created_at))
+                    ];
+                });
+                filename = `merchants_report_${new Date().toISOString().split('T')[0]}.csv`;
+                break;
+                
+            default:
+                showNotification('Error', 'Unknown report type', 'error');
+                return;
+        }
+        
+        if (rows.length === 0) {
+            showNotification('Info', 'No data to export', 'info');
+            return;
+        }
+        
+        // Create CSV content
+        const csvContent = [
+            headers.join(','),
+            ...rows.map(row => row.join(','))
+        ].join('\n');
+        
+        // Add BOM for Excel UTF-8 support
+        const BOM = '\uFEFF';
+        const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+        
+        // Create download link
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.href = url;
+        link.download = filename;
+        
+        // Ensure download works
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        
+        // Trigger download
+        setTimeout(() => {
+            link.click();
+            // Clean up after a delay
+            setTimeout(() => {
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            }, 100);
+        }, 10);
+        
+        showNotification('Success', `Exported ${rows.length} records to Excel`, 'success');
+    } catch (error) {
+        console.error('Error exporting report:', error);
+        showNotification('Error', 'Failed to export report: ' + error.message, 'error');
+    }
 };
 
 // Show Reviews page
