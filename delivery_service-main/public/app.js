@@ -2426,7 +2426,8 @@ function createOrderRow(order) {
     const status = (order.status || 'UNKNOWN').toUpperCase();
     const customerName = escapeHtml(order.customer_name || 'N/A');
     const customerAddress = escapeHtml(order.delivery_address || order.customer_address || 'N/A');
-    const merchantName = escapeHtml(order.merchant_name || order.store_id || 'N/A');
+    // Use merchant_name from backend (already enriched), fallback to store_id only if not available
+    const merchantName = escapeHtml(order.merchant_name || (order.store_id ? `Store ${order.store_id}` : 'N/A'));
     const amount = formatCurrency(order.total_price || 0, order.currency || 'USD');
     const orderPlaced = formatDate(order.fetched_at || order.created_at || order.updated_at);
     
@@ -2440,7 +2441,16 @@ function createOrderRow(order) {
         console.error('Error parsing raw_data:', e);
     }
     
-    // Get pickup time from various possible fields
+    // Get distance from various possible fields
+    const distance = order.distance || 
+                    rawData.distance || 
+                    rawData.delivery_distance ||
+                    (rawData.delivery && rawData.delivery.distance) ||
+                    (rawData.delivery && rawData.delivery.delivery_distance) ||
+                    null;
+    const formattedDistance = distance ? (typeof distance === 'number' ? distance.toFixed(2) + ' km' : distance + ' km') : 'N/A';
+    
+    // Get pickup time from various possible fields (comprehensive search)
     const pickupTime = order.pickup_time || 
                       order.pickupTime || 
                       rawData.pickup_time || 
@@ -2448,9 +2458,15 @@ function createOrderRow(order) {
                       rawData.requested_pickup_time ||
                       rawData.requestedPickupTime ||
                       rawData.scheduled_pickup_time ||
+                      rawData.scheduledPickupTime ||
+                      rawData.pickup_at ||
+                      rawData.pickupAt ||
+                      (rawData.delivery && rawData.delivery.pickup_time) ||
+                      (rawData.delivery && rawData.delivery.requested_pickup_time) ||
+                      (rawData.schedule && rawData.schedule.pickup_time) ||
                       null;
     
-    // Get delivery time from various possible fields
+    // Get delivery time from various possible fields (comprehensive search)
     const deliveryTime = order.delivery_time || 
                         order.deliveryTime || 
                         rawData.delivery_time || 
@@ -2458,18 +2474,33 @@ function createOrderRow(order) {
                         rawData.requested_delivery_time ||
                         rawData.requestedDeliveryTime ||
                         rawData.scheduled_delivery_time ||
+                        rawData.scheduledDeliveryTime ||
+                        rawData.delivery_at ||
+                        rawData.deliveryAt ||
+                        (rawData.delivery && rawData.delivery.delivery_time) ||
+                        (rawData.delivery && rawData.delivery.requested_delivery_time) ||
+                        (rawData.delivery && rawData.delivery.scheduled_delivery_time) ||
+                        (rawData.schedule && rawData.schedule.delivery_time) ||
                         null;
     
-    // Get ready for pickup time
+    // Get ready for pickup time (comprehensive search)
     const readyForPickup = order.ready_for_pickup || 
                            order.readyForPickup || 
                            rawData.ready_for_pickup || 
                            rawData.readyForPickup ||
                            rawData.ready_for_pick_up ||
                            rawData.readyForPickUp ||
+                           rawData.ready_time ||
+                           rawData.readyTime ||
+                           rawData.ready_at ||
+                           rawData.readyAt ||
+                           rawData.prepared_at ||
+                           rawData.preparedAt ||
+                           (rawData.status && rawData.status.ready_time) ||
+                           (rawData.delivery && rawData.delivery.ready_for_pickup) ||
                            null;
     
-    // Get driver name from various possible fields
+    // Get driver name from various possible fields (comprehensive search)
     const driver = order.driver_name || 
                   order.driverName || 
                   order.driver || 
@@ -2478,13 +2509,43 @@ function createOrderRow(order) {
                   rawData.driver ||
                   rawData.assigned_driver ||
                   rawData.assignedDriver ||
+                  rawData.driver_id ||
+                  rawData.driverId ||
                   (rawData.delivery && rawData.delivery.driver_name) ||
+                  (rawData.delivery && rawData.delivery.driver) ||
+                  (rawData.delivery && rawData.delivery.assigned_driver) ||
+                  (rawData.driver && rawData.driver.name) ||
+                  (rawData.driver && rawData.driver.full_name) ||
                   null;
     
-    // Format times
-    const formattedPickupTime = pickupTime ? formatDate(pickupTime) : 'N/A';
-    const formattedDeliveryTime = deliveryTime ? formatDate(deliveryTime) : 'N/A';
-    const formattedReadyForPickup = readyForPickup ? formatDate(readyForPickup) : 'N/A';
+    // Format times - try to format, if invalid date, show raw value
+    let formattedPickupTime = 'N/A';
+    if (pickupTime) {
+        try {
+            formattedPickupTime = formatDate(pickupTime);
+        } catch (e) {
+            formattedPickupTime = String(pickupTime);
+        }
+    }
+    
+    let formattedDeliveryTime = 'N/A';
+    if (deliveryTime) {
+        try {
+            formattedDeliveryTime = formatDate(deliveryTime);
+        } catch (e) {
+            formattedDeliveryTime = String(deliveryTime);
+        }
+    }
+    
+    let formattedReadyForPickup = 'N/A';
+    if (readyForPickup) {
+        try {
+            formattedReadyForPickup = formatDate(readyForPickup);
+        } catch (e) {
+            formattedReadyForPickup = String(readyForPickup);
+        }
+    }
+    
     const formattedDriver = driver ? escapeHtml(String(driver)) : 'N/A';
     
     const tracking = order.doordash_tracking_url 
@@ -2501,7 +2562,7 @@ function createOrderRow(order) {
             <td><span style="color: #3b82f6; font-weight: 500;">${merchantName}</span></td>
             <td>${customerAddress}</td>
             <td>${amount}</td>
-            <td>${order.distance ? order.distance + ' km' : 'N/A'}</td>
+            <td>${formattedDistance}</td>
             <td>${orderPlaced}</td>
             <td>${formattedPickupTime}</td>
             <td>${formattedDeliveryTime}</td>
