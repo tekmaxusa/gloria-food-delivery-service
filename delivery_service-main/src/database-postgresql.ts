@@ -86,14 +86,19 @@ export class OrderDatabasePostgreSQL {
         }
         
         // Add SSL parameter if missing (required for Render PostgreSQL)
+        // Note: We'll use ssl option in Pool config, but adding sslmode=require to URL for compatibility
         if (!fixedUrl.includes('sslmode=') && !fixedUrl.includes('?ssl=')) {
           const separator = fixedUrl.includes('?') ? '&' : '?';
           fixedUrl = `${fixedUrl}${separator}sslmode=require`;
           console.log(chalk.blue('   🔒 Added SSL parameter (sslmode=require)'));
         }
+        
+        // Ensure we always use rejectUnauthorized: false for Render (self-signed certificates)
+        console.log(chalk.blue('   🔒 Will use rejectUnauthorized: false for SSL (Render self-signed certs)'));
       }
       
-      // For Render PostgreSQL, always enable SSL
+      // For Render PostgreSQL, always enable SSL with rejectUnauthorized: false
+      // Render uses self-signed certificates, so we need to disable certificate validation
       const needsSSL = isRenderDb || 
                        fixedUrl.includes('sslmode=require') || 
                        fixedUrl.includes('ssl=true') ||
@@ -101,9 +106,21 @@ export class OrderDatabasePostgreSQL {
       
       console.log(chalk.gray(`   Final connection string: ${fixedUrl.replace(/:[^:@]+@/, ':****@')}`));
       
+      // Always use rejectUnauthorized: false for Render databases to handle self-signed certificates
+      // This is critical - Render PostgreSQL uses self-signed certs that will fail validation
+      const sslConfig = needsSSL ? { 
+        rejectUnauthorized: false 
+      } : false;
+      
+      if (isRenderDb) {
+        console.log(chalk.blue('   🔒 SSL enabled with rejectUnauthorized: false (for Render self-signed certificates)'));
+      } else if (needsSSL) {
+        console.log(chalk.blue('   🔒 SSL enabled with rejectUnauthorized: false'));
+      }
+      
       this.pool = new Pool({
         connectionString: fixedUrl,
-        ssl: needsSSL ? { rejectUnauthorized: false } : false,
+        ssl: sslConfig,
         max: 10,
         idleTimeoutMillis: 30000,
         connectionTimeoutMillis: 30000, // Increased timeout for cloud databases
