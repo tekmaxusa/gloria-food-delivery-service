@@ -209,259 +209,261 @@ export class OrderDatabasePostgreSQL {
         }
         
         const client = await this.pool.connect();
-      console.log('✅ PostgreSQL connection successful!');
-      
-      // Create orders table if not exists
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS orders (
-          id SERIAL PRIMARY KEY,
-          gloriafood_order_id VARCHAR(255) UNIQUE NOT NULL,
-          store_id VARCHAR(255),
-          customer_name VARCHAR(255) NOT NULL,
-          customer_phone VARCHAR(100),
-          customer_email VARCHAR(255),
-          delivery_address TEXT,
-          total_price DECIMAL(10, 2) DEFAULT 0.00,
-          currency VARCHAR(10) DEFAULT 'USD',
-          status VARCHAR(50),
-          order_type VARCHAR(50),
-          items TEXT,
-          raw_data TEXT,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          sent_to_doordash BOOLEAN DEFAULT FALSE,
-          doordash_order_id VARCHAR(255),
-          doordash_sent_at TIMESTAMP,
-          doordash_tracking_url TEXT
-        )
-      `);
+        console.log('✅ PostgreSQL connection successful!');
+        
+        // Create orders table if not exists
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS orders (
+            id SERIAL PRIMARY KEY,
+            gloriafood_order_id VARCHAR(255) UNIQUE NOT NULL,
+            store_id VARCHAR(255),
+            customer_name VARCHAR(255) NOT NULL,
+            customer_phone VARCHAR(100),
+            customer_email VARCHAR(255),
+            delivery_address TEXT,
+            total_price DECIMAL(10, 2) DEFAULT 0.00,
+            currency VARCHAR(10) DEFAULT 'USD',
+            status VARCHAR(50),
+            order_type VARCHAR(50),
+            items TEXT,
+            raw_data TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            sent_to_doordash BOOLEAN DEFAULT FALSE,
+            doordash_order_id VARCHAR(255),
+            doordash_sent_at TIMESTAMP,
+            doordash_tracking_url TEXT
+          )
+        `);
 
-      // Create indexes
-      await client.query(`
-        CREATE INDEX IF NOT EXISTS idx_gloriafood_order_id ON orders(gloriafood_order_id)
-      `);
-      await client.query(`
-        CREATE INDEX IF NOT EXISTS idx_store_id ON orders(store_id)
-      `);
-      await client.query(`
-        CREATE INDEX IF NOT EXISTS idx_status ON orders(status)
-      `);
-      await client.query(`
-        CREATE INDEX IF NOT EXISTS idx_fetched_at ON orders(fetched_at)
-      `);
+        // Create indexes
+        await client.query(`
+          CREATE INDEX IF NOT EXISTS idx_gloriafood_order_id ON orders(gloriafood_order_id)
+        `);
+        await client.query(`
+          CREATE INDEX IF NOT EXISTS idx_store_id ON orders(store_id)
+        `);
+        await client.query(`
+          CREATE INDEX IF NOT EXISTS idx_status ON orders(status)
+        `);
+        await client.query(`
+          CREATE INDEX IF NOT EXISTS idx_fetched_at ON orders(fetched_at)
+        `);
 
-      // Add missing columns for existing installations (ignore errors if already exist)
-      try {
-        await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS doordash_tracking_url TEXT`);
-        console.log('✅ Added doordash_tracking_url column to existing table');
-      } catch (e: any) {
-        // Column already exists or other error - ignore
-        if (e.code !== '42701') {
-          console.log('   Note: doordash_tracking_url column may already exist');
+        // Add missing columns for existing installations (ignore errors if already exist)
+        try {
+          await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS doordash_tracking_url TEXT`);
+          console.log('✅ Added doordash_tracking_url column to existing table');
+        } catch (e: any) {
+          // Column already exists or other error - ignore
+          if (e.code !== '42701') {
+            console.log('   Note: doordash_tracking_url column may already exist');
+          }
         }
-      }
 
-      // Create merchants table if not exists
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS merchants (
-          id SERIAL PRIMARY KEY,
-          store_id VARCHAR(255) UNIQUE NOT NULL,
-          merchant_name VARCHAR(255) NOT NULL,
-          api_key VARCHAR(500),
-          api_url VARCHAR(500),
-          master_key VARCHAR(500),
-          is_active BOOLEAN DEFAULT TRUE,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-      `);
+        // Create merchants table if not exists
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS merchants (
+            id SERIAL PRIMARY KEY,
+            store_id VARCHAR(255) UNIQUE NOT NULL,
+            merchant_name VARCHAR(255) NOT NULL,
+            api_key VARCHAR(500),
+            api_url VARCHAR(500),
+            master_key VARCHAR(500),
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
 
-      // Create indexes for merchants
-      await client.query(`
-        CREATE INDEX IF NOT EXISTS idx_merchants_store_id ON merchants(store_id)
-      `);
-      await client.query(`
-        CREATE INDEX IF NOT EXISTS idx_merchants_is_active ON merchants(is_active)
-      `);
+        // Create indexes for merchants
+        await client.query(`
+          CREATE INDEX IF NOT EXISTS idx_merchants_store_id ON merchants(store_id)
+        `);
+        await client.query(`
+          CREATE INDEX IF NOT EXISTS idx_merchants_is_active ON merchants(is_active)
+        `);
 
-      // Create trigger function for updated_at
-      await client.query(`
-        CREATE OR REPLACE FUNCTION update_updated_at_column()
-        RETURNS TRIGGER AS $$
-        BEGIN
-            NEW.updated_at = CURRENT_TIMESTAMP;
-            RETURN NEW;
-        END;
-        $$ language 'plpgsql'
-      `);
+        // Create trigger function for updated_at
+        await client.query(`
+          CREATE OR REPLACE FUNCTION update_updated_at_column()
+          RETURNS TRIGGER AS $$
+          BEGIN
+              NEW.updated_at = CURRENT_TIMESTAMP;
+              RETURN NEW;
+          END;
+          $$ language 'plpgsql'
+        `);
 
-      // Create triggers for updated_at
-      await client.query(`
-        DROP TRIGGER IF EXISTS update_orders_updated_at ON orders;
-        CREATE TRIGGER update_orders_updated_at
-          BEFORE UPDATE ON orders
-          FOR EACH ROW
-          EXECUTE FUNCTION update_updated_at_column()
-      `);
+        // Create triggers for updated_at
+        await client.query(`
+          DROP TRIGGER IF EXISTS update_orders_updated_at ON orders;
+          CREATE TRIGGER update_orders_updated_at
+            BEFORE UPDATE ON orders
+            FOR EACH ROW
+            EXECUTE FUNCTION update_updated_at_column()
+        `);
 
-      await client.query(`
-        DROP TRIGGER IF EXISTS update_merchants_updated_at ON merchants;
-        CREATE TRIGGER update_merchants_updated_at
-          BEFORE UPDATE ON merchants
-          FOR EACH ROW
-          EXECUTE FUNCTION update_updated_at_column()
-      `);
+        await client.query(`
+          DROP TRIGGER IF EXISTS update_merchants_updated_at ON merchants;
+          CREATE TRIGGER update_merchants_updated_at
+            BEFORE UPDATE ON merchants
+            FOR EACH ROW
+            EXECUTE FUNCTION update_updated_at_column()
+        `);
 
-      client.release();
-      console.log('✅ Database table initialized successfully!');
-      return; // Success - exit retry loop
-    } catch (error: any) {
-      attempt++;
-      const isLastAttempt = attempt >= maxRetries;
-      
-      // If ENOTFOUND and using DATABASE_URL without domain, try adding domain
-      if ((error.code === 'ENOTFOUND' || error.message.includes('getaddrinfo ENOTFOUND')) && 
-          this.config.host === 'from-url' && 
-          !isLastAttempt) {
-        const dbUrl = process.env.DATABASE_URL || '';
-        if (dbUrl && dbUrl.includes('dpg-')) {
-          const hostnameMatch = dbUrl.match(/@(dpg-[^\/:]+)/);
-          if (hostnameMatch && !hostnameMatch[1].includes('.')) {
-            const hostname = hostnameMatch[1];
-            console.error(`   ⚠️  Attempt ${attempt} failed: Hostname without domain`);
-            
-            // Try with .render.com domain
-            if (attempt === 1) {
-              console.log(chalk.blue(`   🔄 Retrying with .render.com domain...`));
-              const newUrl = dbUrl.replace(`@${hostname}/`, `@${hostname}.render.com:5432/`);
-              const sslUrl = newUrl.includes('sslmode=') ? newUrl : `${newUrl}?sslmode=require`;
+        client.release();
+        console.log('✅ Database table initialized successfully!');
+        return; // Success - exit retry loop
+      } catch (error: any) {
+        attempt++;
+        const isLastAttempt = attempt >= maxRetries;
+        
+        // If ENOTFOUND and using DATABASE_URL without domain, try adding domain
+        if ((error.code === 'ENOTFOUND' || error.message.includes('getaddrinfo ENOTFOUND')) && 
+            this.config.host === 'from-url' && 
+            !isLastAttempt) {
+          const dbUrl = process.env.DATABASE_URL || '';
+          if (dbUrl && dbUrl.includes('dpg-')) {
+            const hostnameMatch = dbUrl.match(/@(dpg-[^\/:]+)/);
+            if (hostnameMatch && !hostnameMatch[1].includes('.')) {
+              const hostname = hostnameMatch[1];
+              console.error(`   ⚠️  Attempt ${attempt} failed: Hostname without domain`);
               
-              // Recreate pool with new URL
-              this.pool.end().catch(() => {});
-              this.pool = new Pool({
-                connectionString: sslUrl,
-                ssl: { rejectUnauthorized: false },
-                max: 10,
-                idleTimeoutMillis: 30000,
-                connectionTimeoutMillis: 30000,
-              });
-              continue; // Retry connection
-            }
-            // Try with -pooler.render.com domain
-            else if (attempt === 2) {
-              console.log(chalk.blue(`   🔄 Retrying with -pooler.render.com domain...`));
-              const newUrl = dbUrl.replace(`@${hostname}/`, `@${hostname}-pooler.render.com:5432/`);
-              const sslUrl = newUrl.includes('sslmode=') ? newUrl : `${newUrl}?sslmode=require`;
-              
-              // Recreate pool with new URL
-              this.pool.end().catch(() => {});
-              this.pool = new Pool({
-                connectionString: sslUrl,
-                ssl: { rejectUnauthorized: false },
-                max: 10,
-                idleTimeoutMillis: 30000,
-                connectionTimeoutMillis: 30000,
-              });
-              continue; // Retry connection
+              // Try with .render.com domain
+              if (attempt === 1) {
+                console.log(chalk.blue(`   🔄 Retrying with .render.com domain...`));
+                const newUrl = dbUrl.replace(`@${hostname}/`, `@${hostname}.render.com:5432/`);
+                const sslUrl = newUrl.includes('sslmode=') ? newUrl : `${newUrl}?sslmode=require`;
+                
+                // Recreate pool with new URL
+                this.pool.end().catch(() => {});
+                this.pool = new Pool({
+                  connectionString: sslUrl,
+                  ssl: { rejectUnauthorized: false },
+                  max: 10,
+                  idleTimeoutMillis: 30000,
+                  connectionTimeoutMillis: 30000,
+                });
+                continue; // Retry connection
+              }
+              // Try with -pooler.render.com domain
+              else if (attempt === 2) {
+                console.log(chalk.blue(`   🔄 Retrying with -pooler.render.com domain...`));
+                const newUrl = dbUrl.replace(`@${hostname}/`, `@${hostname}-pooler.render.com:5432/`);
+                const sslUrl = newUrl.includes('sslmode=') ? newUrl : `${newUrl}?sslmode=require`;
+                
+                // Recreate pool with new URL
+                this.pool.end().catch(() => {});
+                this.pool = new Pool({
+                  connectionString: sslUrl,
+                  ssl: { rejectUnauthorized: false },
+                  max: 10,
+                  idleTimeoutMillis: 30000,
+                  connectionTimeoutMillis: 30000,
+                });
+                continue; // Retry connection
+              }
             }
           }
         }
-      }
-      
-      // If last attempt or not retryable error, show full error message
-      if (isLastAttempt || !(error.code === 'ENOTFOUND' || error.message.includes('getaddrinfo ENOTFOUND'))) {
-        console.error('❌ Error initializing database tables:', error);
-        console.error(`   Error message: ${error.message}`);
         
-        // Check if DATABASE_URL is set
-        const dbUrl = process.env.DATABASE_URL;
-        if (dbUrl) {
-          try {
-            const url = new URL(dbUrl.replace('postgresql://', 'http://'));
-            console.error('');
-            console.error('   📊 Current DATABASE_URL Configuration:');
-            console.error(`      Host: ${url.hostname}`);
-            console.error(`      Port: ${url.port || '5432'}`);
-            console.error(`      Database: ${url.pathname.replace('/', '') || 'default'}`);
-            console.error(`      User: ${url.username || 'default'}`);
-          } catch (e) {
-            console.error(`   Current DATABASE_URL: ${dbUrl.substring(0, 50)}...`);
-          }
-        } else {
-          console.error('');
-          console.error('   ⚠️  DATABASE_URL is NOT SET!');
-        }
-        
-        if (error.code === 'ENOTFOUND' || error.message.includes('getaddrinfo ENOTFOUND')) {
-        console.error('');
-        console.error('   🚨 CRITICAL: Database hostname cannot be resolved!');
-        console.error('');
-        console.error('   💡 This usually means:');
-        console.error('      • You created a NEW database (old one expired)');
-        console.error('      • DATABASE_URL still points to OLD database hostname');
-        console.error('      • Need to update DATABASE_URL with NEW database URL');
-        console.error('');
-        console.error('   📋 STEP-BY-STEP FIX:');
-        console.error('');
-        console.error('   1. ✅ Go to Render Dashboard → PostgreSQL Database');
-        console.error('      - Click on your NEW database (not the old one)');
-        console.error('      - Check database status is "Available"');
-        console.error('');
-        console.error('   2. ✅ Copy "Internal Database URL"');
-        console.error('      - Look for "Internal Database URL" (NOT External)');
-        console.error('      - Copy the ENTIRE connection string');
-        console.error('      - Should look like:');
-        console.error('        postgresql://user:pass@dpg-NEW-xxxxx-a.render.com:5432/dbname');
-        console.error('');
-        console.error('   3. ✅ Update DATABASE_URL in Web Service');
-        console.error('      - Go to Render Dashboard → Web Service → Environment');
-        console.error('      - Find DATABASE_URL variable');
-        console.error('      - Replace with NEW database URL from step 2');
-        console.error('      - Save (Render will auto-restart)');
-        console.error('');
-        console.error('   4. ✅ Verify Connection');
-        console.error('      - Check logs after restart');
-        console.error('      - Should see: "✅ PostgreSQL connection successful!"');
-        console.error('');
-        console.error('   ⚠️  If you still see errors:');
-        console.error('      - Make sure database and web service are in SAME region');
-        console.error('      - Try using "-pooler.render.com" format if available');
-        console.error('      - Check if database is paused (free tier may pause after inactivity)');
-        console.error('      - If different, recreate database in same region');
-        console.error('');
-        console.error('   📝 Your current DATABASE_URL:');
-        const dbUrl = process.env.DATABASE_URL || '';
-        if (dbUrl) {
-          try {
-            const url = new URL(dbUrl.replace('postgresql://', 'http://'));
-            console.error(`      Host: ${url.hostname || 'N/A'} ${url.hostname && !url.hostname.includes('.') ? '⚠️ (NO DOMAIN!)' : ''}`);
-            console.error(`      Port: ${url.port || '5432'}`);
-            console.error(`      Database: ${url.pathname.replace('/', '') || 'N/A'}`);
-            if (url.hostname && !url.hostname.includes('.')) {
+        // If last attempt or not retryable error, show full error message
+        if (isLastAttempt || !(error.code === 'ENOTFOUND' || error.message.includes('getaddrinfo ENOTFOUND'))) {
+          console.error('❌ Error initializing database tables:', error);
+          console.error(`   Error message: ${error.message}`);
+          
+          // Check if DATABASE_URL is set
+          const dbUrl = process.env.DATABASE_URL;
+          if (dbUrl) {
+            try {
+              const url = new URL(dbUrl.replace('postgresql://', 'http://'));
               console.error('');
-              console.error('   ❌ PROBLEM: Hostname has no domain!');
-              console.error('   💡 The Internal Database URL from Render should include .render.com');
-              console.error('   💡 Get the COMPLETE URL from Render Dashboard (not just the hostname)');
+              console.error('   📊 Current DATABASE_URL Configuration:');
+              console.error(`      Host: ${url.hostname}`);
+              console.error(`      Port: ${url.port || '5432'}`);
+              console.error(`      Database: ${url.pathname.replace('/', '') || 'default'}`);
+              console.error(`      User: ${url.username || 'default'}`);
+            } catch (e) {
+              console.error(`   Current DATABASE_URL: ${dbUrl.substring(0, 50)}...`);
             }
-          } catch (e) {
-            console.error(`      ${dbUrl.substring(0, 80)}...`);
+          } else {
+            console.error('');
+            console.error('   ⚠️  DATABASE_URL is NOT SET!');
+          }
+          
+          if (error.code === 'ENOTFOUND' || error.message.includes('getaddrinfo ENOTFOUND')) {
+            console.error('');
+            console.error('   🚨 CRITICAL: Database hostname cannot be resolved!');
+            console.error('');
+            console.error('   💡 This usually means:');
+            console.error('      • You created a NEW database (old one expired)');
+            console.error('      • DATABASE_URL still points to OLD database hostname');
+            console.error('      • Need to update DATABASE_URL with NEW database URL');
+            console.error('');
+            console.error('   📋 STEP-BY-STEP FIX:');
+            console.error('');
+            console.error('   1. ✅ Go to Render Dashboard → PostgreSQL Database');
+            console.error('      - Click on your NEW database (not the old one)');
+            console.error('      - Check database status is "Available"');
+            console.error('');
+            console.error('   2. ✅ Copy "Internal Database URL"');
+            console.error('      - Look for "Internal Database URL" (NOT External)');
+            console.error('      - Copy the ENTIRE connection string');
+            console.error('      - Should look like:');
+            console.error('        postgresql://user:pass@dpg-NEW-xxxxx-a.render.com:5432/dbname');
+            console.error('');
+            console.error('   3. ✅ Update DATABASE_URL in Web Service');
+            console.error('      - Go to Render Dashboard → Web Service → Environment');
+            console.error('      - Find DATABASE_URL variable');
+            console.error('      - Replace with NEW database URL from step 2');
+            console.error('      - Save (Render will auto-restart)');
+            console.error('');
+            console.error('   4. ✅ Verify Connection');
+            console.error('      - Check logs after restart');
+            console.error('      - Should see: "✅ PostgreSQL connection successful!"');
+            console.error('');
+            console.error('   ⚠️  If you still see errors:');
+            console.error('      - Make sure database and web service are in SAME region');
+            console.error('      - Try using "-pooler.render.com" format if available');
+            console.error('      - Check if database is paused (free tier may pause after inactivity)');
+            console.error('      - If different, recreate database in same region');
+            console.error('');
+            console.error('   📝 Your current DATABASE_URL:');
+            const dbUrl2 = process.env.DATABASE_URL || '';
+            if (dbUrl2) {
+              try {
+                const url = new URL(dbUrl2.replace('postgresql://', 'http://'));
+                console.error(`      Host: ${url.hostname || 'N/A'} ${url.hostname && !url.hostname.includes('.') ? '⚠️ (NO DOMAIN!)' : ''}`);
+                console.error(`      Port: ${url.port || '5432'}`);
+                console.error(`      Database: ${url.pathname.replace('/', '') || 'N/A'}`);
+                if (url.hostname && !url.hostname.includes('.')) {
+                  console.error('');
+                  console.error('   ❌ PROBLEM: Hostname has no domain!');
+                  console.error('   💡 The Internal Database URL from Render should include .render.com');
+                  console.error('   💡 Get the COMPLETE URL from Render Dashboard (not just the hostname)');
+                }
+              } catch (e) {
+                console.error(`      ${dbUrl2.substring(0, 80)}...`);
+              }
+            }
+            console.error('');
+            console.error('   ⚠️  If database was recreated, the hostname changed - get new URL!');
+          } else if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
+            console.error('   ⚠️  Cannot connect to PostgreSQL. Check your connection settings!');
+            console.error('   ⚠️  Make sure the database host is accessible and credentials are correct.');
+          } else if (error.code === '3D000') {
+            console.error(`   ⚠️  Database "${this.config.database}" does not exist. Please create it first!`);
+          } else if (error.code === '28P01') {
+            console.error('   ⚠️  Access denied. Check your PostgreSQL username and password!');
           }
         }
-        console.error('');
-        console.error('   ⚠️  If database was recreated, the hostname changed - get new URL!');
-      } else if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
-        console.error('   ⚠️  Cannot connect to PostgreSQL. Check your connection settings!');
-        console.error('   ⚠️  Make sure the database host is accessible and credentials are correct.');
-      } else if (error.code === '3D000') {
-        console.error(`   ⚠️  Database "${this.config.database}" does not exist. Please create it first!`);
-      } else if (error.code === '28P01') {
-        console.error('   ⚠️  Access denied. Check your PostgreSQL username and password!');
-      }
-      
-      // If last attempt, throw error; otherwise continue retry loop
-      if (isLastAttempt) {
-        throw error;
+        
+        // If last attempt, throw error; otherwise continue retry loop
+        if (isLastAttempt) {
+          throw error;
+        }
       }
     }
   }
