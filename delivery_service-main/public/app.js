@@ -452,6 +452,14 @@ function showOrdersPage() {
                         </svg>
                         <input type="text" id="searchInput" placeholder="Search" class="search-input">
                     </div>
+                    <button class="btn-secondary" id="exportOrdersBtn" style="display: flex; align-items: center; gap: 8px;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        Export to Excel
+                    </button>
                     <button class="btn-primary" id="newOrderBtn">+ New order</button>
                 </div>
             </div>
@@ -598,6 +606,12 @@ function initializeOrdersPage() {
     const newOrderBtn = document.getElementById('newOrderBtn');
     if (newOrderBtn) {
         newOrderBtn.addEventListener('click', handleNewOrder);
+    }
+    
+    // Export orders button
+    const exportOrdersBtn = document.getElementById('exportOrdersBtn');
+    if (exportOrdersBtn) {
+        exportOrdersBtn.addEventListener('click', exportOrdersToExcel);
     }
 }
 
@@ -1800,6 +1814,259 @@ function renderMerchantsReport(merchants) {
             </table>
         </div>
     `;
+}
+
+// Export orders to Excel
+function exportOrdersToExcel() {
+    try {
+        // Get currently displayed orders (filtered)
+        const displayedOrders = getFilteredOrders();
+        
+        if (displayedOrders.length === 0) {
+            showNotification('Info', 'No orders to export', 'info');
+            return;
+        }
+        
+        // Prepare CSV data
+        const headers = [
+            'Order No.',
+            'Customer Name',
+            'Merchant',
+            'Customer Address',
+            'Amount',
+            'Currency',
+            'Distance',
+            'Order Placed',
+            'Req. Pickup Time',
+            'Req. Delivery Time',
+            'Ready for Pick-up',
+            'Driver',
+            'Status',
+            'Tracking URL',
+            'Customer Phone',
+            'Customer Email',
+            'Order Type'
+        ];
+        
+        const rows = displayedOrders.map(order => {
+            // Extract fields same way as createOrderRow
+            const orderId = order.gloriafood_order_id || order.id || 'N/A';
+            const customerName = order.customer_name || 'N/A';
+            const merchantName = order.merchant_name || (order.store_id ? `Store ${order.store_id}` : 'N/A');
+            const customerAddress = order.delivery_address || order.customer_address || 'N/A';
+            const amount = order.total_price || 0;
+            const currency = order.currency || 'USD';
+            const orderPlaced = order.fetched_at || order.created_at || order.updated_at || 'N/A';
+            const status = order.status || 'N/A';
+            const orderType = order.order_type || 'N/A';
+            const customerPhone = order.customer_phone || 'N/A';
+            const customerEmail = order.customer_email || 'N/A';
+            const trackingUrl = order.doordash_tracking_url || 'N/A';
+            
+            // Extract from raw_data
+            let rawData = {};
+            try {
+                if (order.raw_data) {
+                    rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+                }
+            } catch (e) {
+                // Ignore parsing errors
+            }
+            
+            // Get distance
+            const distance = order.distance || 
+                            rawData.distance || 
+                            rawData.delivery_distance ||
+                            (rawData.delivery && rawData.delivery.distance) ||
+                            'N/A';
+            const formattedDistance = distance && distance !== 'N/A' ? (typeof distance === 'number' ? distance.toFixed(2) + ' km' : distance + ' km') : 'N/A';
+            
+            // Get pickup time
+            const pickupTime = order.pickup_time || 
+                              order.pickupTime || 
+                              rawData.pickup_time || 
+                              rawData.pickupTime || 
+                              rawData.requested_pickup_time ||
+                              rawData.requestedPickupTime ||
+                              rawData.scheduled_pickup_time ||
+                              rawData.scheduledPickupTime ||
+                              rawData.pickup_at ||
+                              rawData.pickupAt ||
+                              (rawData.delivery && rawData.delivery.pickup_time) ||
+                              (rawData.delivery && rawData.delivery.requested_pickup_time) ||
+                              (rawData.schedule && rawData.schedule.pickup_time) ||
+                              null;
+            const formattedPickupTime = pickupTime ? (typeof pickupTime === 'string' ? pickupTime : new Date(pickupTime).toISOString()) : 'N/A';
+            
+            // Get delivery time
+            const deliveryTime = order.delivery_time || 
+                                order.deliveryTime || 
+                                rawData.delivery_time || 
+                                rawData.deliveryTime || 
+                                rawData.requested_delivery_time ||
+                                rawData.requestedDeliveryTime ||
+                                rawData.scheduled_delivery_time ||
+                                rawData.scheduledDeliveryTime ||
+                                rawData.delivery_at ||
+                                rawData.deliveryAt ||
+                                (rawData.delivery && rawData.delivery.delivery_time) ||
+                                (rawData.delivery && rawData.delivery.requested_delivery_time) ||
+                                (rawData.delivery && rawData.delivery.scheduled_delivery_time) ||
+                                (rawData.schedule && rawData.schedule.delivery_time) ||
+                                null;
+            const formattedDeliveryTime = deliveryTime ? (typeof deliveryTime === 'string' ? deliveryTime : new Date(deliveryTime).toISOString()) : 'N/A';
+            
+            // Get ready for pickup
+            const readyForPickup = order.ready_for_pickup || 
+                                   order.readyForPickup || 
+                                   rawData.ready_for_pickup || 
+                                   rawData.readyForPickup ||
+                                   rawData.ready_for_pick_up ||
+                                   rawData.readyForPickUp ||
+                                   rawData.ready_time ||
+                                   rawData.readyTime ||
+                                   rawData.ready_at ||
+                                   rawData.readyAt ||
+                                   rawData.prepared_at ||
+                                   rawData.preparedAt ||
+                                   (rawData.status && rawData.status.ready_time) ||
+                                   (rawData.delivery && rawData.delivery.ready_for_pickup) ||
+                                   null;
+            const formattedReadyForPickup = readyForPickup ? (typeof readyForPickup === 'string' ? readyForPickup : new Date(readyForPickup).toISOString()) : 'N/A';
+            
+            // Get driver
+            const driver = order.driver_name || 
+                          order.driverName || 
+                          order.driver || 
+                          rawData.driver_name || 
+                          rawData.driverName || 
+                          rawData.driver ||
+                          rawData.assigned_driver ||
+                          rawData.assignedDriver ||
+                          rawData.driver_id ||
+                          rawData.driverId ||
+                          (rawData.delivery && rawData.delivery.driver_name) ||
+                          (rawData.delivery && rawData.delivery.driver) ||
+                          (rawData.delivery && rawData.delivery.assigned_driver) ||
+                          (rawData.driver && rawData.driver.name) ||
+                          (rawData.driver && rawData.driver.full_name) ||
+                          'N/A';
+            
+            // Format order placed date
+            let formattedOrderPlaced = 'N/A';
+            if (orderPlaced && orderPlaced !== 'N/A') {
+                try {
+                    formattedOrderPlaced = formatDate(orderPlaced);
+                } catch (e) {
+                    formattedOrderPlaced = orderPlaced;
+                }
+            }
+            
+            // Escape CSV values (handle commas, quotes, newlines)
+            const escapeCSV = (value) => {
+                if (value === null || value === undefined) return '';
+                const str = String(value);
+                if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                    return '"' + str.replace(/"/g, '""') + '"';
+                }
+                return str;
+            };
+            
+            return [
+                escapeCSV(orderId),
+                escapeCSV(customerName),
+                escapeCSV(merchantName),
+                escapeCSV(customerAddress),
+                escapeCSV(amount),
+                escapeCSV(currency),
+                escapeCSV(formattedDistance),
+                escapeCSV(formattedOrderPlaced),
+                escapeCSV(formattedPickupTime),
+                escapeCSV(formattedDeliveryTime),
+                escapeCSV(formattedReadyForPickup),
+                escapeCSV(driver),
+                escapeCSV(status),
+                escapeCSV(trackingUrl),
+                escapeCSV(customerPhone),
+                escapeCSV(customerEmail),
+                escapeCSV(orderType)
+            ];
+        });
+        
+        // Create CSV content
+        const csvContent = [
+            headers.join(','),
+            ...rows.map(row => row.join(','))
+        ].join('\n');
+        
+        // Add BOM for Excel UTF-8 support
+        const BOM = '\uFEFF';
+        const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+        
+        // Create download link
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        
+        // Generate filename with current date
+        const now = new Date();
+        const dateStr = now.toISOString().split('T')[0];
+        const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
+        const statusFilter = currentStatusFilter || 'all';
+        link.setAttribute('download', `orders_${statusFilter}_${dateStr}_${timeStr}.csv`);
+        
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        showNotification('Success', `Exported ${displayedOrders.length} orders to Excel`, 'success');
+    } catch (error) {
+        console.error('Error exporting orders:', error);
+        showNotification('Error', 'Failed to export orders: ' + error.message, 'error');
+    }
+}
+
+// Get filtered orders (currently displayed)
+function getFilteredOrders() {
+    if (!allOrders || allOrders.length === 0) {
+        return [];
+    }
+    
+    let filtered = [...allOrders];
+    
+    // Apply status filter
+    if (currentStatusFilter && currentStatusFilter !== 'current') {
+        filtered = filtered.filter(order => {
+            const category = getOrderCategory(order);
+            return category === currentStatusFilter;
+        });
+    } else if (currentStatusFilter === 'current') {
+        filtered = filtered.filter(order => {
+            const category = getOrderCategory(order);
+            return category === 'current';
+        });
+    }
+    
+    // Apply search filter
+    if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        filtered = filtered.filter(order => {
+            const orderId = (order.gloriafood_order_id || order.id || '').toString().toLowerCase();
+            const customerName = (order.customer_name || '').toLowerCase();
+            const merchantName = (order.merchant_name || order.store_id || '').toLowerCase();
+            const address = (order.delivery_address || order.customer_address || '').toLowerCase();
+            const status = (order.status || '').toLowerCase();
+            
+            return orderId.includes(query) ||
+                   customerName.includes(query) ||
+                   merchantName.includes(query) ||
+                   address.includes(query) ||
+                   status.includes(query);
+        });
+    }
+    
+    return filtered;
 }
 
 // Export report (placeholder)
