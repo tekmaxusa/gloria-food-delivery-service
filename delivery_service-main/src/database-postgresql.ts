@@ -85,24 +85,23 @@ export class OrderDatabasePostgreSQL {
           }
         }
         
-        // Add SSL parameter if missing (required for Render PostgreSQL)
-        // Note: We'll use ssl option in Pool config, but adding sslmode=require to URL for compatibility
-        if (!fixedUrl.includes('sslmode=') && !fixedUrl.includes('?ssl=')) {
-          const separator = fixedUrl.includes('?') ? '&' : '?';
-          fixedUrl = `${fixedUrl}${separator}sslmode=require`;
-          console.log(chalk.blue('   🔒 Added SSL parameter (sslmode=require)'));
-        }
+        // For Render databases, DO NOT add sslmode=require to connection string
+        // Instead, we'll use the ssl option in Pool config with rejectUnauthorized: false
+        // This is critical because sslmode=require in the URL forces certificate validation
+        // which will fail with Render's self-signed certificates
         
-        // Ensure we always use rejectUnauthorized: false for Render (self-signed certificates)
+        // Remove any existing sslmode parameters that might force validation
+        fixedUrl = fixedUrl.replace(/[?&]sslmode=[^&]*/g, '');
+        fixedUrl = fixedUrl.replace(/[?&]ssl=[^&]*/g, '');
+        
+        console.log(chalk.blue('   🔒 Removed sslmode from URL (will use Pool ssl option instead)'));
         console.log(chalk.blue('   🔒 Will use rejectUnauthorized: false for SSL (Render self-signed certs)'));
       }
       
       // For Render PostgreSQL, always enable SSL with rejectUnauthorized: false
       // Render uses self-signed certificates, so we need to disable certificate validation
-      const needsSSL = isRenderDb || 
-                       fixedUrl.includes('sslmode=require') || 
-                       fixedUrl.includes('ssl=true') ||
-                       fixedUrl.includes('?ssl=true');
+      // Note: We removed sslmode from URL, so we check isRenderDb directly
+      const needsSSL = isRenderDb;
       
       console.log(chalk.gray(`   Final connection string: ${fixedUrl.replace(/:[^:@]+@/, ':****@')}`));
       
@@ -351,13 +350,15 @@ export class OrderDatabasePostgreSQL {
               // Try with .render.com domain
               if (attempt === 1) {
                 console.log(chalk.blue(`   🔄 Retrying with .render.com domain...`));
-                const newUrl = dbUrl.replace(`@${hostname}/`, `@${hostname}.render.com:5432/`);
-                const sslUrl = newUrl.includes('sslmode=') ? newUrl : `${newUrl}?sslmode=require`;
+                let newUrl = dbUrl.replace(`@${hostname}/`, `@${hostname}.render.com:5432/`);
+                // Remove any sslmode parameters - we'll use Pool ssl option instead
+                newUrl = newUrl.replace(/[?&]sslmode=[^&]*/g, '');
+                newUrl = newUrl.replace(/[?&]ssl=[^&]*/g, '');
                 
-                // Recreate pool with new URL
+                // Recreate pool with new URL (no sslmode in URL, use Pool ssl option)
                 this.pool.end().catch(() => {});
                 this.pool = new Pool({
-                  connectionString: sslUrl,
+                  connectionString: newUrl,
                   ssl: { rejectUnauthorized: false },
                   max: 10,
                   idleTimeoutMillis: 30000,
@@ -368,13 +369,15 @@ export class OrderDatabasePostgreSQL {
               // Try with -pooler.render.com domain
               else if (attempt === 2) {
                 console.log(chalk.blue(`   🔄 Retrying with -pooler.render.com domain...`));
-                const newUrl = dbUrl.replace(`@${hostname}/`, `@${hostname}-pooler.render.com:5432/`);
-                const sslUrl = newUrl.includes('sslmode=') ? newUrl : `${newUrl}?sslmode=require`;
+                let newUrl = dbUrl.replace(`@${hostname}/`, `@${hostname}-pooler.render.com:5432/`);
+                // Remove any sslmode parameters - we'll use Pool ssl option instead
+                newUrl = newUrl.replace(/[?&]sslmode=[^&]*/g, '');
+                newUrl = newUrl.replace(/[?&]ssl=[^&]*/g, '');
                 
-                // Recreate pool with new URL
+                // Recreate pool with new URL (no sslmode in URL, use Pool ssl option)
                 this.pool.end().catch(() => {});
                 this.pool = new Pool({
-                  connectionString: sslUrl,
+                  connectionString: newUrl,
                   ssl: { rejectUnauthorized: false },
                   max: 10,
                   idleTimeoutMillis: 30000,
