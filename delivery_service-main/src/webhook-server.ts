@@ -31,18 +31,25 @@ class GloriaFoodWebhookServer {
 
   private setupRoutes(): void {
     // Health check endpoint
-    this.app.get('/', (req: Request, res: Response) => {
-      const totalOrders = this.database.getOrderCount();
-      res.json({ 
-        status: 'ok', 
-        service: 'GloriaFood Webhook Server',
-        totalOrders,
-        endpoints: {
-          webhook: '/webhook',
-          orders: '/orders',
-          health: '/health'
-        }
-      });
+    this.app.get('/', async (req: Request, res: Response) => {
+      try {
+        const totalOrders = await this.handleAsync(this.database.getOrderCount());
+        res.json({ 
+          status: 'ok', 
+          service: 'GloriaFood Webhook Server',
+          totalOrders,
+          endpoints: {
+            webhook: '/webhook',
+            orders: '/orders',
+            health: '/health'
+          }
+        });
+      } catch (error: any) {
+        res.status(500).json({ 
+          status: 'error', 
+          error: error.message 
+        });
+      }
     });
 
     // Health check endpoint
@@ -51,7 +58,7 @@ class GloriaFoodWebhookServer {
     });
 
     // Webhook endpoint for receiving orders from GloriaFood
-    this.app.post('/webhook', (req: Request, res: Response) => {
+    this.app.post('/webhook', async (req: Request, res: Response) => {
       try {
         const orderData = req.body;
         
@@ -61,11 +68,11 @@ class GloriaFoodWebhookServer {
         console.log(chalk.gray(`  Body:`, JSON.stringify(orderData, null, 2)));
 
         // Store order in database
-        const savedOrder = this.database.insertOrUpdateOrder(orderData);
+        const savedOrder = await this.handleAsync(this.database.insertOrUpdateOrder(orderData));
 
         if (savedOrder) {
           console.log(chalk.green(`  ✅ Order saved: #${savedOrder.gloriafood_order_id}`));
-          this.displayOrder(savedOrder, true);
+          await this.displayOrder(savedOrder, true);
         } else {
           console.log(chalk.yellow(`  ⚠️  Order received but could not be saved`));
         }
@@ -98,10 +105,10 @@ class GloriaFoodWebhookServer {
     });
 
     // Get all orders endpoint
-    this.app.get('/orders', (req: Request, res: Response) => {
+    this.app.get('/orders', async (req: Request, res: Response) => {
       try {
         const limit = parseInt(req.query.limit as string) || 50;
-        const orders = this.database.getAllOrders(limit);
+        const orders = await this.handleAsync(this.database.getAllOrders(limit));
         res.status(200).json({ 
           success: true,
           count: orders.length,
@@ -116,9 +123,9 @@ class GloriaFoodWebhookServer {
     });
 
     // Get order by ID
-    this.app.get('/orders/:orderId', (req: Request, res: Response) => {
+    this.app.get('/orders/:orderId', async (req: Request, res: Response) => {
       try {
-        const order = this.database.getOrderByGloriaFoodId(req.params.orderId);
+        const order = await this.handleAsync(this.database.getOrderByGloriaFoodId(req.params.orderId));
         if (!order) {
           return res.status(404).json({ 
             success: false,
@@ -138,7 +145,7 @@ class GloriaFoodWebhookServer {
     });
   }
 
-  private displayOrder(order: any, isNew: boolean = false): void {
+  private async displayOrder(order: any, isNew: boolean = false): Promise<void> {
     const prefix = isNew ? chalk.green('🆕 NEW ORDER') : chalk.blue('📦 ORDER');
     
     console.log(`\n${prefix} ${chalk.bold(`#${order.gloriafood_order_id || order.id}`)}`);
@@ -163,9 +170,17 @@ class GloriaFoodWebhookServer {
       console.log(`  ${chalk.bold('Status:')} ${order.status}`);
     }
     
-    const stats = this.database.getOrderCount();
+    const stats = await this.handleAsync(this.database.getOrderCount());
     console.log(chalk.gray('  ──────────────────────────────────────────'));
     console.log(chalk.gray(`  📊 Total Orders in DB: ${stats}`));
+  }
+
+  // Helper method to handle both sync and async database methods
+  private async handleAsync<T>(result: T | Promise<T>): Promise<T> {
+    if (result instanceof Promise) {
+      return await result;
+    }
+    return result;
   }
 
   start(): void {
