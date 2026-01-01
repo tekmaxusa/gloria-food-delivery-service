@@ -2849,13 +2849,23 @@ function hasScheduledDeliveryTime(order) {
         // Ignore parsing errors
     }
     
+    // Check if "Later" option is selected (GloriaFood sends delivery_type or delivery_option)
+    const deliveryType = (rawData.delivery_type || rawData.deliveryOption || rawData.delivery_option || rawData.deliveryType || '').toLowerCase();
+    const deliveryOption = (rawData.delivery_option || rawData.deliveryOption || rawData.available_time || rawData.availableTime || '').toLowerCase();
+    
+    // If delivery type/option indicates "later" or "scheduled", it's scheduled
+    if (deliveryType === 'later' || deliveryType === 'scheduled' || deliveryOption === 'later' || deliveryOption === 'scheduled') {
+        return true;
+    }
+    
     // Check for scheduled delivery time in various possible fields
     // Also check nested delivery object and schedule object
     const deliveryObj = rawData.delivery || order.delivery || {};
     const scheduleObj = rawData.schedule || order.schedule || {};
     const timeObj = rawData.time || order.time || rawData.times || order.times || {};
     
-    const scheduledTime = order.scheduled_delivery_time || 
+    // Check for date and time separately (GloriaFood might send delivery_date and delivery_time separately)
+    let scheduledTime = order.scheduled_delivery_time || 
                          order.scheduledDeliveryTime ||
                          order.delivery_time ||
                          order.deliveryTime ||
@@ -2902,18 +2912,32 @@ function hasScheduledDeliveryTime(order) {
                          timeObj.scheduled_delivery ||
                          null;
     
-    // Check if scheduled time is in the future (any future time means it's scheduled)
-    try {
-        const scheduledDate = new Date(scheduledTime);
-        const now = new Date();
+    // If date and time are separate, combine them
+    if (!scheduledTime) {
+        const deliveryDate = rawData.delivery_date || rawData.deliveryDate || deliveryObj.delivery_date || scheduleObj.delivery_date;
+        const deliveryTimeOnly = rawData.delivery_time_only || rawData.deliveryTimeOnly || deliveryObj.delivery_time_only || scheduleObj.delivery_time_only;
         
-        // If scheduled time is in the future (even 1 minute), it's scheduled
-        // This will catch orders scheduled for tomorrow, specific times, etc.
-        if (scheduledDate > now) {
-            return true;
+        if (deliveryDate && deliveryTimeOnly) {
+            scheduledTime = `${deliveryDate} ${deliveryTimeOnly}`;
+        } else if (deliveryDate) {
+            scheduledTime = deliveryDate;
         }
-    } catch (e) {
-        // Ignore parsing errors
+    }
+    
+    // Check if scheduled time is in the future (any future time means it's scheduled)
+    if (scheduledTime) {
+        try {
+            const scheduledDate = new Date(scheduledTime);
+            const now = new Date();
+            
+            // If scheduled time is in the future (even 1 minute), it's scheduled
+            // This will catch orders scheduled for tomorrow, specific times, etc.
+            if (scheduledDate > now) {
+                return true;
+            }
+        } catch (e) {
+            // Ignore parsing errors, continue to check delivery time
+        }
     }
     
     // Also check delivery time if scheduled time not found - use same comprehensive extraction
@@ -2937,14 +2961,18 @@ function hasScheduledDeliveryTime(order) {
                         rawData.scheduledDeliveryTime ||
                         rawData.preferred_delivery_time ||
                         rawData.preferredDeliveryTime ||
+                        rawData.delivery_date ||
+                        rawData.deliveryDate ||
                         deliveryObj.delivery_time ||
                         deliveryObj.deliveryTime ||
                         deliveryObj.scheduled_delivery_time ||
                         deliveryObj.requested_delivery_time ||
                         deliveryObj.delivery_at ||
+                        deliveryObj.delivery_date ||
                         scheduleObj.delivery_time ||
                         scheduleObj.scheduled_delivery_time ||
                         scheduleObj.requested_delivery_time ||
+                        scheduleObj.delivery_date ||
                         timeObj.delivery ||
                         timeObj.delivery_time ||
                         null;
@@ -2953,21 +2981,23 @@ function hasScheduledDeliveryTime(order) {
         try {
             const deliveryDate = new Date(deliveryTime);
             const now = new Date();
-            const orderCreatedAt = order.created_at || order.fetched_at || order.updated_at;
             
             // If delivery time is in the future, it's scheduled
+            // Be more lenient - any future time means scheduled (for tomorrow, specific times, etc.)
             if (deliveryDate > now) {
-                // Also check if it's significantly different from order creation time
-                // (to distinguish scheduled orders from "as soon as possible")
+                // Check if it's significantly different from order creation time
+                // to distinguish scheduled orders from "as soon as possible"
+                const orderCreatedAt = order.created_at || order.fetched_at || order.updated_at;
                 if (orderCreatedAt) {
                     try {
                         const orderDate = new Date(orderCreatedAt);
                         const timeDiff = deliveryDate.getTime() - orderDate.getTime();
                         const minutesDiff = timeDiff / (1000 * 60);
                         
-                        // If delivery time is more than 15 minutes from order creation, it's scheduled
+                        // If delivery time is more than 5 minutes from order creation, it's scheduled
                         // This catches orders scheduled for tomorrow or specific times
-                        if (minutesDiff > 15) {
+                        // Very lenient threshold to catch all "Later" orders
+                        if (minutesDiff > 5) {
                             return true;
                         }
                     } catch (e) {
@@ -3222,7 +3252,7 @@ function createOrderRow(order) {
     const scheduleObj = rawData.schedule || {};
     const timeObj = rawData.time || rawData.times || {};
     
-    const pickupTime = order.pickup_time || 
+    let pickupTime = order.pickup_time || 
                       order.pickupTime || 
                       order.pickup_at ||
                       order.pickupAt ||
@@ -3261,8 +3291,21 @@ function createOrderRow(order) {
                       (rawData.restaurant && rawData.restaurant.pickup_time) ||
                       null;
     
+    // If date and time are separate for pickup, combine them
+    if (!pickupTime) {
+        const pickupDate = rawData.pickup_date || rawData.pickupDate || deliveryObj.pickup_date || scheduleObj.pickup_date;
+        const pickupTimeOnly = rawData.pickup_time_only || rawData.pickupTimeOnly || deliveryObj.pickup_time_only || scheduleObj.pickup_time_only;
+        
+        if (pickupDate && pickupTimeOnly) {
+            pickupTime = `${pickupDate} ${pickupTimeOnly}`;
+        } else if (pickupDate) {
+            pickupTime = pickupDate;
+        }
+    }
+    
     // Get delivery time from various possible fields (comprehensive search)
-    const deliveryTime = order.delivery_time || 
+    // Also check for separate date and time fields (GloriaFood "Later" option)
+    let deliveryTime = order.delivery_time || 
                         order.deliveryTime || 
                         order.delivery_at ||
                         order.deliveryAt ||
@@ -3301,6 +3344,19 @@ function createOrderRow(order) {
                         timeObj.delivery ||
                         timeObj.delivery_time ||
                         null;
+    
+    // If date and time are separate, combine them (for "Later" option)
+    if (!deliveryTime) {
+        const deliveryDate = rawData.delivery_date || rawData.deliveryDate || deliveryObj.delivery_date || scheduleObj.delivery_date || rawData.scheduled_date || scheduleObj.scheduled_date;
+        const deliveryTimeOnly = rawData.delivery_time_only || rawData.deliveryTimeOnly || deliveryObj.delivery_time_only || scheduleObj.delivery_time_only || rawData.scheduled_time || scheduleObj.scheduled_time;
+        
+        if (deliveryDate && deliveryTimeOnly) {
+            deliveryTime = `${deliveryDate} ${deliveryTimeOnly}`;
+        } else if (deliveryDate) {
+            // If only date, use date with default time
+            deliveryTime = deliveryDate;
+        }
+    }
     
     // Get ready for pickup time (comprehensive search)
     const readyForPickup = order.ready_for_pickup || 

@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import { OrderDatabase } from './database';
+import { DatabaseFactory, IDatabase } from './database-factory';
 import chalk from 'chalk';
 import * as dotenv from 'dotenv';
 
@@ -7,12 +7,12 @@ dotenv.config();
 
 class GloriaFoodWebhookServer {
   private app: express.Application;
-  private database: OrderDatabase;
+  private database: IDatabase;
   private port: number;
 
-  constructor(database: OrderDatabase, port: number = 3000) {
+  constructor(database?: IDatabase, port: number = 3000) {
     this.app = express();
-    this.database = database;
+    this.database = database || DatabaseFactory.createDatabase();
     this.port = port;
     this.setupMiddleware();
     this.setupRoutes();

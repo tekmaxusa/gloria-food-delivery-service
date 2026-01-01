@@ -1,12 +1,11 @@
 import * as dotenv from 'dotenv';
-import { OrderDatabase, Order } from './src/database';
+import { DatabaseFactory, IDatabase, Order } from './src/database-factory';
 import chalk from 'chalk';
 
 // Load environment variables
 dotenv.config();
 
-const databasePath = process.env.DATABASE_PATH || './orders.db';
-const database = new OrderDatabase(databasePath);
+const database = DatabaseFactory.createDatabase();
 
 function displayOrder(order: Order, index?: number): void {
   const orderNum = index !== undefined ? `${index + 1}. ` : '';

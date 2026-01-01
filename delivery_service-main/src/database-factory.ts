@@ -1,6 +1,5 @@
 import * as dotenv from 'dotenv';
-import { OrderDatabasePostgreSQL } from './database-postgresql';
-import { Order } from './database';
+import { OrderDatabasePostgreSQL, Order } from './database-postgresql';
 
 // Load environment variables
 dotenv.config();
@@ -75,5 +74,5 @@ export class DatabaseFactory {
   }
 }
 
-export { Order, OrderDatabasePostgreSQL };
+export { Order, OrderDatabasePostgreSQL } from './database-postgresql';
 
