@@ -3640,7 +3640,6 @@ async function getDriverSettingsContent() {
                         <input type="checkbox" ${itemCheckPickup ? 'checked' : ''} onchange="toggleDriverSetting('itemCheckPickup', this.checked)">
                         <span class="slider"></span>
                     </label>
-                    <button class="btn-upgrade">Upgrade</button>
                 </div>
             </div>
             
@@ -3665,7 +3664,6 @@ async function getDriverSettingsContent() {
                         <input type="checkbox" ${requireIDScanning ? 'checked' : ''} onchange="toggleDriverSetting('requireIDScanning', this.checked)">
                         <span class="slider"></span>
                     </label>
-                    <button class="btn-upgrade">Upgrade</button>
                 </div>
             </div>
             
