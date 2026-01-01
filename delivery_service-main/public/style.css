@@ -335,7 +335,7 @@ body {
 .table-container {
     background: #ffffff;
     border-radius: 12px;
-    overflow: hidden;
+    overflow: visible;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
     border: 1px solid #e2e8f0;
 }
@@ -413,6 +413,7 @@ body {
     padding: 16px 20px;
     font-size: 14px;
     color: #334155;
+    position: relative;
 }
 
 .orders-table td:first-child {
@@ -579,6 +580,58 @@ body {
 .btn-icon.delete:hover {
     background: #fee2e2;
     color: #dc2626;
+}
+
+/* Dropdown Menu Styles */
+.dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.dropdown-menu {
+    position: absolute;
+    right: 0;
+    top: 100%;
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 10px 15px rgba(0, 0, 0, 0.1);
+    z-index: 10000;
+    min-width: 150px;
+    margin-top: 4px;
+    display: none;
+    overflow: visible;
+}
+
+.dropdown-menu.show {
+    display: block !important;
+}
+
+.dropdown-item {
+    width: 100%;
+    text-align: left;
+    padding: 8px 12px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.2s;
+    color: #1e293b;
+    display: block;
+}
+
+.dropdown-item:hover {
+    background: #f1f5f9;
+}
+
+.dropdown-item:first-child {
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+}
+
+.dropdown-item:last-child {
+    border-bottom-left-radius: 6px;
+    border-bottom-right-radius: 6px;
 }
 
 /* Modal Styles - Modern Design */

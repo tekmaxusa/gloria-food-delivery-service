@@ -654,6 +654,12 @@ function showOrdersPage() {
                                 <path d="M12 5v14M5 12l7-7 7 7"/>
                             </svg>
                         </th>
+                        <th class="sortable">
+                            <span>Tracking</span>
+                            <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 5v14M5 12l7-7 7 7"/>
+                            </svg>
+                        </th>
                         <th></th>
                     </tr>
                 </thead>
@@ -5522,17 +5528,17 @@ function createOrderRow(order) {
     // Three dots menu
     const moreMenu = `
         <div class="dropdown" style="position: relative; display: inline-block;">
-            <button class="btn-icon" onclick="toggleOrderMenu('${escapeHtml(String(orderId))}')" style="color: #6b7280;">
+            <button class="btn-icon" onclick="toggleOrderMenu('${escapeHtml(String(orderId))}'); event.stopPropagation();" style="color: #6b7280; position: relative; z-index: 10;">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="1"></circle>
                     <circle cx="12" cy="5" r="1"></circle>
                     <circle cx="12" cy="19" r="1"></circle>
                 </svg>
             </button>
-            <div id="menu-${escapeHtml(String(orderId))}" class="dropdown-menu" style="display: none; position: absolute; right: 0; top: 100%; background: white; border: 1px solid #e5e7eb; border-radius: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 1000; min-width: 150px; margin-top: 4px;">
-                <button class="dropdown-item" onclick="viewOrderDetails('${escapeHtml(String(orderId))}')" style="width: 100%; text-align: left; padding: 8px 12px; border: none; background: none; cursor: pointer; font-size: 14px;">View Details</button>
-                <button class="dropdown-item" onclick="editOrder('${escapeHtml(String(orderId))}')" style="width: 100%; text-align: left; padding: 8px 12px; border: none; background: none; cursor: pointer; font-size: 14px;">Edit</button>
-                <button class="dropdown-item" onclick="deleteOrder('${escapeHtml(String(orderId))}')" style="width: 100%; text-align: left; padding: 8px 12px; border: none; background: none; cursor: pointer; font-size: 14px; color: #ef4444;">Delete</button>
+            <div id="menu-${escapeHtml(String(orderId))}" class="dropdown-menu" style="display: none; position: absolute; right: 0; top: 100%; background: white; border: 1px solid #e5e7eb; border-radius: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 10000; min-width: 150px; margin-top: 4px;">
+                <button class="dropdown-item" onclick="viewOrderDetails('${escapeHtml(String(orderId))}')" style="width: 100%; text-align: left; padding: 8px 12px; border: none; background: none; cursor: pointer; font-size: 14px; transition: background 0.2s;">View Details</button>
+                <button class="dropdown-item" onclick="editOrder('${escapeHtml(String(orderId))}')" style="width: 100%; text-align: left; padding: 8px 12px; border: none; background: none; cursor: pointer; font-size: 14px; transition: background 0.2s;">Edit</button>
+                <button class="dropdown-item" onclick="deleteOrder('${escapeHtml(String(orderId))}')" style="width: 100%; text-align: left; padding: 8px 12px; border: none; background: none; cursor: pointer; font-size: 14px; color: #ef4444; transition: background 0.2s;">Delete</button>
             </div>
         </div>
     `;
@@ -5556,6 +5562,7 @@ function createOrderRow(order) {
             <td>${formattedReadyForPickup}</td>
             <td>${formattedDriver}</td>
             <td><span class="status-badge status-${status.toLowerCase()}">${escapeHtml(status)}</span></td>
+            <td>${tracking}</td>
             <td>${moreMenu}</td>
         </tr>
     `;
@@ -5729,14 +5736,17 @@ function toggleOrderMenu(orderId) {
     document.querySelectorAll('.dropdown-menu').forEach(m => {
         if (m.id !== `menu-${orderId}`) {
             m.style.display = 'none';
+            m.classList.remove('show');
         }
     });
     
     // Toggle current menu
     if (menu.style.display === 'none' || !menu.style.display) {
         menu.style.display = 'block';
+        menu.classList.add('show');
     } else {
         menu.style.display = 'none';
+        menu.classList.remove('show');
     }
 }
 
@@ -5745,6 +5755,7 @@ document.addEventListener('click', (e) => {
     if (!e.target.closest('.dropdown')) {
         document.querySelectorAll('.dropdown-menu').forEach(menu => {
             menu.style.display = 'none';
+            menu.classList.remove('show');
         });
     }
 });
