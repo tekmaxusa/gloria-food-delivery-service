@@ -4198,6 +4198,67 @@ function selectBusinessType(type) {
     showNotification('Success', 'Business type updated', 'success');
 }
 
+function switchBusinessTab(tab) {
+    localStorage.setItem('businessSettingsTab', tab);
+    loadSettingsContent('business-settings');
+}
+
+function editMaxDeliveryTimeDC() {
+    const valueElement = document.getElementById('maxDeliveryTimeValueDC');
+    if (!valueElement) return;
+    
+    const currentValue = valueElement.textContent.replace(' Minutes', '');
+    const newValue = prompt('Enter maximum delivery time (minutes):', currentValue);
+    
+    if (newValue !== null && newValue.trim() !== '') {
+        const minutes = parseInt(newValue.trim());
+        if (!isNaN(minutes) && minutes > 0) {
+            valueElement.textContent = `${minutes} Minutes`;
+            localStorage.setItem('maxDeliveryTime', minutes.toString());
+            showNotification('Success', 'Maximum delivery time updated', 'success');
+        } else {
+            showNotification('Error', 'Please enter a valid number', 'error');
+        }
+    }
+}
+
+function editOrderPrepTimeDC() {
+    const valueElement = document.getElementById('orderPrepTimeValueDC');
+    if (!valueElement) return;
+    
+    const currentValue = valueElement.textContent.replace(' Minutes', '');
+    const newValue = prompt('Enter order preparation time (minutes):', currentValue);
+    
+    if (newValue !== null && newValue.trim() !== '') {
+        const minutes = parseInt(newValue.trim());
+        if (!isNaN(minutes) && minutes > 0) {
+            valueElement.textContent = `${minutes} Minutes`;
+            localStorage.setItem('orderPrepTime', minutes.toString());
+            showNotification('Success', 'Order preparation time updated', 'success');
+        } else {
+            showNotification('Error', 'Please enter a valid number', 'error');
+        }
+    }
+}
+
+function cancelBusinessSettings() {
+    // Reload to reset any unsaved changes
+    loadSettingsContent('business-settings');
+    showNotification('Info', 'Changes cancelled', 'info');
+}
+
+function saveBusinessSettings() {
+    // Save all settings
+    const maxDeliveryTime = document.getElementById('maxDeliveryTimeValueDC')?.textContent.replace(' Minutes', '') || localStorage.getItem('maxDeliveryTime') || '60';
+    const orderPrepTime = document.getElementById('orderPrepTimeValueDC')?.textContent.replace(' Minutes', '') || localStorage.getItem('orderPrepTime') || '60';
+    
+    localStorage.setItem('maxDeliveryTime', maxDeliveryTime);
+    localStorage.setItem('orderPrepTime', orderPrepTime);
+    
+    // TODO: Save to backend API
+    showNotification('Success', 'Settings saved successfully', 'success');
+}
+
 function toggleDriverFleet(enabled) {
     localStorage.setItem('useDriverFleet', enabled);
     showNotification('Success', `Driver fleet ${enabled ? 'enabled' : 'disabled'}`, 'success');
