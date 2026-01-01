@@ -3146,7 +3146,7 @@ function hasScheduledDeliveryTime(order) {
     }
     
     // Debug: Log if order is NOT scheduled (only log once per order to avoid spam)
-    const orderId = order.gloriafood_order_id || order.id;
+    // orderId is already declared at the top of this function
     if (orderId && !window._scheduledDebugLogged) {
         window._scheduledDebugLogged = new Set();
     }
