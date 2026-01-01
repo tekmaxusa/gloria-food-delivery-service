@@ -3218,6 +3218,8 @@ async function loadSettingsContent(itemId) {
             content = await getUsersContent();
         } else if (itemId === 'location') {
             content = await getLocationContent();
+        } else if (itemId === 'dispatch-settings') {
+            content = await getDispatchSettingsContent();
         } else {
             content = await getSettingsContent(itemId);
         }
@@ -3418,22 +3420,676 @@ async function getBusinessSettingsContent() {
     `;
 }
 
+// Get Dispatch Settings content
+async function getDispatchSettingsContent() {
+    const autoAssign = localStorage.getItem('dispatchAutoAssign') === 'true';
+    const dispatchTimeWindow = localStorage.getItem('dispatchTimeWindow') || '1';
+    
+    return `
+        <h1 class="settings-content-title">Dispatch settings</h1>
+        
+        <!-- Auto-assign Section -->
+        <div class="driver-settings-section">
+            <div class="driver-setting-item">
+                <div class="driver-setting-content">
+                    <div class="driver-setting-label">Auto-assign</div>
+                    <p class="driver-setting-description">Any incoming delivery order will be assigned to the best drivers.</p>
+                </div>
+                <label class="switch">
+                    <input type="checkbox" ${autoAssign ? 'checked' : ''} onchange="toggleDispatchSetting('autoAssign', this.checked)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+        </div>
+        
+        <!-- Dispatch time window Section -->
+        <div class="driver-settings-section">
+            <h3 class="settings-section-subtitle">Dispatch time window</h3>
+            <p class="settings-instruction-text">This time is used to indicate when a scheduled order will be put in the current order tab for dispatch. If this time is 1 hours, it means when the required delivery time is within 1 hours window, this order will be moved to the current order tab for dispatch.</p>
+            
+            <div class="driver-time-input">
+                <input type="number" class="business-input" id="dispatchTimeWindowInput" value="${dispatchTimeWindow}" min="0.5" max="24" step="0.5" style="width: 100px; display: inline-block;">
+                <span style="margin-left: 8px; color: #475569;">hours</span>
+                <button class="btn-primary" onclick="saveDispatchTimeWindow()" style="margin-left: 16px; padding: 8px 16px;">Save</button>
+            </div>
+        </div>
+    `;
+}
+
+// Get Driver Settings content
+async function getDriverSettingsContent() {
+    const dispatchOnlineOnly = localStorage.getItem('dispatchOnlineOnly') === 'true';
+    const autoAccept = localStorage.getItem('autoAccept') === 'true';
+    const showItemPrice = localStorage.getItem('showItemPrice') === 'true';
+    const showEarningInfo = localStorage.getItem('showEarningInfo') === 'true';
+    const showDriverPhone = localStorage.getItem('showDriverPhone') === 'true';
+    const showCustomerDetails = localStorage.getItem('showCustomerDetails') === 'true';
+    const itemCheckPickup = localStorage.getItem('itemCheckPickup') === 'true';
+    const requirePOD = localStorage.getItem('requirePOD') === 'true';
+    const requireIDScanning = localStorage.getItem('requireIDScanning') === 'true';
+    const reoptimizeRoute = localStorage.getItem('reoptimizeRoute') === 'true';
+    const geofencing = localStorage.getItem('geofencing') === 'true';
+    const driverResponseTime = localStorage.getItem('driverResponseTime') || '10';
+    const fixPayPerDelivery = localStorage.getItem('fixPayPerDelivery') === 'true';
+    const fixPayAmount = localStorage.getItem('fixPayAmount') || '5';
+    const percentageOrderTotal = localStorage.getItem('percentageOrderTotal') === 'true';
+    const perDistance = localStorage.getItem('perDistance') === 'true';
+    const percentageDeliveryFee = localStorage.getItem('percentageDeliveryFee') === 'true';
+    const percentageDeliveryFeeValue = localStorage.getItem('percentageDeliveryFeeValue') || '100';
+    const percentageTips = localStorage.getItem('percentageTips') === 'true';
+    const percentageTipsValue = localStorage.getItem('percentageTipsValue') || '100';
+    const payPerHoursOnline = localStorage.getItem('payPerHoursOnline') === 'true';
+    
+    return `
+        <h1 class="settings-content-title">Driver settings</h1>
+        
+        <!-- Driver App Section -->
+        <div class="driver-settings-section">
+            <h3 class="settings-section-subtitle">Driver app</h3>
+            <p class="settings-instruction-text">Custom settings to manage drivers</p>
+            
+            <div class="driver-setting-item">
+                <div class="driver-setting-content">
+                    <div class="driver-setting-label">Dispatch to online drivers only</div>
+                    <p class="driver-setting-description">This is only show drivers active now on the driver page</p>
+                </div>
+                <label class="switch">
+                    <input type="checkbox" ${dispatchOnlineOnly ? 'checked' : ''} onchange="toggleDriverSetting('dispatchOnlineOnly', this.checked)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            
+            <div class="driver-setting-item">
+                <div class="driver-setting-content">
+                    <div class="driver-setting-label">Drivers will always accept assigned orders (auto-accept)</div>
+                    <p class="driver-setting-description">No accept/reject option for the driver</p>
+                </div>
+                <label class="switch">
+                    <input type="checkbox" ${autoAccept ? 'checked' : ''} onchange="toggleDriverSetting('autoAccept', this.checked)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            
+            <div class="driver-setting-item">
+                <div class="driver-setting-content">
+                    <div class="driver-setting-label">Show order item price to driver/customer</div>
+                </div>
+                <label class="switch">
+                    <input type="checkbox" ${showItemPrice ? 'checked' : ''} onchange="toggleDriverSetting('showItemPrice', this.checked)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            
+            <div class="driver-setting-item">
+                <div class="driver-setting-content">
+                    <div class="driver-setting-label">Show earning info to drivers before they accept the order</div>
+                </div>
+                <label class="switch">
+                    <input type="checkbox" ${showEarningInfo ? 'checked' : ''} onchange="toggleDriverSetting('showEarningInfo', this.checked)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            
+            <div class="driver-setting-item">
+                <div class="driver-setting-content">
+                    <div class="driver-setting-label">Show driver phone number to customers</div>
+                    <p class="driver-setting-description">Customers will be able to call drivers directly</p>
+                </div>
+                <label class="switch">
+                    <input type="checkbox" ${showDriverPhone ? 'checked' : ''} onchange="toggleDriverSetting('showDriverPhone', this.checked)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            
+            <div class="driver-setting-item">
+                <div class="driver-setting-content">
+                    <div class="driver-setting-label">Show sensitive customer details (Customer name & phone number) to the driver</div>
+                </div>
+                <label class="switch">
+                    <input type="checkbox" ${showCustomerDetails ? 'checked' : ''} onchange="toggleDriverSetting('showCustomerDetails', this.checked)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            
+            <div class="driver-setting-item">
+                <div class="driver-setting-content">
+                    <div class="driver-setting-label">Item check on pick-up</div>
+                    <p class="driver-setting-description">Drivers have to confirm items on pick-up</p>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <label class="switch">
+                        <input type="checkbox" ${itemCheckPickup ? 'checked' : ''} onchange="toggleDriverSetting('itemCheckPickup', this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                    <button class="btn-upgrade">Upgrade</button>
+                </div>
+            </div>
+            
+            <div class="driver-setting-item">
+                <div class="driver-setting-content">
+                    <div class="driver-setting-label">Require Proof of Delivery</div>
+                    <p class="driver-setting-description">Drivers must take proof of delivery (Only Picture) to complete an order</p>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <label class="switch">
+                        <input type="checkbox" ${requirePOD ? 'checked' : ''} onchange="toggleDriverSetting('requirePOD', this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                    <button class="btn-upgrade">Upgrade</button>
+                </div>
+            </div>
+            
+            <div class="driver-setting-item">
+                <div class="driver-setting-content">
+                    <div class="driver-setting-label">Requires ID scanning</div>
+                    <p class="driver-setting-description">Drivers must do id scanning</p>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <label class="switch">
+                        <input type="checkbox" ${requireIDScanning ? 'checked' : ''} onchange="toggleDriverSetting('requireIDScanning', this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                    <button class="btn-upgrade">Upgrade</button>
+                </div>
+            </div>
+            
+            <div class="driver-setting-item">
+                <div class="driver-setting-content">
+                    <div class="driver-setting-label">Drivers can re-optimize the route from their App</div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <label class="switch">
+                        <input type="checkbox" ${reoptimizeRoute ? 'checked' : ''} onchange="toggleDriverSetting('reoptimizeRoute', this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                    <button class="btn-upgrade">Upgrade</button>
+                </div>
+            </div>
+            
+            <div class="driver-setting-item">
+                <div class="driver-setting-content">
+                    <div class="driver-setting-label">Geofencing for pick-up & drop-off</div>
+                    <p class="driver-setting-description">Set geofencing for pick-up and drop-off</p>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <label class="switch">
+                        <input type="checkbox" ${geofencing ? 'checked' : ''} onchange="toggleDriverSetting('geofencing', this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                    <button class="btn-upgrade">Upgrade</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Driver Response Time Section -->
+        <div class="driver-settings-section">
+            <h3 class="settings-section-subtitle">Driver response time</h3>
+            <p class="settings-instruction-text">This is the maximum time allowed for a driver to send her feedback for an assigned order with 'Accept' or 'Reject'. If the driver does not respond within the time specified here, it comes back to dispatch dashboard for dispatching to others</p>
+            
+            <div class="driver-time-input">
+                <input type="number" class="business-input" id="driverResponseTimeInput" value="${driverResponseTime}" min="1" max="60" style="width: 100px; display: inline-block;">
+                <span style="margin-left: 8px; color: #475569;">mins</span>
+                <button class="btn-primary" onclick="saveDriverResponseTime()" style="margin-left: 16px; padding: 8px 16px;">Save</button>
+            </div>
+        </div>
+        
+        <!-- Driver Payment Section -->
+        <div class="driver-settings-section">
+            <h3 class="settings-section-subtitle">Driver payment ($)</h3>
+            <p class="settings-instruction-text">This is to show how much money driver will be paid per delivery for calculating the end of the day due.</p>
+            
+            <div class="driver-payment-item">
+                <div class="driver-payment-content">
+                    <div class="driver-setting-label">Fix pay per delivery</div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <label class="switch">
+                        <input type="checkbox" ${fixPayPerDelivery ? 'checked' : ''} onchange="toggleDriverPayment('fixPayPerDelivery', this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                    ${fixPayPerDelivery ? `<input type="number" class="business-input" id="fixPayAmount" value="${fixPayAmount}" style="width: 80px; display: inline-block;" onchange="updateDriverPayment('fixPayAmount', this.value)"> <span style="color: #475569;">/Order</span>` : ''}
+                </div>
+            </div>
+            
+            <div class="driver-payment-item">
+                <div class="driver-payment-content">
+                    <div class="driver-setting-label">Percentage of order total</div>
+                </div>
+                <label class="switch">
+                    <input type="checkbox" ${percentageOrderTotal ? 'checked' : ''} onchange="toggleDriverPayment('percentageOrderTotal', this.checked)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            
+            <div class="driver-payment-item">
+                <div class="driver-payment-content">
+                    <div class="driver-setting-label">Per distance</div>
+                </div>
+                <label class="switch">
+                    <input type="checkbox" ${perDistance ? 'checked' : ''} onchange="toggleDriverPayment('perDistance', this.checked)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            
+            <div class="driver-payment-item">
+                <div class="driver-payment-content">
+                    <div class="driver-setting-label">% of delivery fee charged to the end customer</div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <label class="switch">
+                        <input type="checkbox" ${percentageDeliveryFee ? 'checked' : ''} onchange="toggleDriverPayment('percentageDeliveryFee', this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                    ${percentageDeliveryFee ? `<input type="number" class="business-input" id="percentageDeliveryFeeValue" value="${percentageDeliveryFeeValue}" style="width: 80px; display: inline-block;" onchange="updateDriverPayment('percentageDeliveryFeeValue', this.value)"> <span style="color: #475569;">%</span>` : ''}
+                </div>
+            </div>
+            
+            <div class="driver-payment-item">
+                <div class="driver-payment-content">
+                    <div class="driver-setting-label">% of Tips given by the end customer</div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <label class="switch">
+                        <input type="checkbox" ${percentageTips ? 'checked' : ''} onchange="toggleDriverPayment('percentageTips', this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                    ${percentageTips ? `<input type="number" class="business-input" id="percentageTipsValue" value="${percentageTipsValue}" style="width: 80px; display: inline-block;" onchange="updateDriverPayment('percentageTipsValue', this.value)"> <span style="color: #475569;">%</span>` : ''}
+                </div>
+            </div>
+            
+            <div class="driver-payment-item">
+                <div class="driver-payment-content">
+                    <div class="driver-setting-label">Pay per hours online</div>
+                </div>
+                <label class="switch">
+                    <input type="checkbox" ${payPerHoursOnline ? 'checked' : ''} onchange="toggleDriverPayment('payPerHoursOnline', this.checked)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            
+            <div class="driver-payment-summary" id="paymentSummary">
+                ${calculatePaymentSummary()}
+            </div>
+        </div>
+    `;
+}
+
+// Get Third-Party Delivery content
+async function getThirdPartyDeliveryContent() {
+    const activeTab = localStorage.getItem('thirdPartyTab') || 'services';
+    const doordashEnabled = localStorage.getItem('doordashEnabled') === 'true';
+    const uberEnabled = localStorage.getItem('uberEnabled') === 'true';
+    const autoAssignOrders = localStorage.getItem('autoAssignOrders') === 'true';
+    const thirdPartyPickupInstructions = localStorage.getItem('thirdPartyPickupInstructions') === 'true';
+    
+    return `
+        <h1 class="settings-content-title">Third Party Delivery Services</h1>
+        
+        <div class="third-party-tabs">
+            <button class="third-party-tab ${activeTab === 'services' ? 'active' : ''}" onclick="switchThirdPartyTab('services')">Third-party Services</button>
+            <button class="third-party-tab ${activeTab === 'settings' ? 'active' : ''}" onclick="switchThirdPartyTab('settings')">Third-party Settings</button>
+        </div>
+        
+        <div id="thirdPartyContent">
+            ${activeTab === 'services' ? `
+                <!-- National & Regional Services -->
+                <div class="third-party-section">
+                    <h3 class="settings-section-subtitle">National & Regional Services</h3>
+                    <h4 style="font-size: 16px; font-weight: 600; color: #0f172a; margin: 16px 0 8px 0;">On Demand Delivery</h4>
+                    
+                    <div class="third-party-service-card">
+                        <div class="service-card-content">
+                            <div class="service-name">DoorDash</div>
+                            <p class="service-description">On-demand short distance food delivery, grocery delivery, convenience delivery, pet items and other small retail deliveries.</p>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <label class="switch">
+                                <input type="checkbox" ${doordashEnabled ? 'checked' : ''} onchange="toggleThirdPartyService('doordash', this.checked)">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="third-party-service-card">
+                        <div class="service-card-content">
+                            <div class="service-name">Uber</div>
+                            <p class="service-description">On-demand short distance food delivery.</p>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <label class="switch">
+                                <input type="checkbox" ${uberEnabled ? 'checked' : ''} onchange="toggleThirdPartyService('uber', this.checked)">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div style="text-align: right; margin-top: 16px;">
+                        <button class="btn-upgrade">Upgrade</button>
+                    </div>
+                </div>
+                
+                <!-- Local Services -->
+                <div class="third-party-section">
+                    <h3 class="settings-section-subtitle">Local Services</h3>
+                    <p class="settings-instruction-text">Invite a local delivery company to deliver for you. TekMaxLLC allows you to easily send orders to local 3rd party delivery services on TekMaxLLC platform.</p>
+                    <button class="btn-primary" onclick="inviteLocalDelivery()" style="margin-top: 16px;">Invite a local delivery company</button>
+                </div>
+            ` : `
+                <!-- Third-party Settings -->
+                <div class="third-party-section">
+                    <div class="driver-setting-item">
+                        <div class="driver-setting-content">
+                            <div class="driver-setting-label">Automatically assign orders</div>
+                            <p class="driver-setting-description">Any incoming delivery request will be assigned to the best driver</p>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" ${autoAssignOrders ? 'checked' : ''} onchange="toggleThirdPartySetting('autoAssignOrders', this.checked)">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    
+                    <div class="driver-setting-item" style="border-top: 1px solid #e2e8f0; margin-top: 16px; padding-top: 20px;">
+                        <div class="driver-setting-content">
+                            <div class="driver-setting-label">Third-Party Driver Pickup Instructions</div>
+                            <p class="driver-setting-description">These instructions will appear for orders assigned to third-party drivers</p>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" ${thirdPartyPickupInstructions ? 'checked' : ''} onchange="toggleThirdPartySetting('thirdPartyPickupInstructions', this.checked)">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+            `}
+        </div>
+    `;
+}
+
+// Get Users content
+async function getUsersContent() {
+    // Get users from API or use current user
+    let users = [];
+    try {
+        // TODO: Implement users API endpoint
+        // For now, use current user if available
+        if (currentUser) {
+            users = [currentUser];
+        }
+    } catch (error) {
+        console.error('Error fetching users:', error);
+    }
+    
+    return `
+        <h1 class="settings-content-title">Users</h1>
+        
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <div></div>
+            <button class="btn-primary" onclick="inviteUser()">Invite user</button>
+        </div>
+        
+        <div class="users-search-box">
+            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+            </svg>
+            <input type="text" id="usersSearchInput" placeholder="Search" class="search-input" oninput="filterUsers()">
+        </div>
+        
+        <div class="table-container" style="margin-top: 16px;">
+            <table class="orders-table">
+                <thead>
+                    <tr>
+                        <th class="sortable">
+                            <span>Name</span>
+                            <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 5v14M5 12l7-7 7 7"/>
+                            </svg>
+                        </th>
+                        <th class="sortable">
+                            <span>Email</span>
+                            <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 5v14M5 12l7-7 7 7"/>
+                            </svg>
+                        </th>
+                        <th>Role</th>
+                    </tr>
+                </thead>
+                <tbody id="usersTableBody">
+                    ${users.length > 0 ? users.map(user => `
+                        <tr>
+                            <td>
+                                <div style="display: flex; align-items: center; gap: 12px;">
+                                    <div class="user-avatar" style="width: 32px; height: 32px; border-radius: 50%; background: #22c55e; color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 12px;">
+                                        ${(user.full_name || user.email || 'U').charAt(0).toUpperCase()}
+                                    </div>
+                                    <span>${escapeHtml(user.full_name || user.email || 'User')}</span>
+                                </div>
+                            </td>
+                            <td>${escapeHtml(user.email || 'N/A')}</td>
+                            <td><span class="status-badge status-active">${escapeHtml(user.role || 'User')}</span></td>
+                        </tr>
+                    `).join('') : `
+                        <tr>
+                            <td colspan="3" class="empty-state-cell">
+                                <div class="empty-state">
+                                    <div class="empty-state-text">No users found</div>
+                                </div>
+                            </td>
+                        </tr>
+                    `}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+// Get Location content
+async function getLocationContent() {
+    const country = localStorage.getItem('country') || 'United States';
+    const city = localStorage.getItem('city') || '';
+    const currency = localStorage.getItem('currency') || 'USD';
+    const timezoneAuto = localStorage.getItem('timezoneAuto') === 'true';
+    const timezone = localStorage.getItem('timezone') || 'UTC-06:00';
+    const distanceUnit = localStorage.getItem('distanceUnit') || 'mile';
+    
+    // Get current local time
+    const now = new Date();
+    const localTime = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    
+    return `
+        <h1 class="settings-content-title">Location</h1>
+        
+        <!-- Geographical Location Settings -->
+        <div class="driver-settings-section">
+            <div class="location-field">
+                <label class="business-input-label">Country</label>
+                <div class="location-value">${escapeHtml(country)}</div>
+            </div>
+            
+            <div class="location-field">
+                <label class="business-input-label">City</label>
+                <input type="text" class="business-input" id="cityInput" value="${escapeHtml(city)}" placeholder="Enter city" onchange="updateLocation('city', this.value)">
+            </div>
+            
+            <div class="location-field">
+                <label class="business-input-label">Currency</label>
+                <select class="business-input" id="currencySelect" onchange="updateLocation('currency', this.value)">
+                    <option value="USD" ${currency === 'USD' ? 'selected' : ''}>United States dollar ($)</option>
+                    <option value="EUR" ${currency === 'EUR' ? 'selected' : ''}>Euro (€)</option>
+                    <option value="GBP" ${currency === 'GBP' ? 'selected' : ''}>British pound (£)</option>
+                    <option value="PHP" ${currency === 'PHP' ? 'selected' : ''}>Philippine peso (₱)</option>
+                </select>
+            </div>
+        </div>
+        
+        <!-- Time Zone Settings -->
+        <div class="driver-settings-section" style="border-top: 1px solid #e2e8f0; padding-top: 24px;">
+            <h3 class="settings-section-subtitle">TimeZone</h3>
+            
+            <div class="location-field">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" ${timezoneAuto ? 'checked' : ''} onchange="toggleTimezoneAuto(this.checked)">
+                    <span class="business-input-label" style="margin: 0;">Automatic setup</span>
+                </label>
+            </div>
+            
+            <div class="location-field">
+                <select class="business-input" id="timezoneSelect" ${timezoneAuto ? 'disabled' : ''} onchange="updateLocation('timezone', this.value)">
+                    <option value="UTC-12:00" ${timezone === 'UTC-12:00' ? 'selected' : ''}>UTC-12:00</option>
+                    <option value="UTC-11:00" ${timezone === 'UTC-11:00' ? 'selected' : ''}>UTC-11:00</option>
+                    <option value="UTC-10:00" ${timezone === 'UTC-10:00' ? 'selected' : ''}>UTC-10:00</option>
+                    <option value="UTC-09:00" ${timezone === 'UTC-09:00' ? 'selected' : ''}>UTC-09:00</option>
+                    <option value="UTC-08:00" ${timezone === 'UTC-08:00' ? 'selected' : ''}>UTC-08:00</option>
+                    <option value="UTC-07:00" ${timezone === 'UTC-07:00' ? 'selected' : ''}>UTC-07:00</option>
+                    <option value="UTC-06:00" ${timezone === 'UTC-06:00' ? 'selected' : ''}>UTC-06:00</option>
+                    <option value="UTC-05:00" ${timezone === 'UTC-05:00' ? 'selected' : ''}>UTC-05:00</option>
+                    <option value="UTC-04:00" ${timezone === 'UTC-04:00' ? 'selected' : ''}>UTC-04:00</option>
+                    <option value="UTC-03:00" ${timezone === 'UTC-03:00' ? 'selected' : ''}>UTC-03:00</option>
+                    <option value="UTC-02:00" ${timezone === 'UTC-02:00' ? 'selected' : ''}>UTC-02:00</option>
+                    <option value="UTC-01:00" ${timezone === 'UTC-01:00' ? 'selected' : ''}>UTC-01:00</option>
+                    <option value="UTC+00:00" ${timezone === 'UTC+00:00' ? 'selected' : ''}>UTC+00:00</option>
+                    <option value="UTC+01:00" ${timezone === 'UTC+01:00' ? 'selected' : ''}>UTC+01:00</option>
+                    <option value="UTC+02:00" ${timezone === 'UTC+02:00' ? 'selected' : ''}>UTC+02:00</option>
+                    <option value="UTC+03:00" ${timezone === 'UTC+03:00' ? 'selected' : ''}>UTC+03:00</option>
+                    <option value="UTC+04:00" ${timezone === 'UTC+04:00' ? 'selected' : ''}>UTC+04:00</option>
+                    <option value="UTC+05:00" ${timezone === 'UTC+05:00' ? 'selected' : ''}>UTC+05:00</option>
+                    <option value="UTC+06:00" ${timezone === 'UTC+06:00' ? 'selected' : ''}>UTC+06:00</option>
+                    <option value="UTC+07:00" ${timezone === 'UTC+07:00' ? 'selected' : ''}>UTC+07:00</option>
+                    <option value="UTC+08:00" ${timezone === 'UTC+08:00' ? 'selected' : ''}>UTC+08:00</option>
+                    <option value="UTC+09:00" ${timezone === 'UTC+09:00' ? 'selected' : ''}>UTC+09:00</option>
+                    <option value="UTC+10:00" ${timezone === 'UTC+10:00' ? 'selected' : ''}>UTC+10:00</option>
+                    <option value="UTC+11:00" ${timezone === 'UTC+11:00' ? 'selected' : ''}>UTC+11:00</option>
+                    <option value="UTC+12:00" ${timezone === 'UTC+12:00' ? 'selected' : ''}>UTC+12:00</option>
+                </select>
+            </div>
+            
+            <div class="location-field">
+                <p style="color: #475569; margin: 0;">Account local time is <span style="color: #ef4444; font-weight: 600;">${localTime}</span>.</p>
+            </div>
+        </div>
+        
+        <!-- Distance Unit Settings -->
+        <div class="driver-settings-section" style="border-top: 1px solid #e2e8f0; padding-top: 24px;">
+            <h3 class="settings-section-subtitle">Distance Unit</h3>
+            <p class="settings-instruction-text">Distance in mile or km</p>
+            
+            <div class="distance-unit-selector">
+                <button class="distance-unit-btn ${distanceUnit === 'mile' ? 'active' : ''}" onclick="selectDistanceUnit('mile')">Mile</button>
+                <button class="distance-unit-btn ${distanceUnit === 'km' ? 'active' : ''}" onclick="selectDistanceUnit('km')">Km</button>
+            </div>
+        </div>
+    `;
+}
+
+// Get Customer Notification content
+async function getCustomerNotificationContent() {
+    const etaEmail = localStorage.getItem('etaEmail') === 'true';
+    const etaSMS = localStorage.getItem('etaSMS') === 'true';
+    const trackingNotification = localStorage.getItem('trackingNotification') || 'order-accepted';
+    const allowEditInstructions = localStorage.getItem('allowEditInstructions') === 'true';
+    const deliveryReceiptEmail = localStorage.getItem('deliveryReceiptEmail') === 'true';
+    const deliveryFeedbackEmail = localStorage.getItem('deliveryFeedbackEmail') === 'true';
+    
+    return `
+        <h1 class="settings-content-title">Customer notification</h1>
+        
+        <!-- Customer ETA sharing Section -->
+        <div class="driver-settings-section">
+            <h3 class="settings-section-subtitle">Customer ETA sharing</h3>
+            <p class="settings-instruction-text">Turning on customer tracking will send customers a real time delivery tracking page with live ETA by mins. It will also show the driver name, profile picture and phone number to call or text the driver</p>
+            
+            <div class="notification-toggle-item">
+                <div class="notification-toggle-content">
+                    <div class="driver-setting-label">Email</div>
+                </div>
+                <label class="switch">
+                    <input type="checkbox" ${etaEmail ? 'checked' : ''} onchange="toggleNotificationSetting('etaEmail', this.checked)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            
+            <div class="notification-toggle-item">
+                <div class="notification-toggle-content">
+                    <div class="driver-setting-label">SMS</div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <label class="switch">
+                        <input type="checkbox" ${etaSMS ? 'checked' : ''} onchange="toggleNotificationSetting('etaSMS', this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                    <button class="btn-upgrade">Upgrade</button>
+                </div>
+            </div>
+            
+            <div style="margin-top: 24px;">
+                <div class="driver-setting-label" style="margin-bottom: 8px;">Send tracking notification as soon as</div>
+                <select class="business-input" id="trackingNotificationSelect" onchange="updateTrackingNotification(this.value)" style="max-width: 400px;">
+                    <option value="order-placed" ${trackingNotification === 'order-placed' ? 'selected' : ''}>The order is placed</option>
+                    <option value="order-accepted" ${trackingNotification === 'order-accepted' ? 'selected' : ''}>The order is accepted by a driver</option>
+                    <option value="driver-assigned" ${trackingNotification === 'driver-assigned' ? 'selected' : ''}>A driver is assigned</option>
+                    <option value="pickup-started" ${trackingNotification === 'pickup-started' ? 'selected' : ''}>Pickup is started</option>
+                </select>
+            </div>
+            
+            <div class="notification-toggle-item" style="margin-top: 24px;">
+                <div class="notification-toggle-content">
+                    <div class="driver-setting-label">Allow Editing Delivery Instructions on Tracking Link</div>
+                    <p class="driver-setting-description" style="margin-top: 8px;">Allow Customers to change delivery instructions directly from the tracking link</p>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <label class="switch">
+                        <input type="checkbox" ${allowEditInstructions ? 'checked' : ''} onchange="toggleNotificationSetting('allowEditInstructions', this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                    <button class="btn-upgrade">Upgrade</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Delivery receipt Section -->
+        <div class="driver-settings-section">
+            <h3 class="settings-section-subtitle">Delivery receipt</h3>
+            <p class="settings-instruction-text">This will send a notification to the customer with delivery details and proof of delivery after the delivery is complete</p>
+            
+            <div class="notification-toggle-item">
+                <div class="notification-toggle-content">
+                    <div class="driver-setting-label">Email</div>
+                </div>
+                <label class="switch">
+                    <input type="checkbox" ${deliveryReceiptEmail ? 'checked' : ''} onchange="toggleNotificationSetting('deliveryReceiptEmail', this.checked)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+        </div>
+        
+        <!-- Delivery feedback Section -->
+        <div class="driver-settings-section">
+            <h3 class="settings-section-subtitle">Delivery feedback</h3>
+            <p class="settings-instruction-text">This will send a reminder notification within 24 hours to share feedback/rating of their delivery service</p>
+            
+            <div class="notification-toggle-item">
+                <div class="notification-toggle-content">
+                    <div class="driver-setting-label">Email</div>
+                </div>
+                <label class="switch">
+                    <input type="checkbox" ${deliveryFeedbackEmail ? 'checked' : ''} onchange="toggleNotificationSetting('deliveryFeedbackEmail', this.checked)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+        </div>
+    `;
+}
+
 // Get settings content based on selected item
 async function getSettingsContent(itemId) {
     if (itemId === 'business-settings') {
         return await getBusinessSettingsContent();
     }
     
-    const content = {
-        'dispatch-settings': `
-            <h1 class="settings-content-title">Dispatch settings</h1>
-            <div class="settings-content-body">
-                <p>Configure dispatch and delivery settings.</p>
-            </div>
-        `
-    };
+    if (itemId === 'dispatch-settings') {
+        return await getDispatchSettingsContent();
+    }
     
-    return content[itemId] || content['business-settings'];
+    return '<p>Settings content not found</p>';
 }
 
 // Business settings helper functions
@@ -3605,6 +4261,11 @@ function inviteLocalDelivery() {
     showNotification('Info', 'Invite local delivery company functionality coming soon', 'info');
 }
 
+function toggleThirdPartySetting(setting, enabled) {
+    localStorage.setItem(setting, enabled);
+    showNotification('Success', 'Third-party setting updated', 'success');
+}
+
 // Customer notification helper functions
 function toggleNotificationSetting(setting, enabled) {
     localStorage.setItem(setting, enabled);
@@ -3680,6 +4341,7 @@ window.updateDriverPayment = updateDriverPayment;
 window.switchThirdPartyTab = switchThirdPartyTab;
 window.toggleThirdPartyService = toggleThirdPartyService;
 window.inviteLocalDelivery = inviteLocalDelivery;
+window.toggleThirdPartySetting = toggleThirdPartySetting;
 window.toggleNotificationSetting = toggleNotificationSetting;
 window.updateTrackingNotification = updateTrackingNotification;
 window.inviteUser = inviteUser;
@@ -3689,6 +4351,28 @@ window.deleteUser = deleteUser;
 window.updateLocation = updateLocation;
 window.toggleTimezoneAuto = toggleTimezoneAuto;
 window.selectDistanceUnit = selectDistanceUnit;
+
+// Dispatch settings helper functions
+function toggleDispatchSetting(setting, enabled) {
+    localStorage.setItem(`dispatch${setting.charAt(0).toUpperCase() + setting.slice(1)}`, enabled);
+    showNotification('Success', 'Dispatch setting updated', 'success');
+}
+
+function saveDispatchTimeWindow() {
+    const input = document.getElementById('dispatchTimeWindowInput');
+    if (input) {
+        const value = parseFloat(input.value);
+        if (!isNaN(value) && value >= 0.5 && value <= 24) {
+            localStorage.setItem('dispatchTimeWindow', value.toString());
+            showNotification('Success', 'Dispatch time window updated', 'success');
+        } else {
+            showNotification('Error', 'Please enter a valid number (0.5-24)', 'error');
+        }
+    }
+}
+
+window.toggleDispatchSetting = toggleDispatchSetting;
+window.saveDispatchTimeWindow = saveDispatchTimeWindow;
 
 // Handle profile picture upload
 function handleProfilePictureUpload(e) {
