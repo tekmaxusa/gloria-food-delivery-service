@@ -79,6 +79,16 @@ async function checkAuth() {
         }
     } catch (error) {
         console.log('Not authenticated:', error);
+        // Check if it's a connection error
+        if (error.message && error.message.includes('fetch')) {
+            console.warn('Server might not be running. Please start the server.');
+            // Show a helpful message in the login form
+            const errorDiv = document.getElementById('loginError');
+            if (errorDiv) {
+                errorDiv.textContent = 'Cannot connect to server. Please make sure the server is running.';
+                errorDiv.style.display = 'block';
+            }
+        }
     }
     
     // Clear invalid session
@@ -231,6 +241,12 @@ function setupAuth() {
     // Login form
     const loginForm = document.getElementById('loginFormElement');
     if (loginForm) {
+        // Store original button text
+        const submitButton = loginForm.querySelector('button[type="submit"]');
+        if (submitButton && !submitButton.getAttribute('data-original-text')) {
+            submitButton.setAttribute('data-original-text', submitButton.textContent || 'Login');
+        }
+        
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const email = document.getElementById('loginEmail')?.value;
@@ -254,13 +270,70 @@ function setupAuth() {
             }
             
             try {
+                // Show loading state
+                const submitButton = loginForm.querySelector('button[type="submit"]');
+                const originalButtonText = submitButton?.textContent;
+                if (submitButton) {
+                    submitButton.disabled = true;
+                    submitButton.textContent = 'Logging in...';
+                }
+                
+                console.log('Attempting login to:', `${API_BASE}/api/auth/login`);
                 const response = await fetch(`${API_BASE}/api/auth/login`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email, password })
                 });
                 
-                const data = await response.json();
+                // Restore button
+                if (submitButton) {
+                    submitButton.disabled = false;
+                    if (originalButtonText) submitButton.textContent = originalButtonText;
+                }
+                
+                console.log('Login response status:', response.status, response.statusText);
+                
+                // Check if response is OK
+                if (!response.ok) {
+                    // Try to get error message from response
+                    let errorText = `Server error: ${response.status} ${response.statusText}`;
+                    try {
+                        const errorData = await response.json();
+                        errorText = errorData.error || errorData.message || errorText;
+                    } catch (e) {
+                        // If response is not JSON, get text
+                        try {
+                            const text = await response.text();
+                            if (text) errorText = text.substring(0, 200);
+                        } catch (e2) {
+                            // Ignore
+                        }
+                    }
+                    
+                    if (errorDiv) {
+                        errorDiv.textContent = errorText;
+                        errorDiv.style.display = 'block';
+                    }
+                    showError(errorText);
+                    return;
+                }
+                
+                // Parse JSON response
+                let data;
+                try {
+                    const text = await response.text();
+                    console.log('Login response text:', text.substring(0, 200));
+                    data = JSON.parse(text);
+                } catch (parseError) {
+                    console.error('Failed to parse login response:', parseError);
+                    const errorMsg = 'Invalid response from server. Please check if the server is running.';
+                    if (errorDiv) {
+                        errorDiv.textContent = errorMsg;
+                        errorDiv.style.display = 'block';
+                    }
+                    showError(errorMsg);
+                    return;
+                }
                 
                 if (data.success && data.user) {
                     currentUser = data.user;
@@ -278,7 +351,24 @@ function setupAuth() {
                 }
             } catch (error) {
                 console.error('Login error:', error);
-                const errorMsg = 'Error connecting to server: ' + error.message;
+                
+                // Restore button if it was disabled
+                const submitButton = loginForm.querySelector('button[type="submit"]');
+                if (submitButton) {
+                    submitButton.disabled = false;
+                    const originalButtonText = submitButton.getAttribute('data-original-text');
+                    if (originalButtonText) submitButton.textContent = originalButtonText;
+                }
+                
+                let errorMsg = 'Error connecting to server';
+                if (error.message) {
+                    errorMsg += ': ' + error.message;
+                } else if (error.name === 'TypeError' && error.message && error.message.includes('fetch')) {
+                    errorMsg = 'Cannot connect to server. Please make sure the server is running at ' + API_BASE + '. If you just started the server, wait a few seconds and try again.';
+                } else if (error.name === 'TypeError') {
+                    errorMsg = 'Network error. Please check your internet connection and make sure the server is running.';
+                }
+                
                 if (errorDiv) {
                     errorDiv.textContent = errorMsg;
                     errorDiv.style.display = 'block';
