@@ -1387,15 +1387,29 @@ window.editMerchant = editMerchant;
 window.deleteMerchant = deleteMerchant;
 
 // Show Dashboard page
-function showDashboardPage() {
+async function showDashboardPage() {
     const mainContainer = document.querySelector('.main-container');
     if (!mainContainer) {
         console.error('Main container not found');
         return;
     }
+    
+    // Get merchant name
+    let merchantName = 'Dashboard';
+    try {
+        const response = await authenticatedFetch(`${API_BASE}/merchants`);
+        const data = await response.json();
+        if (data.success && data.merchants && data.merchants.length > 0) {
+            const merchant = data.merchants.find(m => m.is_active) || data.merchants[0];
+            merchantName = merchant.merchant_name || 'Dashboard';
+        }
+    } catch (error) {
+        console.error('Error fetching merchant:', error);
+    }
+    
     mainContainer.innerHTML = `
         <div class="orders-header">
-            <h1 class="page-title">Dashboard</h1>
+            <h1 class="page-title">${escapeHtml(merchantName)}</h1>
         </div>
         
         <div class="dashboard-grid">
