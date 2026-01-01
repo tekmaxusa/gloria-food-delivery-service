@@ -536,12 +536,6 @@ function showOrdersPage() {
                             </svg>
                         </th>
                         <th class="sortable">
-                            <span>Merchant</span>
-                            <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M12 5v14M5 12l7-7 7 7"/>
-                            </svg>
-                        </th>
-                        <th class="sortable">
                             <span>C. Address</span>
                             <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M12 5v14M5 12l7-7 7 7"/>
@@ -1863,7 +1857,6 @@ function exportOrdersToExcel() {
         const headers = [
             'Order No.',
             'Customer Name',
-            'Merchant',
             'Customer Address',
             'Amount',
             'Currency',
@@ -2074,7 +2067,6 @@ function exportOrdersToExcel() {
             return [
                 escapeCSV(orderId),
                 escapeCSV(customerName),
-                escapeCSV(merchantName),
                 escapeCSV(customerAddress),
                 escapeCSV(amount),
                 escapeCSV(currency),
@@ -2848,8 +2840,11 @@ function hasScheduledDeliveryTime(order) {
     }
     
     // Check for scheduled delivery time in various possible fields
-    // Also check nested delivery object
+    // Also check nested delivery object and schedule object
     const deliveryObj = rawData.delivery || order.delivery || {};
+    const scheduleObj = rawData.schedule || order.schedule || {};
+    const timeObj = rawData.time || order.time || rawData.times || order.times || {};
+    
     const scheduledTime = order.scheduled_delivery_time || 
                          order.scheduledDeliveryTime ||
                          order.delivery_time ||
@@ -2858,6 +2853,10 @@ function hasScheduledDeliveryTime(order) {
                          order.deliveryDateTime ||
                          order.estimated_delivery_time ||
                          order.estimatedDeliveryTime ||
+                         order.preferred_delivery_time ||
+                         order.preferredDeliveryTime ||
+                         order.scheduled_at ||
+                         order.scheduledAt ||
                          rawData.scheduled_delivery_time ||
                          rawData.scheduledDeliveryTime ||
                          rawData.delivery_time ||
@@ -2868,12 +2867,29 @@ function hasScheduledDeliveryTime(order) {
                          rawData.estimatedDeliveryTime ||
                          rawData.requested_delivery_time ||
                          rawData.requestedDeliveryTime ||
+                         rawData.preferred_delivery_time ||
+                         rawData.preferredDeliveryTime ||
+                         rawData.scheduled_at ||
+                         rawData.scheduledAt ||
+                         rawData.schedule_time ||
+                         rawData.scheduleTime ||
                          deliveryObj.delivery_time ||
                          deliveryObj.deliveryTime ||
                          deliveryObj.scheduled_delivery_time ||
                          deliveryObj.scheduledDeliveryTime ||
                          deliveryObj.estimated_delivery_time ||
                          deliveryObj.estimatedDeliveryTime ||
+                         deliveryObj.requested_delivery_time ||
+                         deliveryObj.requestedDeliveryTime ||
+                         scheduleObj.delivery_time ||
+                         scheduleObj.deliveryTime ||
+                         scheduleObj.scheduled_delivery_time ||
+                         scheduleObj.scheduledDeliveryTime ||
+                         scheduleObj.requested_delivery_time ||
+                         scheduleObj.requestedDeliveryTime ||
+                         timeObj.delivery ||
+                         timeObj.delivery_time ||
+                         timeObj.scheduled_delivery ||
                          null;
     
     if (!scheduledTime) return false;
@@ -2881,16 +2897,16 @@ function hasScheduledDeliveryTime(order) {
     // Check if scheduled time is in the future (not "as soon as possible")
     try {
         const scheduledDate = new Date(scheduledTime);
-        const orderDate = new Date(order.created_at || order.fetched_at || Date.now());
         const now = new Date();
         
-        // If scheduled time is more than 30 minutes in the future from order time, it's scheduled
-        // If scheduled time is in the past or very close (less than 30 min), it's "as soon as possible"
-        const timeDiff = scheduledDate.getTime() - orderDate.getTime();
-        const minutesDiff = timeDiff / (1000 * 60);
+        // If scheduled time is in the future (more than current time), it's scheduled
+        // Also check if it's more than 30 minutes from now to avoid showing "as soon as possible" orders
+        const timeDiffFromNow = scheduledDate.getTime() - now.getTime();
+        const minutesDiffFromNow = timeDiffFromNow / (1000 * 60);
         
-        // Scheduled if: time is in the future AND more than 30 minutes from order time
-        return scheduledDate > now && minutesDiff > 30;
+        // Scheduled if: time is in the future AND more than 30 minutes from now
+        // This ensures orders scheduled for tomorrow or later appear in Scheduled tab
+        return scheduledDate > now && minutesDiffFromNow > 30;
     } catch (e) {
         return false;
     }
@@ -2983,7 +2999,7 @@ function displayOrders(orders) {
     if (!orders || orders.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="15" class="empty-state-cell">
+                <td colspan="14" class="empty-state-cell">
                     <div class="empty-state">
                         <div class="empty-state-icon">
                             <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -3010,7 +3026,7 @@ function displayOrders(orders) {
         console.error('Error displaying orders:', error);
         tbody.innerHTML = `
             <tr>
-                <td colspan="15" class="empty-state-cell">
+                <td colspan="14" class="empty-state-cell">
                     <div class="empty-state">
                         <div class="empty-state-text">Error displaying orders: ${error.message}</div>
                     </div>
@@ -3074,11 +3090,16 @@ function createOrderRow(order) {
                     rawData.delivery_distance ||
                     rawData.distance_km ||
                     rawData.distance_miles ||
+                    rawData.distanceKm ||
+                    rawData.distanceMiles ||
+                    rawData.deliveryDistance ||
                     (rawData.delivery && rawData.delivery.distance) ||
                     (rawData.delivery && rawData.delivery.delivery_distance) ||
                     (rawData.delivery && rawData.delivery.distance_km) ||
+                    (rawData.delivery && rawData.delivery.distanceKm) ||
                     (rawData.location && rawData.location.distance) ||
                     (rawData.restaurant && rawData.restaurant.distance) ||
+                    (rawData.store && rawData.store.distance) ||
                     null;
     let formattedDistance = 'N/A';
     if (distance) {
@@ -3103,8 +3124,16 @@ function createOrderRow(order) {
     }
     
     // Get pickup time from various possible fields (comprehensive search)
+    const scheduleObj = rawData.schedule || {};
+    const timeObj = rawData.time || rawData.times || {};
+    const deliveryObj = rawData.delivery || {};
+    
     const pickupTime = order.pickup_time || 
                       order.pickupTime || 
+                      order.pickup_at ||
+                      order.pickupAt ||
+                      order.pickup_datetime ||
+                      order.pickupDateTime ||
                       rawData.pickup_time || 
                       rawData.pickupTime || 
                       rawData.requested_pickup_time ||
@@ -3116,18 +3145,32 @@ function createOrderRow(order) {
                       rawData.pickup_datetime ||
                       rawData.pickupDateTime ||
                       rawData.requested_pickup_datetime ||
-                      (rawData.delivery && rawData.delivery.pickup_time) ||
-                      (rawData.delivery && rawData.delivery.requested_pickup_time) ||
-                      (rawData.delivery && rawData.delivery.pickup_at) ||
-                      (rawData.schedule && rawData.schedule.pickup_time) ||
-                      (rawData.schedule && rawData.schedule.requested_pickup_time) ||
-                      (rawData.time && rawData.time.pickup) ||
-                      (rawData.times && rawData.times.pickup) ||
+                      rawData.estimated_pickup_time ||
+                      rawData.estimatedPickupTime ||
+                      deliveryObj.pickup_time ||
+                      deliveryObj.pickupTime ||
+                      deliveryObj.requested_pickup_time ||
+                      deliveryObj.requestedPickupTime ||
+                      deliveryObj.pickup_at ||
+                      deliveryObj.pickupAt ||
+                      scheduleObj.pickup_time ||
+                      scheduleObj.pickupTime ||
+                      scheduleObj.requested_pickup_time ||
+                      scheduleObj.requestedPickupTime ||
+                      scheduleObj.scheduled_pickup_time ||
+                      timeObj.pickup ||
+                      timeObj.pickup_time ||
                       null;
     
     // Get delivery time from various possible fields (comprehensive search)
     const deliveryTime = order.delivery_time || 
                         order.deliveryTime || 
+                        order.delivery_at ||
+                        order.deliveryAt ||
+                        order.delivery_datetime ||
+                        order.deliveryDateTime ||
+                        order.scheduled_delivery_time ||
+                        order.scheduledDeliveryTime ||
                         rawData.delivery_time || 
                         rawData.deliveryTime || 
                         rawData.requested_delivery_time ||
@@ -3139,19 +3182,36 @@ function createOrderRow(order) {
                         rawData.delivery_datetime ||
                         rawData.deliveryDateTime ||
                         rawData.requested_delivery_datetime ||
-                        (rawData.delivery && rawData.delivery.delivery_time) ||
-                        (rawData.delivery && rawData.delivery.requested_delivery_time) ||
-                        (rawData.delivery && rawData.delivery.scheduled_delivery_time) ||
-                        (rawData.delivery && rawData.delivery.delivery_at) ||
-                        (rawData.schedule && rawData.schedule.delivery_time) ||
-                        (rawData.schedule && rawData.schedule.requested_delivery_time) ||
-                        (rawData.time && rawData.time.delivery) ||
-                        (rawData.times && rawData.times.delivery) ||
+                        rawData.estimated_delivery_time ||
+                        rawData.estimatedDeliveryTime ||
+                        rawData.preferred_delivery_time ||
+                        rawData.preferredDeliveryTime ||
+                        deliveryObj.delivery_time ||
+                        deliveryObj.deliveryTime ||
+                        deliveryObj.requested_delivery_time ||
+                        deliveryObj.requestedDeliveryTime ||
+                        deliveryObj.scheduled_delivery_time ||
+                        deliveryObj.scheduledDeliveryTime ||
+                        deliveryObj.delivery_at ||
+                        deliveryObj.deliveryAt ||
+                        scheduleObj.delivery_time ||
+                        scheduleObj.deliveryTime ||
+                        scheduleObj.requested_delivery_time ||
+                        scheduleObj.requestedDeliveryTime ||
+                        scheduleObj.scheduled_delivery_time ||
+                        timeObj.delivery ||
+                        timeObj.delivery_time ||
                         null;
     
     // Get ready for pickup time (comprehensive search)
     const readyForPickup = order.ready_for_pickup || 
                            order.readyForPickup || 
+                           order.ready_time ||
+                           order.readyTime ||
+                           order.ready_at ||
+                           order.readyAt ||
+                           order.prepared_at ||
+                           order.preparedAt ||
                            rawData.ready_for_pickup || 
                            rawData.readyForPickup ||
                            rawData.ready_for_pick_up ||
@@ -3162,14 +3222,25 @@ function createOrderRow(order) {
                            rawData.readyAt ||
                            rawData.prepared_at ||
                            rawData.preparedAt ||
+                           rawData.estimated_ready_time ||
+                           rawData.estimatedReadyTime ||
                            (rawData.status && rawData.status.ready_time) ||
-                           (rawData.delivery && rawData.delivery.ready_for_pickup) ||
+                           (rawData.status && rawData.status.ready_at) ||
+                           (rawData.status && rawData.status.prepared_at) ||
+                           deliveryObj.ready_for_pickup ||
+                           deliveryObj.ready_time ||
+                           deliveryObj.ready_at ||
+                           (rawData.restaurant && rawData.restaurant.ready_time) ||
+                           (rawData.store && rawData.store.ready_time) ||
                            null;
     
     // Get driver name from various possible fields (comprehensive search)
+    const driverObj = rawData.driver || {};
     const driver = order.driver_name || 
                   order.driverName || 
                   order.driver || 
+                  order.assigned_driver ||
+                  order.assignedDriver ||
                   rawData.driver_name || 
                   rawData.driverName || 
                   rawData.driver ||
@@ -3177,11 +3248,22 @@ function createOrderRow(order) {
                   rawData.assignedDriver ||
                   rawData.driver_id ||
                   rawData.driverId ||
-                  (rawData.delivery && rawData.delivery.driver_name) ||
-                  (rawData.delivery && rawData.delivery.driver) ||
-                  (rawData.delivery && rawData.delivery.assigned_driver) ||
-                  (rawData.driver && rawData.driver.name) ||
-                  (rawData.driver && rawData.driver.full_name) ||
+                  rawData.courier_name ||
+                  rawData.courierName ||
+                  rawData.courier ||
+                  deliveryObj.driver_name ||
+                  deliveryObj.driverName ||
+                  deliveryObj.driver ||
+                  deliveryObj.assigned_driver ||
+                  deliveryObj.assignedDriver ||
+                  deliveryObj.courier_name ||
+                  deliveryObj.courier ||
+                  driverObj.name ||
+                  driverObj.full_name ||
+                  (driverObj.first_name && driverObj.last_name ? driverObj.first_name + ' ' + driverObj.last_name : null) ||
+                  (driverObj.first_name ? driverObj.first_name : null) ||
+                  (rawData.courier && rawData.courier.name) ||
+                  (rawData.courier && rawData.courier.full_name) ||
                   null;
     
     // Format times - try to format, if invalid date, show raw value
@@ -3214,9 +3296,25 @@ function createOrderRow(order) {
     
     const formattedDriver = driver ? escapeHtml(String(driver)) : 'N/A';
     
-    const tracking = order.doordash_tracking_url 
-        ? `<a href="${escapeHtml(order.doordash_tracking_url)}" target="_blank" style="color: #22c55e; text-decoration: underline;">Track</a>`
-        : 'N/A';
+    // Get tracking information
+    let tracking = order.doordash_tracking_url || 
+                   order.tracking_url ||
+                   order.trackingUrl ||
+                   rawData.tracking_url ||
+                   rawData.trackingUrl ||
+                   rawData.doordash_tracking_url ||
+                   rawData.doordashTrackingUrl ||
+                   (rawData.delivery && rawData.delivery.tracking_url) ||
+                   (rawData.delivery && rawData.delivery.trackingUrl) ||
+                   null;
+    
+    if (tracking) {
+        tracking = `<a href="${escapeHtml(tracking)}" target="_blank" style="color: #22c55e; text-decoration: underline;">Track</a>`;
+    } else if (order.doordash_order_id || rawData.doordash_order_id || rawData.doordashOrderId) {
+        tracking = 'Pending';
+    } else {
+        tracking = 'N/A';
+    }
     
     return `
         <tr data-order-id="${escapeHtml(String(orderId))}">
@@ -3225,7 +3323,6 @@ function createOrderRow(order) {
             </td>
             <td><strong>#${escapeHtml(String(orderId))}</strong></td>
             <td>${customerName}</td>
-            <td><span style="color: #3b82f6; font-weight: 500;">${merchantName}</span></td>
             <td>${customerAddress}</td>
             <td>${amount}</td>
             <td>${formattedDistance}</td>
