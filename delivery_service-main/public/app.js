@@ -114,17 +114,44 @@ function showLogin() {
 
 // Show dashboard
 function showDashboard() {
+    console.log('showDashboard() called');
     const authContainer = document.getElementById('authContainer');
     const dashboardContainer = document.getElementById('dashboardContainer');
     
-    if (authContainer) authContainer.classList.add('hidden');
-    if (dashboardContainer) dashboardContainer.classList.remove('hidden');
+    console.log('Auth container:', authContainer);
+    console.log('Dashboard container:', dashboardContainer);
+    
+    if (authContainer) {
+        authContainer.classList.add('hidden');
+        console.log('Auth container hidden');
+    } else {
+        console.error('Auth container not found!');
+    }
+    
+    if (dashboardContainer) {
+        dashboardContainer.classList.remove('hidden');
+        console.log('Dashboard container shown');
+    } else {
+        console.error('Dashboard container not found!');
+    }
     
     // Show dashboard page by default
-    showDashboardPage();
+    try {
+        showDashboardPage();
+        console.log('Dashboard page shown');
+    } catch (error) {
+        console.error('Error showing dashboard page:', error);
+    }
     
     // Start auto-refresh only when authenticated
-    startAutoRefresh();
+    try {
+        startAutoRefresh();
+        console.log('Auto-refresh started');
+    } catch (error) {
+        console.error('Error starting auto-refresh:', error);
+    }
+    
+    console.log('showDashboard() completed');
 }
 
 // Setup dashboard UI elements
@@ -351,17 +378,27 @@ function setupAuth() {
                     return;
                 }
                 
+                // Debug: Log the response data
+                console.log('Login response data:', data);
+                console.log('data.success:', data.success);
+                console.log('data.user:', data.user);
+                console.log('response.ok:', response.ok);
+                
                 if (data.success && data.user) {
+                    console.log('Login successful, setting user and redirecting...');
                     currentUser = data.user;
                     sessionId = data.sessionId;
                     saveSessionId(data.sessionId);
+                    
+                    // Show notification
                     showNotification('Success', 'Login successful!');
                     
-                    // Small delay to show notification, then redirect
-                    setTimeout(() => {
-                        showDashboard();
-                    }, 100);
+                    // Redirect immediately to dashboard
+                    console.log('Calling showDashboard()...');
+                    showDashboard();
+                    console.log('showDashboard() called');
                 } else {
+                    console.log('Login failed - success:', data.success, 'user:', data.user);
                     const errorMsg = data.error || 'Invalid email or password';
                     if (errorDiv) {
                         errorDiv.textContent = errorMsg;
@@ -525,6 +562,12 @@ function setupAuth() {
                     if (originalButtonText) submitButton.textContent = originalButtonText;
                 }
                 
+                // Restore button after reading response
+                if (submitButton) {
+                    submitButton.disabled = false;
+                    if (originalButtonText) submitButton.textContent = originalButtonText;
+                }
+                
                 // Check if response is OK after parsing
                 if (!response.ok) {
                     const errorText = data.error || data.message || `Server error: ${response.status} ${response.statusText}`;
@@ -535,6 +578,12 @@ function setupAuth() {
                     showError(errorText);
                     return;
                 }
+                
+                // Debug: Log the response data
+                console.log('Login response data:', data);
+                console.log('data.success:', data.success);
+                console.log('data.user:', data.user);
+                console.log('response.ok:', response.ok);
                 
                 if (data.success && data.user) {
                     currentUser = data.user;
