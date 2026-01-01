@@ -3302,22 +3302,47 @@ async function getBusinessSettingsContent() {
         if (data.success && data.merchants && data.merchants.length > 0) {
             merchant = data.merchants.find(m => m.is_active) || data.merchants[0];
             
-            // Try to get phone and address from recent orders
+            // Try to get phone and address from recent orders for this merchant
             try {
-                const ordersResponse = await authenticatedFetch(`${API_BASE}/orders?limit=1`);
+                const ordersResponse = await authenticatedFetch(`${API_BASE}/orders?limit=100&store_id=${encodeURIComponent(merchant.store_id)}`);
                 const ordersData = await ordersResponse.json();
                 if (ordersData.success && ordersData.orders && ordersData.orders.length > 0) {
-                    const order = ordersData.orders[0];
-                    // Try to extract phone and address from order data
-                    let rawData = {};
-                    try {
-                        if (order.raw_data) {
-                            rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+                    // Find an order with store/restaurant address (not delivery address)
+                    for (const order of ordersData.orders) {
+                        let rawData = {};
+                        try {
+                            if (order.raw_data) {
+                                rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+                            }
+                        } catch (e) {}
+                        
+                        // Get merchant phone
+                        if (!merchantPhone) {
+                            merchantPhone = rawData.phone || 
+                                          rawData.merchant_phone || 
+                                          rawData.store_phone || 
+                                          rawData.restaurant?.phone ||
+                                          rawData.store?.phone ||
+                                          order.phone || '';
                         }
-                    } catch (e) {}
-                    
-                    merchantPhone = rawData.phone || rawData.merchant_phone || rawData.store_phone || order.phone || '';
-                    merchantAddress = rawData.address || rawData.store_address || rawData.restaurant_address || order.store_address || order.delivery_address || '';
+                        
+                        // Get merchant store address (NOT delivery address)
+                        if (!merchantAddress) {
+                            merchantAddress = rawData.store_address || 
+                                            rawData.restaurant_address || 
+                                            rawData.restaurant?.address ||
+                                            rawData.store?.address ||
+                                            rawData.pickup_address ||
+                                            rawData.merchant_address ||
+                                            (rawData.restaurant && rawData.restaurant.address) ||
+                                            (rawData.store && rawData.store.address) ||
+                                            order.store_address || 
+                                            '';
+                        }
+                        
+                        // If we found both, break
+                        if (merchantPhone && merchantAddress) break;
+                    }
                 }
             } catch (e) {
                 console.error('Error fetching order data:', e);
@@ -3327,7 +3352,38 @@ async function getBusinessSettingsContent() {
         console.error('Error fetching merchant:', error);
     }
     
-    const businessName = merchant?.merchant_name || 'Not set';
+    // Get business name - use same logic as dashboard
+    let businessName = 'Not set';
+    if (merchant) {
+        // Check if merchant_name is valid (not empty, not null, and not the same as store_id)
+        if (merchant.merchant_name && 
+            merchant.merchant_name.trim() !== '' && 
+            merchant.merchant_name !== merchant.store_id &&
+            merchant.merchant_name.toLowerCase() !== merchant.store_id.toLowerCase()) {
+            businessName = merchant.merchant_name;
+        } else {
+            // If merchant_name is missing or equals store_id, try to get it from orders
+            try {
+                const ordersResponse = await authenticatedFetch(`${API_BASE}/orders?limit=100&store_id=${encodeURIComponent(merchant.store_id)}`);
+                const ordersData = await ordersResponse.json();
+                if (ordersData.success && ordersData.orders && ordersData.orders.length > 0) {
+                    // Find an order with merchant_name that's different from store_id
+                    const orderWithMerchant = ordersData.orders.find(o => 
+                        o.store_id === merchant.store_id && 
+                        o.merchant_name && 
+                        o.merchant_name.trim() !== '' &&
+                        o.merchant_name !== merchant.store_id &&
+                        o.merchant_name.toLowerCase() !== merchant.store_id.toLowerCase()
+                    );
+                    if (orderWithMerchant && orderWithMerchant.merchant_name) {
+                        businessName = orderWithMerchant.merchant_name;
+                    }
+                }
+            } catch (e) {
+                console.error('Error fetching orders for business name:', e);
+            }
+        }
+    }
     const businessType = localStorage.getItem('businessType') || 'merchant';
     const activeTab = localStorage.getItem('businessSettingsTab') || 'merchant';
     const useDriverFleet = localStorage.getItem('useDriverFleet') === 'true';
