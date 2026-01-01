@@ -4446,6 +4446,14 @@ function selectDistanceUnit(unit) {
 }
 
 // Make functions globally available
+// Define switchBusinessTab if not already defined
+if (typeof switchBusinessTab === 'undefined') {
+    window.switchBusinessTab = function(tab) {
+        localStorage.setItem('businessSettingsTab', tab);
+        loadSettingsContent('business-settings');
+    };
+}
+
 window.selectSettingsItem = selectSettingsItem;
 window.editBusinessName = editBusinessName;
 window.editBusinessLogo = editBusinessLogo;
