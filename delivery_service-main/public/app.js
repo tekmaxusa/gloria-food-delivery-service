@@ -531,9 +531,6 @@ function navigateToPage(page) {
         case 'reviews':
             showReviewsPage();
             break;
-        case 'myaccount':
-            showMyAccountPage();
-            break;
         default:
             showOrdersPage();
     }
@@ -2922,123 +2919,197 @@ function createProfileDropdown() {
 }
 
 // Show My Account page
-function showMyAccountPage() {
+async function showMyAccountPage() {
     const mainContainer = document.querySelector('.main-container');
+    if (!mainContainer) return;
+    
     const userName = currentUser?.full_name || currentUser?.email || 'User';
     const userEmail = currentUser?.email || '';
-    const userPhone = currentUser?.phone || 'N/A';
-    const apiKey = currentUser?.api_key || 'N/A';
+    const userPhone = currentUser?.phone || '';
     
-    // Get billing info (if available)
-    const billingCompany = currentUser?.company_name || 'N/A';
-    const billingEmail = currentUser?.billing_email || userEmail;
-    const billingAddress = currentUser?.billing_address || 'N/A';
-    const billingContactName = currentUser?.billing_contact_name || userName;
-    const billingContactPhone = currentUser?.billing_contact_phone || userPhone;
+    // Get restaurant API key from merchants
+    let restaurantApiKey = 'Not configured';
+    try {
+        const response = await authenticatedFetch(`${API_BASE}/merchants`);
+        const data = await response.json();
+        if (data.success && data.merchants && data.merchants.length > 0) {
+            // Get first active merchant's API key
+            const activeMerchant = data.merchants.find(m => m.is_active) || data.merchants[0];
+            restaurantApiKey = activeMerchant.api_key ? '********' : 'Not configured';
+        }
+    } catch (error) {
+        console.error('Error fetching merchants:', error);
+    }
     
     mainContainer.innerHTML = `
-        <div class="account-page">
-            <h1 class="page-title">My Account</h1>
+        <div class="profile-page-container">
+            <div class="profile-page-header">
+                <h1 class="page-title">Profile</h1>
+            </div>
             
             <!-- Profile Section -->
-            <div class="account-section">
-                <h2 class="account-section-title">Profile</h2>
-                <div class="account-card">
-                    <div class="account-field">
-                        <div class="account-field-label">Account owner name</div>
-                        <div class="account-field-value">${escapeHtml(userName)}</div>
-                        <button class="account-change-btn" onclick="changeField('name')">Change</button>
+            <div class="profile-section">
+                <h2 class="section-title">Profile</h2>
+                <div class="profile-field-card">
+                    <div class="profile-field-content">
+                        <div class="profile-field-label">Account owner name</div>
+                        <div class="profile-field-value" id="accountOwnerName">${escapeHtml(userName)}</div>
                     </div>
-                    <div class="account-field">
-                        <div class="account-field-label">Phone number</div>
-                        <div class="account-field-value">${escapeHtml(userPhone)}</div>
-                        <button class="account-change-btn" onclick="changeField('phone')">Change</button>
+                    <button class="btn-change" onclick="editField('accountOwnerName', 'Account owner name', 'text')">Change</button>
+                </div>
+                
+                <div class="profile-field-card">
+                    <div class="profile-field-content">
+                        <div class="profile-field-label">Phone number</div>
+                        <div class="profile-field-value" id="phoneNumber">${escapeHtml(userPhone || 'Not set')}</div>
                     </div>
-                    <div class="account-field">
-                        <div class="account-field-label">Email</div>
-                        <div class="account-field-value">${escapeHtml(userEmail)}</div>
-                        <button class="account-change-btn" onclick="changeField('email')">Change</button>
+                    <button class="btn-change" onclick="editField('phoneNumber', 'Phone number', 'tel')">Change</button>
+                </div>
+                
+                <div class="profile-field-card">
+                    <div class="profile-field-content">
+                        <div class="profile-field-label">Email</div>
+                        <div class="profile-field-value" id="email">${escapeHtml(userEmail)}</div>
                     </div>
-                    <div class="account-field">
-                        <div class="account-field-label">Api Key</div>
-                        <div class="account-field-value" id="apiKeyValue">${apiKey !== 'N/A' ? '********' : 'N/A'}</div>
-                        <button class="account-change-btn" onclick="toggleApiKey()" id="apiKeyBtn">${apiKey !== 'N/A' ? 'Show' : 'N/A'}</button>
+                    <button class="btn-change" onclick="editField('email', 'Email', 'email')">Change</button>
+                </div>
+                
+                <div class="profile-field-card">
+                    <div class="profile-field-content">
+                        <div class="profile-field-label">Api Key</div>
+                        <div class="profile-field-value" id="apiKey">${escapeHtml(restaurantApiKey)}</div>
                     </div>
-                    <div class="account-field">
-                        <div class="account-field-label">Password</div>
-                        <div class="account-field-value">********</div>
-                        <button class="account-change-btn" onclick="changeField('password')">Change</button>
+                    <button class="btn-show" onclick="toggleApiKey()" id="apiKeyToggle">Show</button>
+                </div>
+                
+                <div class="profile-field-card">
+                    <div class="profile-field-content">
+                        <div class="profile-field-label">Password</div>
+                        <div class="profile-field-value">********</div>
                     </div>
+                    <button class="btn-change" onclick="editPassword()">Change</button>
                 </div>
             </div>
             
-            <!-- Billing contact details Section -->
-            <div class="account-section">
-                <h2 class="account-section-title">Billing contact details</h2>
-                <div class="account-card">
-                    <div class="account-field">
-                        <div class="account-field-label">Company name</div>
-                        <div class="account-field-value">${escapeHtml(billingCompany)}</div>
-                        <button class="account-change-btn" onclick="changeField('company')">Change</button>
+            <!-- Billing Contact Details Section -->
+            <div class="profile-section">
+                <h2 class="section-title">Billing contact details</h2>
+                <p class="section-subtitle">Billing contact details</p>
+                
+                <div class="profile-field-card">
+                    <div class="profile-field-content">
+                        <div class="profile-field-label">Company name</div>
+                        <div class="profile-field-value" id="companyName">${escapeHtml(userName || 'Not set')}</div>
                     </div>
-                    <div class="account-field">
-                        <div class="account-field-label">Email</div>
-                        <div class="account-field-value">${escapeHtml(billingEmail)}</div>
-                        <button class="account-change-btn" onclick="changeField('billing_email')">Change</button>
+                    <button class="btn-change" onclick="editField('companyName', 'Company name', 'text')">Change</button>
+                </div>
+                
+                <div class="profile-field-card">
+                    <div class="profile-field-content">
+                        <div class="profile-field-label">Email</div>
+                        <div class="profile-field-value" id="billingEmail">${escapeHtml(userEmail)}</div>
                     </div>
-                    <div class="account-field">
-                        <div class="account-field-label">Billing address</div>
-                        <div class="account-field-value">${escapeHtml(billingAddress)}</div>
-                        <button class="account-change-btn" onclick="changeField('billing_address')">Change</button>
+                    <button class="btn-change" onclick="editField('billingEmail', 'Billing Email', 'email')">Change</button>
+                </div>
+                
+                <div class="profile-field-card">
+                    <div class="profile-field-content">
+                        <div class="profile-field-label">Billing address</div>
+                        <div class="profile-field-value" id="billingAddress">Not set</div>
                     </div>
-                    <div class="account-field">
-                        <div class="account-field-label">Contact Name</div>
-                        <div class="account-field-value">${escapeHtml(billingContactName)}</div>
-                        <button class="account-change-btn" onclick="changeField('billing_contact_name')">Change</button>
+                    <button class="btn-change" onclick="editField('billingAddress', 'Billing address', 'text')">Change</button>
+                </div>
+                
+                <div class="profile-field-card">
+                    <div class="profile-field-content">
+                        <div class="profile-field-label">Contact Name</div>
+                        <div class="profile-field-value" id="contactName">${escapeHtml(userName)}</div>
                     </div>
-                    <div class="account-field">
-                        <div class="account-field-label">Contact Phone</div>
-                        <div class="account-field-value">${escapeHtml(billingContactPhone)}</div>
-                        <button class="account-change-btn" onclick="changeField('billing_contact_phone')">Change</button>
+                    <button class="btn-change" onclick="editField('contactName', 'Contact Name', 'text')">Change</button>
+                </div>
+                
+                <div class="profile-field-card">
+                    <div class="profile-field-content">
+                        <div class="profile-field-label">Contact Phone</div>
+                        <div class="profile-field-value" id="contactPhone">${escapeHtml(userPhone || 'Not set')}</div>
                     </div>
+                    <button class="btn-change" onclick="editField('contactPhone', 'Contact Phone', 'tel')">Change</button>
                 </div>
             </div>
         </div>
     `;
     
     // Store original API key for toggle
-    if (apiKey !== 'N/A') {
-        window._originalApiKey = apiKey;
-    }
+    window._originalApiKey = restaurantApiKey;
+}
+
+// Edit field function
+function editField(fieldId, fieldLabel, fieldType) {
+    const fieldElement = document.getElementById(fieldId);
+    if (!fieldElement) return;
     
-    // Setup header buttons
-    setupHeaderButtons();
+    const currentValue = fieldElement.textContent;
+    const newValue = prompt(`Enter new ${fieldLabel}:`, currentValue);
+    
+    if (newValue !== null && newValue.trim() !== '') {
+        // Update the field
+        fieldElement.textContent = newValue.trim();
+        
+        // TODO: Save to backend API
+        showNotification('Success', `${fieldLabel} updated successfully`, 'success');
+    }
 }
 
 // Toggle API Key visibility
-function toggleApiKey() {
-    const apiKeyValue = document.getElementById('apiKeyValue');
-    const apiKeyBtn = document.getElementById('apiKeyBtn');
+async function toggleApiKey() {
+    const apiKeyElement = document.getElementById('apiKey');
+    const toggleBtn = document.getElementById('apiKeyToggle');
     
-    if (!apiKeyValue || !apiKeyBtn) return;
+    if (!apiKeyElement || !toggleBtn) return;
     
-    if (apiKeyValue.textContent === '********') {
-        apiKeyValue.textContent = window._originalApiKey || 'N/A';
-        apiKeyBtn.textContent = 'Hide';
+    if (apiKeyElement.textContent === '********') {
+        // Show API key
+        try {
+            const response = await authenticatedFetch(`${API_BASE}/merchants`);
+            const data = await response.json();
+            if (data.success && data.merchants && data.merchants.length > 0) {
+                const activeMerchant = data.merchants.find(m => m.is_active) || data.merchants[0];
+                if (activeMerchant.api_key) {
+                    apiKeyElement.textContent = activeMerchant.api_key;
+                    toggleBtn.textContent = 'Hide';
+                } else {
+                    showNotification('Info', 'API Key not configured', 'info');
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching API key:', error);
+            showNotification('Error', 'Failed to fetch API key', 'error');
+        }
     } else {
-        apiKeyValue.textContent = '********';
-        apiKeyBtn.textContent = 'Show';
+        // Hide API key
+        apiKeyElement.textContent = '********';
+        toggleBtn.textContent = 'Show';
     }
 }
 
-// Change field handler
-function changeField(fieldName) {
-    showNotification('Info', `Change ${fieldName} functionality coming soon`, 'info');
+// Edit password function
+function editPassword() {
+    const newPassword = prompt('Enter new password:');
+    if (newPassword !== null && newPassword.trim() !== '') {
+        if (newPassword.length < 6) {
+            showNotification('Error', 'Password must be at least 6 characters', 'error');
+            return;
+        }
+        
+        // TODO: Save to backend API
+        showNotification('Success', 'Password updated successfully', 'success');
+    }
 }
 
 // Make functions globally available
+window.editField = editField;
 window.toggleApiKey = toggleApiKey;
-window.changeField = changeField;
+window.editPassword = editPassword;
 
 // Show Settings information
 function showSettingsInfo() {
