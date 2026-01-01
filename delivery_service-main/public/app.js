@@ -99,11 +99,27 @@ async function checkAuth() {
 
 // Show login screen
 function showLogin() {
+    console.log('Showing login screen...');
     const authContainer = document.getElementById('authContainer');
     const dashboardContainer = document.getElementById('dashboardContainer');
     
-    if (authContainer) authContainer.classList.remove('hidden');
-    if (dashboardContainer) dashboardContainer.classList.add('hidden');
+    console.log('Auth container found:', !!authContainer);
+    console.log('Dashboard container found:', !!dashboardContainer);
+    
+    if (authContainer) {
+        authContainer.classList.remove('hidden');
+        console.log('Auth container visible');
+    }
+    if (dashboardContainer) {
+        dashboardContainer.classList.add('hidden');
+        console.log('Dashboard container hidden');
+    }
+    
+    // Make sure login form is active
+    const loginForm = document.getElementById('loginForm');
+    const signupForm = document.getElementById('signupForm');
+    if (loginForm) loginForm.classList.add('active');
+    if (signupForm) signupForm.classList.remove('active');
 }
 
 // Show dashboard
@@ -235,11 +251,14 @@ function setupHeaderButtons() {
 
 // Setup authentication handlers
 function setupAuth() {
+    console.log('Setting up authentication handlers...');
+    
     // Setup password toggle buttons
     setupPasswordToggles();
     
     // Login form
     const loginForm = document.getElementById('loginFormElement');
+    console.log('Login form found:', !!loginForm);
     if (loginForm) {
         // Store original button text
         const submitButton = loginForm.querySelector('button[type="submit"]');
@@ -293,45 +312,59 @@ function setupAuth() {
                 
                 console.log('Login response status:', response.status, response.statusText);
                 
-                // Check if response is OK
-                if (!response.ok) {
-                    // Try to get error message from response
-                    let errorText = `Server error: ${response.status} ${response.statusText}`;
-                    try {
-                        const errorData = await response.json();
-                        errorText = errorData.error || errorData.message || errorText;
-                    } catch (e) {
-                        // If response is not JSON, get text
-                        try {
-                            const text = await response.text();
-                            if (text) errorText = text.substring(0, 200);
-                        } catch (e2) {
-                            // Ignore
-                        }
-                    }
-                    
+                // Read response body once (can only be read once)
+                let responseText = '';
+                try {
+                    responseText = await response.text();
+                    console.log('Login response text:', responseText.substring(0, 200));
+                } catch (readError) {
+                    console.error('Failed to read response:', readError);
+                    const errorMsg = 'Failed to read server response. Please check if the server is running.';
                     if (errorDiv) {
-                        errorDiv.textContent = errorText;
+                        errorDiv.textContent = errorMsg;
                         errorDiv.style.display = 'block';
                     }
-                    showError(errorText);
+                    showError(errorMsg);
                     return;
                 }
                 
                 // Parse JSON response
                 let data;
                 try {
-                    const text = await response.text();
-                    console.log('Login response text:', text.substring(0, 200));
-                    data = JSON.parse(text);
+                    if (responseText) {
+                        data = JSON.parse(responseText);
+                    } else {
+                        throw new Error('Empty response');
+                    }
                 } catch (parseError) {
                     console.error('Failed to parse login response:', parseError);
-                    const errorMsg = 'Invalid response from server. Please check if the server is running.';
+                    // Check if response is not OK
+                    if (!response.ok) {
+                        const errorMsg = `Server error: ${response.status} ${response.statusText}. ${responseText ? responseText.substring(0, 100) : 'No response body'}`;
+                        if (errorDiv) {
+                            errorDiv.textContent = errorMsg;
+                            errorDiv.style.display = 'block';
+                        }
+                        showError(errorMsg);
+                    } else {
+                        const errorMsg = 'Invalid response from server. Please check if the server is running.';
+                        if (errorDiv) {
+                            errorDiv.textContent = errorMsg;
+                            errorDiv.style.display = 'block';
+                        }
+                        showError(errorMsg);
+                    }
+                    return;
+                }
+                
+                // Check if response is OK after parsing
+                if (!response.ok) {
+                    const errorText = data.error || data.message || `Server error: ${response.status} ${response.statusText}`;
                     if (errorDiv) {
-                        errorDiv.textContent = errorMsg;
+                        errorDiv.textContent = errorText;
                         errorDiv.style.display = 'block';
                     }
-                    showError(errorMsg);
+                    showError(errorText);
                     return;
                 }
                 
@@ -380,7 +413,14 @@ function setupAuth() {
     
     // Signup form
     const signupForm = document.getElementById('signupFormElement');
+    console.log('Signup form found:', !!signupForm);
     if (signupForm) {
+        // Store original button text
+        const submitButton = signupForm.querySelector('button[type="submit"]');
+        if (submitButton && !submitButton.getAttribute('data-original-text')) {
+            submitButton.setAttribute('data-original-text', submitButton.textContent || 'Sign Up');
+        }
+        
         signupForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const name = document.getElementById('signupName')?.value;
@@ -415,13 +455,84 @@ function setupAuth() {
             }
             
             try {
+                // Show loading state
+                const submitButton = signupForm.querySelector('button[type="submit"]');
+                const originalButtonText = submitButton?.textContent;
+                if (submitButton) {
+                    submitButton.disabled = true;
+                    submitButton.textContent = 'Creating account...';
+                }
+                
+                console.log('Attempting signup to:', `${API_BASE}/api/auth/signup`);
                 const response = await fetch(`${API_BASE}/api/auth/signup`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email, password, fullName: name })
                 });
                 
-                const data = await response.json();
+                // Restore button
+                if (submitButton) {
+                    submitButton.disabled = false;
+                    if (originalButtonText) submitButton.textContent = originalButtonText;
+                }
+                
+                console.log('Signup response status:', response.status, response.statusText);
+                
+                // Read response body once (can only be read once)
+                let responseText = '';
+                try {
+                    responseText = await response.text();
+                    console.log('Signup response text:', responseText.substring(0, 200));
+                } catch (readError) {
+                    console.error('Failed to read response:', readError);
+                    const errorMsg = 'Failed to read server response. Please check if the server is running.';
+                    if (errorDiv) {
+                        errorDiv.textContent = errorMsg;
+                        errorDiv.style.display = 'block';
+                    }
+                    showError(errorMsg);
+                    return;
+                }
+                
+                // Parse JSON response
+                let data;
+                try {
+                    if (responseText) {
+                        data = JSON.parse(responseText);
+                    } else {
+                        throw new Error('Empty response');
+                    }
+                } catch (parseError) {
+                    console.error('Failed to parse signup response:', parseError);
+                    // Check if response is not OK
+                    if (!response.ok) {
+                        const errorMsg = `Server error: ${response.status} ${response.statusText}. ${responseText ? responseText.substring(0, 100) : 'No response body'}`;
+                        if (errorDiv) {
+                            errorDiv.textContent = errorMsg;
+                            errorDiv.style.display = 'block';
+                        }
+                        showError(errorMsg);
+                    } else {
+                        const errorMsg = 'Invalid response from server. Please check if the server is running.';
+                        if (errorDiv) {
+                            errorDiv.textContent = errorMsg;
+                            errorDiv.style.display = 'block';
+                        }
+                        showError(errorMsg);
+                    }
+                    return;
+                }
+                
+                // Check if response is OK after parsing
+                if (!response.ok) {
+                    const errorText = data.error || data.message || `Server error: ${response.status} ${response.statusText}`;
+                    if (errorDiv) {
+                        errorDiv.textContent = errorText;
+                        errorDiv.style.display = 'block';
+                    }
+                    showError(errorText);
+                    return;
+                }
                 
                 if (data.success && data.user) {
                     currentUser = data.user;
@@ -439,7 +550,24 @@ function setupAuth() {
                 }
             } catch (error) {
                 console.error('Signup error:', error);
-                const errorMsg = 'Error connecting to server: ' + error.message;
+                
+                // Restore button if it was disabled
+                const submitButton = signupForm.querySelector('button[type="submit"]');
+                if (submitButton) {
+                    submitButton.disabled = false;
+                    const originalButtonText = submitButton.getAttribute('data-original-text');
+                    if (originalButtonText) submitButton.textContent = originalButtonText;
+                }
+                
+                let errorMsg = 'Error connecting to server';
+                if (error.message) {
+                    errorMsg += ': ' + error.message;
+                } else if (error.name === 'TypeError' && error.message && error.message.includes('fetch')) {
+                    errorMsg = 'Cannot connect to server. Please make sure the server is running at ' + API_BASE + '. If you just started the server, wait a few seconds and try again.';
+                } else if (error.name === 'TypeError') {
+                    errorMsg = 'Network error. Please check your internet connection and make sure the server is running.';
+                }
+                
                 if (errorDiv) {
                     errorDiv.textContent = errorMsg;
                     errorDiv.style.display = 'block';
@@ -451,9 +579,11 @@ function setupAuth() {
     
     // Show signup form
     const showSignupLink = document.getElementById('showSignup');
+    console.log('Show signup link found:', !!showSignupLink);
     if (showSignupLink) {
         showSignupLink.addEventListener('click', (e) => {
             e.preventDefault();
+            console.log('Switching to signup form...');
             document.getElementById('loginForm')?.classList.remove('active');
             document.getElementById('signupForm')?.classList.add('active');
         });
@@ -461,13 +591,17 @@ function setupAuth() {
     
     // Show login form
     const showLoginLink = document.getElementById('showLogin');
+    console.log('Show login link found:', !!showLoginLink);
     if (showLoginLink) {
         showLoginLink.addEventListener('click', (e) => {
             e.preventDefault();
+            console.log('Switching to login form...');
             document.getElementById('signupForm')?.classList.remove('active');
             document.getElementById('loginForm')?.classList.add('active');
         });
     }
+    
+    console.log('Authentication handlers setup complete');
     
     // Logout button is handled in setupHeaderButtons()
 }
