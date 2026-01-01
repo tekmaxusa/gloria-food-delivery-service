@@ -1407,7 +1407,40 @@ async function showDashboardPage() {
         const data = await response.json();
         if (data.success && data.merchants && data.merchants.length > 0) {
             const merchant = data.merchants.find(m => m.is_active) || data.merchants[0];
-            merchantName = merchant.merchant_name || 'Dashboard';
+            
+            // Check if merchant_name is valid (not empty, not null, and not the same as store_id)
+            if (merchant.merchant_name && 
+                merchant.merchant_name.trim() !== '' && 
+                merchant.merchant_name !== merchant.store_id &&
+                merchant.merchant_name.toLowerCase() !== merchant.store_id.toLowerCase()) {
+                merchantName = merchant.merchant_name;
+            } else {
+                // If merchant_name is missing or equals store_id, try to get it from orders
+                try {
+                    const ordersResponse = await authenticatedFetch(`${API_BASE}/orders?limit=100&store_id=${encodeURIComponent(merchant.store_id)}`);
+                    const ordersData = await ordersResponse.json();
+                    if (ordersData.success && ordersData.orders && ordersData.orders.length > 0) {
+                        // Find an order with merchant_name that's different from store_id
+                        const orderWithMerchant = ordersData.orders.find(o => 
+                            o.store_id === merchant.store_id && 
+                            o.merchant_name && 
+                            o.merchant_name.trim() !== '' &&
+                            o.merchant_name !== merchant.store_id &&
+                            o.merchant_name.toLowerCase() !== merchant.store_id.toLowerCase()
+                        );
+                        if (orderWithMerchant && orderWithMerchant.merchant_name) {
+                            merchantName = orderWithMerchant.merchant_name;
+                        } else {
+                            merchantName = 'Dashboard';
+                        }
+                    } else {
+                        merchantName = 'Dashboard';
+                    }
+                } catch (e) {
+                    console.error('Error fetching orders for merchant name:', e);
+                    merchantName = 'Dashboard';
+                }
+            }
         }
     } catch (error) {
         console.error('Error fetching merchant:', error);
