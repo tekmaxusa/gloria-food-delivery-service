@@ -1038,46 +1038,12 @@ body {
     margin: 0 auto;
 }
 
-.auth-testimonial {
-    margin-bottom: 40px;
+.btn-logout:hover {
+    background: #dc2626 !important;
 }
 
-.testimonial-text {
-    font-size: 28px;
-    font-weight: 400;
-    color: #1e293b;
-    line-height: 1.4;
-    margin-bottom: 16px;
-}
-
-.testimonial-text strong {
-    font-weight: 700;
-}
-
-.testimonial-author {
-    font-size: 16px;
-    color: #475569;
-    font-weight: 500;
-}
-
-.auth-carousel-indicators {
-    display: flex;
-    justify-content: center;
-    gap: 8px;
-    margin-top: 40px;
-}
-
-.carousel-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #cbd5e1;
-    cursor: pointer;
-    transition: background 0.2s ease;
-}
-
-.carousel-dot.active {
-    background: #1e293b;
+.btn-logout:active {
+    background: #b91c1c !important;
 }
 
 .dashboard-container {

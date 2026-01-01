@@ -2873,6 +2873,11 @@ function createProfilePanel() {
                     <div class="profile-value">${currentUser?.role || 'User'}</div>
                 </div>
             </div>
+            <div class="profile-actions">
+                <button class="btn-logout" id="profileLogoutBtn" style="width: 100%; padding: 12px; background: #ef4444; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 20px;">
+                    Log Out
+                </button>
+            </div>
         </div>
     `;
     
@@ -2887,6 +2892,32 @@ function createProfilePanel() {
     const fileInput = document.getElementById('profilePictureInput');
     if (fileInput) {
         fileInput.addEventListener('change', handleProfilePictureUpload);
+    }
+    
+    // Handle logout button
+    const logoutBtn = document.getElementById('profileLogoutBtn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', async () => {
+            // Show confirmation dialog
+            const confirmed = confirm('Are you sure you want to log out?');
+            if (!confirmed) {
+                return;
+            }
+            
+            try {
+                await authenticatedFetch(`${API_BASE}/api/auth/logout`, {
+                    method: 'POST'
+                });
+            } catch (error) {
+                console.error('Logout error:', error);
+            }
+            
+            currentUser = null;
+            sessionId = null;
+            saveSessionId(null);
+            panel.classList.add('hidden');
+            showLogin();
+        });
     }
     
     // Close when clicking outside
