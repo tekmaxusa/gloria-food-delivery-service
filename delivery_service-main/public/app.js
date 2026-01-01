@@ -531,6 +531,9 @@ function navigateToPage(page) {
         case 'reviews':
             showReviewsPage();
             break;
+        case 'myaccount':
+            showMyAccountPage();
+            break;
         default:
             showOrdersPage();
     }
@@ -2884,8 +2887,8 @@ function createProfileDropdown() {
     
     // Handle My Account click
     document.getElementById('myAccountItem')?.addEventListener('click', () => {
-        showMyAccountInfo();
         dropdown.classList.add('hidden');
+        showMyAccountPage();
     });
     
     // Handle Settings click
@@ -2918,47 +2921,124 @@ function createProfileDropdown() {
     });
 }
 
-// Show My Account information
-function showMyAccountInfo() {
+// Show My Account page
+function showMyAccountPage() {
+    const mainContainer = document.querySelector('.main-container');
     const userName = currentUser?.full_name || currentUser?.email || 'User';
     const userEmail = currentUser?.email || '';
-    const userRole = currentUser?.role || 'User';
-    const profilePicture = localStorage.getItem('profilePicture') || '';
+    const userPhone = currentUser?.phone || 'N/A';
+    const apiKey = currentUser?.api_key || 'N/A';
     
-    const modal = document.createElement('div');
-    modal.className = 'modal';
-    modal.style.display = 'block';
-    modal.innerHTML = `
-        <div class="modal-content" style="max-width: 500px;">
-            <div class="modal-header">
-                <h2>My Account</h2>
-                <button class="modal-close" onclick="this.closest('.modal').remove()">&times;</button>
+    // Get billing info (if available)
+    const billingCompany = currentUser?.company_name || 'N/A';
+    const billingEmail = currentUser?.billing_email || userEmail;
+    const billingAddress = currentUser?.billing_address || 'N/A';
+    const billingContactName = currentUser?.billing_contact_name || userName;
+    const billingContactPhone = currentUser?.billing_contact_phone || userPhone;
+    
+    mainContainer.innerHTML = `
+        <div class="account-page">
+            <h1 class="page-title">My Account</h1>
+            
+            <!-- Profile Section -->
+            <div class="account-section">
+                <h2 class="account-section-title">Profile</h2>
+                <div class="account-card">
+                    <div class="account-field">
+                        <div class="account-field-label">Account owner name</div>
+                        <div class="account-field-value">${escapeHtml(userName)}</div>
+                        <button class="account-change-btn" onclick="changeField('name')">Change</button>
+                    </div>
+                    <div class="account-field">
+                        <div class="account-field-label">Phone number</div>
+                        <div class="account-field-value">${escapeHtml(userPhone)}</div>
+                        <button class="account-change-btn" onclick="changeField('phone')">Change</button>
+                    </div>
+                    <div class="account-field">
+                        <div class="account-field-label">Email</div>
+                        <div class="account-field-value">${escapeHtml(userEmail)}</div>
+                        <button class="account-change-btn" onclick="changeField('email')">Change</button>
+                    </div>
+                    <div class="account-field">
+                        <div class="account-field-label">Api Key</div>
+                        <div class="account-field-value" id="apiKeyValue">${apiKey !== 'N/A' ? '********' : 'N/A'}</div>
+                        <button class="account-change-btn" onclick="toggleApiKey()" id="apiKeyBtn">${apiKey !== 'N/A' ? 'Show' : 'N/A'}</button>
+                    </div>
+                    <div class="account-field">
+                        <div class="account-field-label">Password</div>
+                        <div class="account-field-value">********</div>
+                        <button class="account-change-btn" onclick="changeField('password')">Change</button>
+                    </div>
+                </div>
             </div>
-            <div class="modal-body">
-                <div style="text-align: center; margin-bottom: 24px;">
-                    <img src="${profilePicture || 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22%3E%3Ccircle cx=%2250%22 cy=%2250%22 r=%2250%22 fill=%22%23e2e8f0%22/%3E%3Ctext x=%2250%22 y=%2255%22 font-size=%2230%22 text-anchor=%22middle%22 fill=%22%2364748b%22%3E${userName.charAt(0).toUpperCase()}%3C/text%3E%3C/svg%3E'}" 
-                         alt="Profile Picture" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; margin-bottom: 16px;">
-                </div>
-                <div class="form-group">
-                    <label><strong>Name:</strong></label>
-                    <div style="padding: 8px 0; color: #475569;">${escapeHtml(userName)}</div>
-                </div>
-                <div class="form-group">
-                    <label><strong>Email:</strong></label>
-                    <div style="padding: 8px 0; color: #475569;">${escapeHtml(userEmail)}</div>
-                </div>
-                <div class="form-group">
-                    <label><strong>Role:</strong></label>
-                    <div style="padding: 8px 0; color: #475569;">${escapeHtml(userRole)}</div>
-                </div>
-                <div class="modal-actions">
-                    <button type="button" class="btn-primary" onclick="this.closest('.modal').remove()">Close</button>
+            
+            <!-- Billing contact details Section -->
+            <div class="account-section">
+                <h2 class="account-section-title">Billing contact details</h2>
+                <div class="account-card">
+                    <div class="account-field">
+                        <div class="account-field-label">Company name</div>
+                        <div class="account-field-value">${escapeHtml(billingCompany)}</div>
+                        <button class="account-change-btn" onclick="changeField('company')">Change</button>
+                    </div>
+                    <div class="account-field">
+                        <div class="account-field-label">Email</div>
+                        <div class="account-field-value">${escapeHtml(billingEmail)}</div>
+                        <button class="account-change-btn" onclick="changeField('billing_email')">Change</button>
+                    </div>
+                    <div class="account-field">
+                        <div class="account-field-label">Billing address</div>
+                        <div class="account-field-value">${escapeHtml(billingAddress)}</div>
+                        <button class="account-change-btn" onclick="changeField('billing_address')">Change</button>
+                    </div>
+                    <div class="account-field">
+                        <div class="account-field-label">Contact Name</div>
+                        <div class="account-field-value">${escapeHtml(billingContactName)}</div>
+                        <button class="account-change-btn" onclick="changeField('billing_contact_name')">Change</button>
+                    </div>
+                    <div class="account-field">
+                        <div class="account-field-label">Contact Phone</div>
+                        <div class="account-field-value">${escapeHtml(billingContactPhone)}</div>
+                        <button class="account-change-btn" onclick="changeField('billing_contact_phone')">Change</button>
+                    </div>
                 </div>
             </div>
         </div>
     `;
-    document.body.appendChild(modal);
+    
+    // Store original API key for toggle
+    if (apiKey !== 'N/A') {
+        window._originalApiKey = apiKey;
+    }
+    
+    // Setup header buttons
+    setupHeaderButtons();
 }
+
+// Toggle API Key visibility
+function toggleApiKey() {
+    const apiKeyValue = document.getElementById('apiKeyValue');
+    const apiKeyBtn = document.getElementById('apiKeyBtn');
+    
+    if (!apiKeyValue || !apiKeyBtn) return;
+    
+    if (apiKeyValue.textContent === '********') {
+        apiKeyValue.textContent = window._originalApiKey || 'N/A';
+        apiKeyBtn.textContent = 'Hide';
+    } else {
+        apiKeyValue.textContent = '********';
+        apiKeyBtn.textContent = 'Show';
+    }
+}
+
+// Change field handler
+function changeField(fieldName) {
+    showNotification('Info', `Change ${fieldName} functionality coming soon`, 'info');
+}
+
+// Make functions globally available
+window.toggleApiKey = toggleApiKey;
+window.changeField = changeField;
 
 // Show Settings information
 function showSettingsInfo() {
