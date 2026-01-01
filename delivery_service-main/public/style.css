@@ -1455,13 +1455,14 @@ body {
 /* Profile Dropdown Menu */
 .profile-dropdown {
     position: fixed;
-    background: #1e293b;
+    background: #ffffff;
     border-radius: 8px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
     z-index: 1000;
     min-width: 200px;
     padding: 8px 0;
     animation: slideDown 0.2s ease-out;
+    border: 1px solid #e2e8f0;
 }
 
 .profile-dropdown.hidden {
@@ -1473,7 +1474,7 @@ body {
     align-items: center;
     gap: 12px;
     padding: 12px 16px;
-    color: #f1f5f9;
+    color: #1e293b;
     cursor: pointer;
     transition: background 0.2s ease;
     font-size: 14px;
@@ -1481,12 +1482,16 @@ body {
 }
 
 .profile-dropdown-item:hover {
-    background: #334155;
+    background: #f1f5f9;
 }
 
 .profile-dropdown-item svg {
-    color: #f1f5f9;
+    color: #64748b;
     flex-shrink: 0;
+}
+
+.profile-dropdown-item:hover svg {
+    color: #1e293b;
 }
 
 .profile-dropdown-item span {
