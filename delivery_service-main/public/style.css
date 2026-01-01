@@ -1945,6 +1945,47 @@ body {
     color: #94a3b8;
 }
 
+.business-type-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 32px;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.business-type-tab {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: #64748b;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-bottom: -2px;
+}
+
+.business-type-tab:hover {
+    color: #0f172a;
+}
+
+.business-type-tab.active {
+    color: #22c55e;
+    border-bottom-color: #22c55e;
+}
+
+.business-type-tab svg {
+    width: 20px;
+    height: 20px;
+}
+
+.business-type-tab.active svg {
+    color: #22c55e;
+}
+
 .business-type-selection {
     display: flex;
     gap: 16px;

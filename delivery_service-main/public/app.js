@@ -3276,6 +3276,7 @@ async function getBusinessSettingsContent() {
     
     const businessName = merchant?.merchant_name || 'Not set';
     const businessType = localStorage.getItem('businessType') || 'merchant';
+    const activeTab = localStorage.getItem('businessSettingsTab') || 'merchant';
     const useDriverFleet = localStorage.getItem('useDriverFleet') === 'true';
     const acceptTakeoutOrders = localStorage.getItem('acceptTakeoutOrders') === 'true';
     const maxDeliveryTime = localStorage.getItem('maxDeliveryTime') || '60';
@@ -3284,138 +3285,202 @@ async function getBusinessSettingsContent() {
     return `
         <h1 class="settings-content-title">Business settings</h1>
         
-        <!-- Business Details Section -->
-        <div class="business-settings-section">
-            <h3 class="settings-section-subtitle">Set your business details</h3>
-            
-            <div class="business-detail-field">
-                <div class="business-detail-label">Business name</div>
-                <div class="business-detail-value-container">
-                    <div class="business-detail-value" id="businessNameValue">${escapeHtml(businessName)}</div>
-                    <button class="btn-edit-icon" onclick="editBusinessName()">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-            
-            <div class="business-detail-field">
-                <div class="business-detail-label">Business logo</div>
-                <div class="business-detail-value-container">
-                    <div class="business-logo-placeholder" id="businessLogoPlaceholder">
-                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                            <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                            <polyline points="21 15 16 10 5 21"></polyline>
-                        </svg>
-                    </div>
-                    <button class="btn-edit-icon" onclick="editBusinessLogo()">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                        </svg>
-                    </button>
-                </div>
-            </div>
+        <div class="business-type-tabs">
+            <button class="business-type-tab ${activeTab === 'merchant' ? 'active' : ''}" onclick="switchBusinessTab('merchant')">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                    <polyline points="10 9 9 9 8 9"></polyline>
+                </svg>
+                <span>Merchant</span>
+            </button>
+            <button class="business-type-tab ${activeTab === 'delivery-company' ? 'active' : ''}" onclick="switchBusinessTab('delivery-company')">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 3h15v13H1z"></path>
+                    <path d="M16 8h4l3 3v5h-7V8z"></path>
+                    <circle cx="5.5" cy="18.5" r="2.5"></circle>
+                    <circle cx="18.5" cy="18.5" r="2.5"></circle>
+                </svg>
+                <span>Delivery company</span>
+            </button>
         </div>
         
-        <!-- Business Type Details Section -->
-        <div class="business-settings-section">
-            <h3 class="settings-section-subtitle">Set your business type details</h3>
-            <p class="settings-instruction-text">If you are a delivery only business like Pizza shop where pick up is always from the same place, please choose the business type delivery only. Otherwise keep it pick up and delivery.</p>
-            
-            <div class="business-type-selection">
-                <div class="business-type-card ${businessType === 'merchant' ? 'active' : ''}" onclick="selectBusinessType('merchant')">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                        <polyline points="14 2 14 8 20 8"></polyline>
-                        <line x1="16" y1="13" x2="8" y2="13"></line>
-                        <line x1="16" y1="17" x2="8" y2="17"></line>
-                        <polyline points="10 9 9 9 8 9"></polyline>
-                    </svg>
-                    <span>Merchant</span>
+        <div id="businessSettingsContent">
+            ${activeTab === 'merchant' ? `
+                <!-- Business Details Section -->
+                <div class="business-settings-section">
+                    <h3 class="settings-section-subtitle">Set your business details</h3>
+                    
+                    <div class="business-detail-field">
+                        <div class="business-detail-label">Business name</div>
+                        <div class="business-detail-value-container">
+                            <div class="business-detail-value" id="businessNameValue">${escapeHtml(businessName)}</div>
+                            <button class="btn-edit-icon" onclick="editBusinessName()">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="business-detail-field">
+                        <div class="business-detail-label">Business logo</div>
+                        <div class="business-detail-value-container">
+                            <div class="business-logo-placeholder" id="businessLogoPlaceholder">
+                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                    <polyline points="21 15 16 10 5 21"></polyline>
+                                </svg>
+                            </div>
+                            <button class="btn-edit-icon" onclick="editBusinessLogo()">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
                 </div>
                 
-                <div class="business-type-card ${businessType === 'delivery-company' ? 'active' : ''}" onclick="selectBusinessType('delivery-company')">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M1 3h15v13H1z"></path>
-                        <path d="M16 8h4l3 3v5h-7V8z"></path>
-                        <circle cx="5.5" cy="18.5" r="2.5"></circle>
-                        <circle cx="18.5" cy="18.5" r="2.5"></circle>
-                    </svg>
-                    <span>Delivery company</span>
+                <!-- Business Type Details Section -->
+                <div class="business-settings-section">
+                    <h3 class="settings-section-subtitle">Set your business type details</h3>
+                    <p class="settings-instruction-text">If you are a delivery only business like Pizza shop where pick up is always from the same place, please choose the business type delivery only. Otherwise keep it pick up and delivery.</p>
+                    
+                    <div class="business-type-selection">
+                        <div class="business-type-card ${businessType === 'merchant' ? 'active' : ''}" onclick="selectBusinessType('merchant')">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                <polyline points="14 2 14 8 20 8"></polyline>
+                                <line x1="16" y1="13" x2="8" y2="13"></line>
+                                <line x1="16" y1="17" x2="8" y2="17"></line>
+                                <polyline points="10 9 9 9 8 9"></polyline>
+                            </svg>
+                            <span>Merchant</span>
+                        </div>
+                        
+                        <div class="business-type-card ${businessType === 'delivery-company' ? 'active' : ''}" onclick="selectBusinessType('delivery-company')">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M1 3h15v13H1z"></path>
+                                <path d="M16 8h4l3 3v5h-7V8z"></path>
+                                <circle cx="5.5" cy="18.5" r="2.5"></circle>
+                                <circle cx="18.5" cy="18.5" r="2.5"></circle>
+                            </svg>
+                            <span>Delivery company</span>
+                        </div>
+                    </div>
                 </div>
-            </div>
-        </div>
-        
-        <!-- Contact and Address Information -->
-        <div class="business-settings-section">
-            <div class="business-input-field">
-                <label class="business-input-label">Merchant phone number</label>
-                <input type="tel" class="business-input" id="merchantPhone" value="${escapeHtml(merchantPhone)}" placeholder="Enter phone number">
-            </div>
-            
-            <div class="business-input-field">
-                <label class="business-input-label">Merchant store address</label>
-                <input type="text" class="business-input" id="merchantAddress" value="${escapeHtml(merchantAddress)}" placeholder="Enter store address">
-            </div>
-        </div>
-        
-        <!-- Operational Settings Toggles -->
-        <div class="business-settings-section">
-            <div class="business-toggle-field">
-                <div class="business-toggle-content">
-                    <label class="business-toggle-label">I will use my own driver fleet for delivery</label>
+                
+                <!-- Contact and Address Information -->
+                <div class="business-settings-section">
+                    <div class="business-input-field">
+                        <label class="business-input-label">Merchant phone number</label>
+                        <input type="tel" class="business-input" id="merchantPhone" value="${escapeHtml(merchantPhone)}" placeholder="Enter phone number">
+                    </div>
+                    
+                    <div class="business-input-field">
+                        <label class="business-input-label">Merchant store address</label>
+                        <input type="text" class="business-input" id="merchantAddress" value="${escapeHtml(merchantAddress)}" placeholder="Enter store address">
+                    </div>
                 </div>
-                <label class="switch">
-                    <input type="checkbox" id="driverFleetToggle" ${useDriverFleet ? 'checked' : ''} onchange="toggleDriverFleet(this.checked)">
-                    <span class="slider"></span>
-                </label>
-            </div>
-            
-            <div class="business-toggle-field">
-                <div class="business-toggle-content">
-                    <label class="business-toggle-label">Accept takeout orders from integrations</label>
-                    <p class="business-toggle-description">Seamlessly accept and manage takeout orders from integrated delivery platforms in one centralized hub.</p>
+                
+                <!-- Operational Settings Toggles -->
+                <div class="business-settings-section">
+                    <div class="business-toggle-field">
+                        <div class="business-toggle-content">
+                            <label class="business-toggle-label">I will use my own driver fleet for delivery</label>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="driverFleetToggle" ${useDriverFleet ? 'checked' : ''} onchange="toggleDriverFleet(this.checked)">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    
+                    <div class="business-toggle-field">
+                        <div class="business-toggle-content">
+                            <label class="business-toggle-label">Accept takeout orders from integrations</label>
+                            <p class="business-toggle-description">Seamlessly accept and manage takeout orders from integrated delivery platforms in one centralized hub.</p>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="takeoutOrdersToggle" ${acceptTakeoutOrders ? 'checked' : ''} onchange="toggleTakeoutOrders(this.checked)">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
                 </div>
-                <label class="switch">
-                    <input type="checkbox" id="takeoutOrdersToggle" ${acceptTakeoutOrders ? 'checked' : ''} onchange="toggleTakeoutOrders(this.checked)">
-                    <span class="slider"></span>
-                </label>
-            </div>
-        </div>
-        
-        <!-- Service Times Section -->
-        <div class="business-settings-section">
-            <h3 class="settings-section-subtitle">Set your service times</h3>
-            
-            <div class="business-detail-field">
-                <div class="business-detail-label">Maximum time allowed for delivery (on-demand)</div>
-                <div class="business-detail-value-container">
-                    <div class="business-detail-value" id="maxDeliveryTimeValue">${maxDeliveryTime} Minutes</div>
-                    <button class="btn-edit-icon" onclick="editMaxDeliveryTime()">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                        </svg>
-                    </button>
+                
+                <!-- Service Times Section -->
+                <div class="business-settings-section">
+                    <h3 class="settings-section-subtitle">Set your service times</h3>
+                    
+                    <div class="business-detail-field">
+                        <div class="business-detail-label">Maximum time allowed for delivery (on-demand)</div>
+                        <div class="business-detail-value-container">
+                            <div class="business-detail-value" id="maxDeliveryTimeValue">${maxDeliveryTime} Minutes</div>
+                            <button class="btn-edit-icon" onclick="editMaxDeliveryTime()">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="business-detail-field">
+                        <div class="business-detail-label">Order preparation time</div>
+                        <div class="business-detail-value-container">
+                            <div class="business-detail-value" id="orderPrepTimeValue">${orderPrepTime} Minutes</div>
+                            <button class="btn-edit-icon" onclick="editOrderPrepTime()">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
                 </div>
-            </div>
-            
-            <div class="business-detail-field">
-                <div class="business-detail-label">Order preparation time</div>
-                <div class="business-detail-value-container">
-                    <div class="business-detail-value" id="orderPrepTimeValue">${orderPrepTime} Minutes</div>
-                    <button class="btn-edit-icon" onclick="editOrderPrepTime()">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                        </svg>
-                    </button>
+            ` : `
+                <!-- Delivery Company - Service Times Section -->
+                <div class="business-settings-section">
+                    <h3 class="settings-section-subtitle">Service times</h3>
+                    <p class="settings-instruction-text">Set your service times</p>
+                    
+                    <div class="business-detail-field">
+                        <div class="business-detail-label">Maximum time allowed for delivery (on-demand)</div>
+                        <div class="business-detail-value-container">
+                            <div class="business-detail-value" id="maxDeliveryTimeValueDC">${maxDeliveryTime} Minutes</div>
+                            <button class="btn-edit-icon" onclick="editMaxDeliveryTimeDC()">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="business-detail-field">
+                        <div class="business-detail-label">Order preparation time</div>
+                        <div class="business-detail-value-container">
+                            <div class="business-detail-value" id="orderPrepTimeValueDC">${orderPrepTime} Minutes</div>
+                            <button class="btn-edit-icon" onclick="editOrderPrepTimeDC()">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
                 </div>
-            </div>
+                
+                <!-- Action Buttons -->
+                <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 32px; padding-top: 24px; border-top: 1px solid #e2e8f0;">
+                    <button class="btn-secondary" onclick="cancelBusinessSettings()">Cancel</button>
+                    <button class="btn-primary" onclick="saveBusinessSettings()">Save</button>
+                </div>
+            `}
         </div>
     `;
 }
@@ -3570,13 +3635,10 @@ async function getDriverSettingsContent() {
                     <div class="driver-setting-label">Require Proof of Delivery</div>
                     <p class="driver-setting-description">Drivers must take proof of delivery (Only Picture) to complete an order</p>
                 </div>
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <label class="switch">
-                        <input type="checkbox" ${requirePOD ? 'checked' : ''} onchange="toggleDriverSetting('requirePOD', this.checked)">
-                        <span class="slider"></span>
-                    </label>
-                    <button class="btn-upgrade">Upgrade</button>
-                </div>
+                <label class="switch">
+                    <input type="checkbox" ${requirePOD ? 'checked' : ''} onchange="toggleDriverSetting('requirePOD', this.checked)">
+                    <span class="slider"></span>
+                </label>
             </div>
             
             <div class="driver-setting-item">
@@ -3597,13 +3659,10 @@ async function getDriverSettingsContent() {
                 <div class="driver-setting-content">
                     <div class="driver-setting-label">Drivers can re-optimize the route from their App</div>
                 </div>
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <label class="switch">
-                        <input type="checkbox" ${reoptimizeRoute ? 'checked' : ''} onchange="toggleDriverSetting('reoptimizeRoute', this.checked)">
-                        <span class="slider"></span>
-                    </label>
-                    <button class="btn-upgrade">Upgrade</button>
-                </div>
+                <label class="switch">
+                    <input type="checkbox" ${reoptimizeRoute ? 'checked' : ''} onchange="toggleDriverSetting('reoptimizeRoute', this.checked)">
+                    <span class="slider"></span>
+                </label>
             </div>
             
             <div class="driver-setting-item">
@@ -3611,13 +3670,10 @@ async function getDriverSettingsContent() {
                     <div class="driver-setting-label">Geofencing for pick-up & drop-off</div>
                     <p class="driver-setting-description">Set geofencing for pick-up and drop-off</p>
                 </div>
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <label class="switch">
-                        <input type="checkbox" ${geofencing ? 'checked' : ''} onchange="toggleDriverSetting('geofencing', this.checked)">
-                        <span class="slider"></span>
-                    </label>
-                    <button class="btn-upgrade">Upgrade</button>
-                </div>
+                <label class="switch">
+                    <input type="checkbox" ${geofencing ? 'checked' : ''} onchange="toggleDriverSetting('geofencing', this.checked)">
+                    <span class="slider"></span>
+                </label>
             </div>
         </div>
         
@@ -3763,9 +3819,6 @@ async function getThirdPartyDeliveryContent() {
                         </div>
                     </div>
                     
-                    <div style="text-align: right; margin-top: 16px;">
-                        <button class="btn-upgrade">Upgrade</button>
-                    </div>
                 </div>
                 
                 <!-- Local Services -->
@@ -4011,13 +4064,10 @@ async function getCustomerNotificationContent() {
                 <div class="notification-toggle-content">
                     <div class="driver-setting-label">SMS</div>
                 </div>
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <label class="switch">
-                        <input type="checkbox" ${etaSMS ? 'checked' : ''} onchange="toggleNotificationSetting('etaSMS', this.checked)">
-                        <span class="slider"></span>
-                    </label>
-                    <button class="btn-upgrade">Upgrade</button>
-                </div>
+                <label class="switch">
+                    <input type="checkbox" ${etaSMS ? 'checked' : ''} onchange="toggleNotificationSetting('etaSMS', this.checked)">
+                    <span class="slider"></span>
+                </label>
             </div>
             
             <div style="margin-top: 24px;">
@@ -4035,13 +4085,10 @@ async function getCustomerNotificationContent() {
                     <div class="driver-setting-label">Allow Editing Delivery Instructions on Tracking Link</div>
                     <p class="driver-setting-description" style="margin-top: 8px;">Allow Customers to change delivery instructions directly from the tracking link</p>
                 </div>
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <label class="switch">
-                        <input type="checkbox" ${allowEditInstructions ? 'checked' : ''} onchange="toggleNotificationSetting('allowEditInstructions', this.checked)">
-                        <span class="slider"></span>
-                    </label>
-                    <button class="btn-upgrade">Upgrade</button>
-                </div>
+                <label class="switch">
+                    <input type="checkbox" ${allowEditInstructions ? 'checked' : ''} onchange="toggleNotificationSetting('allowEditInstructions', this.checked)">
+                    <span class="slider"></span>
+                </label>
             </div>
         </div>
         
@@ -4330,6 +4377,11 @@ window.selectSettingsItem = selectSettingsItem;
 window.editBusinessName = editBusinessName;
 window.editBusinessLogo = editBusinessLogo;
 window.selectBusinessType = selectBusinessType;
+window.switchBusinessTab = switchBusinessTab;
+window.editMaxDeliveryTimeDC = editMaxDeliveryTimeDC;
+window.editOrderPrepTimeDC = editOrderPrepTimeDC;
+window.cancelBusinessSettings = cancelBusinessSettings;
+window.saveBusinessSettings = saveBusinessSettings;
 window.toggleDriverFleet = toggleDriverFleet;
 window.toggleTakeoutOrders = toggleTakeoutOrders;
 window.editMaxDeliveryTime = editMaxDeliveryTime;
