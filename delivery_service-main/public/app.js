@@ -99,21 +99,11 @@ async function checkAuth() {
 
 // Show login screen
 function showLogin() {
-    console.log('Showing login screen...');
     const authContainer = document.getElementById('authContainer');
     const dashboardContainer = document.getElementById('dashboardContainer');
     
-    console.log('Auth container found:', !!authContainer);
-    console.log('Dashboard container found:', !!dashboardContainer);
-    
-    if (authContainer) {
-        authContainer.classList.remove('hidden');
-        console.log('Auth container visible');
-    }
-    if (dashboardContainer) {
-        dashboardContainer.classList.add('hidden');
-        console.log('Dashboard container hidden');
-    }
+    if (authContainer) authContainer.classList.remove('hidden');
+    if (dashboardContainer) dashboardContainer.classList.add('hidden');
     
     // Make sure login form is active
     const loginForm = document.getElementById('loginForm');
@@ -124,29 +114,17 @@ function showLogin() {
 
 // Show dashboard
 function showDashboard() {
-    console.log('showDashboard() called');
     const authContainer = document.getElementById('authContainer');
     const dashboardContainer = document.getElementById('dashboardContainer');
     
-    console.log('Auth container:', !!authContainer);
-    console.log('Dashboard container:', !!dashboardContainer);
-    
-    if (authContainer) {
-        authContainer.classList.add('hidden');
-        console.log('Auth container hidden');
-    }
-    if (dashboardContainer) {
-        dashboardContainer.classList.remove('hidden');
-        console.log('Dashboard container shown');
-    }
+    if (authContainer) authContainer.classList.add('hidden');
+    if (dashboardContainer) dashboardContainer.classList.remove('hidden');
     
     // Show dashboard page by default
     showDashboardPage();
     
     // Start auto-refresh only when authenticated
     startAutoRefresh();
-    
-    console.log('Dashboard setup complete');
 }
 
 // Setup dashboard UI elements
@@ -201,19 +179,11 @@ function setupDashboardUI() {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('DOM Content Loaded - Initializing app...');
-    
     // Ensure login form is active on page load
     const loginForm = document.getElementById('loginForm');
     const signupForm = document.getElementById('signupForm');
-    if (loginForm) {
-        loginForm.classList.add('active');
-        console.log('Login form set to active');
-    }
-    if (signupForm) {
-        signupForm.classList.remove('active');
-        console.log('Signup form set to inactive');
-    }
+    if (loginForm) loginForm.classList.add('active');
+    if (signupForm) signupForm.classList.remove('active');
     
     // Setup authentication handlers first
     setupAuth();
@@ -277,14 +247,11 @@ function setupHeaderButtons() {
 
 // Setup authentication handlers
 function setupAuth() {
-    console.log('Setting up authentication handlers...');
-    
     // Setup password toggle buttons
     setupPasswordToggles();
     
     // Login form
     const loginForm = document.getElementById('loginFormElement');
-    console.log('Login form found:', !!loginForm);
     if (loginForm) {
         // Store original button text
         const submitButton = loginForm.querySelector('button[type="submit"]');
@@ -294,12 +261,9 @@ function setupAuth() {
         
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            console.log('Login form submitted');
             const email = document.getElementById('loginEmail')?.value;
             const password = document.getElementById('loginPassword')?.value;
             const errorDiv = document.getElementById('loginError');
-            
-            console.log('Login attempt with email:', email ? email.substring(0, 3) + '***' : 'empty');
             
             // Hide previous errors
             if (errorDiv) {
@@ -326,26 +290,16 @@ function setupAuth() {
                     submitButton.textContent = 'Logging in...';
                 }
                 
-                console.log('Attempting login to:', `${API_BASE}/api/auth/login`);
                 const response = await fetch(`${API_BASE}/api/auth/login`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email, password })
                 });
                 
-                // Restore button
-                if (submitButton) {
-                    submitButton.disabled = false;
-                    if (originalButtonText) submitButton.textContent = originalButtonText;
-                }
-                
-                console.log('Login response status:', response.status, response.statusText);
-                
                 // Read response body once (can only be read once)
                 let responseText = '';
                 try {
                     responseText = await response.text();
-                    console.log('Login response text:', responseText.substring(0, 200));
                 } catch (readError) {
                     console.error('Failed to read response:', readError);
                     const errorMsg = 'Failed to read server response. Please check if the server is running.';
@@ -402,7 +356,11 @@ function setupAuth() {
                     sessionId = data.sessionId;
                     saveSessionId(data.sessionId);
                     showNotification('Success', 'Login successful!');
-                    showDashboard();
+                    
+                    // Small delay to show notification, then redirect
+                    setTimeout(() => {
+                        showDashboard();
+                    }, 100);
                 } else {
                     const errorMsg = data.error || 'Invalid email or password';
                     if (errorDiv) {
@@ -442,7 +400,6 @@ function setupAuth() {
     
     // Signup form
     const signupForm = document.getElementById('signupFormElement');
-    console.log('Signup form found:', !!signupForm);
     if (signupForm) {
         // Store original button text
         const submitButton = signupForm.querySelector('button[type="submit"]');
@@ -452,13 +409,10 @@ function setupAuth() {
         
         signupForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            console.log('Signup form submitted');
             const name = document.getElementById('signupName')?.value;
             const email = document.getElementById('signupEmail')?.value;
             const password = document.getElementById('signupPassword')?.value;
             const errorDiv = document.getElementById('signupError');
-            
-            console.log('Signup attempt with email:', email ? email.substring(0, 3) + '***' : 'empty');
             
             // Hide previous errors
             if (errorDiv) {
@@ -517,6 +471,11 @@ function setupAuth() {
                     console.log('Signup response text:', responseText.substring(0, 200));
                 } catch (readError) {
                     console.error('Failed to read response:', readError);
+                    // Restore button
+                    if (submitButton) {
+                        submitButton.disabled = false;
+                        if (originalButtonText) submitButton.textContent = originalButtonText;
+                    }
                     const errorMsg = 'Failed to read server response. Please check if the server is running.';
                     if (errorDiv) {
                         errorDiv.textContent = errorMsg;
@@ -536,6 +495,11 @@ function setupAuth() {
                     }
                 } catch (parseError) {
                     console.error('Failed to parse signup response:', parseError);
+                    // Restore button
+                    if (submitButton) {
+                        submitButton.disabled = false;
+                        if (originalButtonText) submitButton.textContent = originalButtonText;
+                    }
                     // Check if response is not OK
                     if (!response.ok) {
                         const errorMsg = `Server error: ${response.status} ${response.statusText}. ${responseText ? responseText.substring(0, 100) : 'No response body'}`;
@@ -555,6 +519,12 @@ function setupAuth() {
                     return;
                 }
                 
+                // Restore button after reading response
+                if (submitButton) {
+                    submitButton.disabled = false;
+                    if (originalButtonText) submitButton.textContent = originalButtonText;
+                }
+                
                 // Check if response is OK after parsing
                 if (!response.ok) {
                     const errorText = data.error || data.message || `Server error: ${response.status} ${response.statusText}`;
@@ -567,7 +537,6 @@ function setupAuth() {
                 }
                 
                 if (data.success && data.user) {
-                    console.log('Signup successful, redirecting to dashboard...');
                     currentUser = data.user;
                     sessionId = data.sessionId;
                     saveSessionId(data.sessionId);
@@ -576,7 +545,6 @@ function setupAuth() {
                     // Small delay to show notification, then redirect
                     setTimeout(() => {
                         showDashboard();
-                        console.log('Dashboard shown');
                     }, 100);
                 } else {
                     const errorMsg = data.error || 'Failed to create account';
@@ -617,22 +585,14 @@ function setupAuth() {
     
     // Show signup form
     const showSignupLink = document.getElementById('showSignup');
-    console.log('Show signup link found:', !!showSignupLink);
     if (showSignupLink) {
         showSignupLink.addEventListener('click', (e) => {
             e.preventDefault();
-            console.log('Switching to signup form...');
             const loginForm = document.getElementById('loginForm');
             const signupForm = document.getElementById('signupForm');
             
-            if (loginForm) {
-                loginForm.classList.remove('active');
-                console.log('Login form hidden');
-            }
-            if (signupForm) {
-                signupForm.classList.add('active');
-                console.log('Signup form shown');
-            }
+            if (loginForm) loginForm.classList.remove('active');
+            if (signupForm) signupForm.classList.add('active');
             
             // Clear any error messages
             const loginError = document.getElementById('loginError');
@@ -645,22 +605,14 @@ function setupAuth() {
     
     // Show login form
     const showLoginLink = document.getElementById('showLogin');
-    console.log('Show login link found:', !!showLoginLink);
     if (showLoginLink) {
         showLoginLink.addEventListener('click', (e) => {
             e.preventDefault();
-            console.log('Switching to login form...');
             const loginForm = document.getElementById('loginForm');
             const signupForm = document.getElementById('signupForm');
             
-            if (signupForm) {
-                signupForm.classList.remove('active');
-                console.log('Signup form hidden');
-            }
-            if (loginForm) {
-                loginForm.classList.add('active');
-                console.log('Login form shown');
-            }
+            if (signupForm) signupForm.classList.remove('active');
+            if (loginForm) loginForm.classList.add('active');
             
             // Clear any error messages
             const signupError = document.getElementById('signupError');
@@ -670,8 +622,6 @@ function setupAuth() {
             }
         });
     }
-    
-    console.log('Authentication handlers setup complete');
     
     // Logout button is handled in setupHeaderButtons()
 }
