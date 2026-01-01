@@ -1481,6 +1481,70 @@ class GloriaFoodWebhookServer {
       }
     });
 
+    // Assign driver to order (sends to DoorDash which automatically assigns driver)
+    this.app.post('/api/orders/:orderId/assign-driver', async (req: Request, res: Response) => {
+      try {
+        const orderId = req.params.orderId;
+        if (!orderId) {
+          return res.status(400).json({ success: false, error: 'Order ID is required' });
+        }
+        
+        // Get order from database
+        const order = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId));
+        if (!order) {
+          return res.status(404).json({ success: false, error: 'Order not found' });
+        }
+        
+        // Check if order is already sent to DoorDash
+        let rawData = {};
+        try {
+          if (order.raw_data) {
+            rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+          }
+        } catch (e) {
+          // Ignore parsing errors
+        }
+        
+        const doordashOrderId = order.doordash_order_id || rawData.doordash_order_id || rawData.doordashOrderId;
+        
+        if (doordashOrderId) {
+          // Order already sent to DoorDash, driver is automatically assigned
+          return res.json({ 
+            success: true, 
+            message: 'Order already sent to DoorDash. Driver will be automatically assigned.',
+            doordash_order_id: doordashOrderId
+          });
+        }
+        
+        // Send order to DoorDash (this will automatically assign a driver)
+        const doorDashResult = await this.sendOrderToDoorDash({
+          ...order,
+          raw_data: rawData
+        });
+        
+        if (doorDashResult && doorDashResult.id) {
+          // Update order with DoorDash info
+          const updatedOrder = await this.handleAsync(this.database.insertOrUpdateOrder({
+            ...order,
+            doordash_order_id: doorDashResult.id,
+            sent_to_doordash: true
+          }));
+          
+          res.json({ 
+            success: true, 
+            message: 'Order sent to DoorDash. Driver will be automatically assigned.',
+            doordash_order_id: doorDashResult.id,
+            tracking_url: doorDashResult.tracking_url
+          });
+        } else {
+          res.status(500).json({ success: false, error: 'Failed to send order to DoorDash' });
+        }
+      } catch (error: any) {
+        console.error('Error assigning driver:', error);
+        res.status(500).json({ success: false, error: error.message || 'Failed to assign driver' });
+      }
+    });
+
     // Reviews endpoints
     this.app.get('/api/reviews', async (req: Request, res: Response) => {
       try {

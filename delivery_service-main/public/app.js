@@ -3334,39 +3334,23 @@ function hasScheduledDeliveryTime(order) {
             if (deliveryDate > now) {
                 console.log(`[DEBUG] Order ${orderId || 'unknown'} delivery time is in future: ${deliveryTime} -> ${deliveryDate}`);
                 
-                // Check if it's significantly different from order creation time
-                // to distinguish scheduled orders from "as soon as possible"
-                const orderCreatedAt = order.created_at || order.fetched_at || order.updated_at;
-                if (orderCreatedAt) {
-                    try {
-                        const orderDate = new Date(orderCreatedAt);
-                        const timeDiff = deliveryDate.getTime() - orderDate.getTime();
-                        const minutesDiff = timeDiff / (1000 * 60);
-                        
-                        console.log(`[DEBUG] Order ${orderId || 'unknown'} time diff: ${minutesDiff} minutes from order creation`);
-                        
-                        // If delivery time is more than 1 minute from order creation, it's scheduled
-                        // Very lenient threshold to catch all "Later" orders
-                        if (minutesDiff > 1) {
-                            console.log(`[DEBUG] Order ${orderId || 'unknown'} is SCHEDULED (${minutesDiff} min difference)`);
-                            return true;
-                        }
-                        // Also check if it's a different day (tomorrow or later)
-                        const deliveryDay = deliveryDate.toDateString();
-                        const orderDay = orderDate.toDateString();
-                        if (deliveryDay !== orderDay) {
-                            console.log(`[DEBUG] Order ${orderId || 'unknown'} is SCHEDULED (different day)`);
-                            return true; // Different day = scheduled
-                        }
-                    } catch (e) {
-                        // If can't compare, still consider it scheduled if in future
-                        console.log(`[DEBUG] Order ${orderId || 'unknown'} is SCHEDULED (can't compare, but in future)`);
-                        return true;
-                    }
-                } else {
-                    // No order creation time, but delivery is in future = scheduled
-                    console.log(`[DEBUG] Order ${orderId || 'unknown'} is SCHEDULED (no order date, but delivery in future)`);
+                // If delivery time is in the future (even 1 minute), it's scheduled
+                // This catches orders with specific date/time (Later option)
+                const timeDiff = deliveryDate.getTime() - now.getTime();
+                const minutesDiff = timeDiff / (1000 * 60);
+                
+                // If more than 1 minute in the future, it's scheduled
+                if (minutesDiff > 1) {
+                    console.log(`[DEBUG] Order ${orderId || 'unknown'} is SCHEDULED (${minutesDiff} min in future)`);
                     return true;
+                }
+                
+                // Also check if it's a different day (tomorrow or later)
+                const deliveryDay = deliveryDate.toDateString();
+                const today = now.toDateString();
+                if (deliveryDay !== today) {
+                    console.log(`[DEBUG] Order ${orderId || 'unknown'} is SCHEDULED (different day)`);
+                    return true; // Different day = scheduled
                 }
             } else {
                 console.log(`[DEBUG] Order ${orderId || 'unknown'} delivery time is NOT in future: ${deliveryTime} -> ${deliveryDate}, now: ${now}`);
@@ -4235,21 +4219,24 @@ async function assignDriver(orderId) {
     }
 }
 
-// Confirm driver assignment
+// Confirm driver assignment (sends order to DoorDash which automatically assigns driver)
 async function confirmAssignDriver(orderId) {
-    const select = document.getElementById('driverSelect');
-    const driverId = select ? select.value : null;
-    
-    if (!driverId) {
-        showError('Please select a driver');
-        return;
-    }
-    
     try {
-        // TODO: Implement API endpoint for assigning driver to order
-        showNotification('Success', 'Driver assigned successfully!', 'success');
-        document.querySelector('.modal').remove();
-        loadOrders();
+        const response = await authenticatedFetch(`${API_BASE}/api/orders/${orderId}/assign-driver`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showNotification('Success', data.message || 'Order sent to DoorDash. Driver will be automatically assigned.', 'success');
+            const modal = document.querySelector('.modal');
+            if (modal) modal.remove();
+            loadOrders();
+        } else {
+            showError(data.error || 'Failed to assign driver');
+        }
     } catch (error) {
         console.error('Error assigning driver:', error);
         showError('Error assigning driver: ' + error.message);

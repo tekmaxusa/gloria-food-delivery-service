@@ -839,58 +839,70 @@ body {
 .auth-container {
     min-height: 100vh;
     display: flex;
+    flex-direction: column;
+    background: #ffffff;
+    padding: 0;
+}
+
+/* Top Header Bar */
+.auth-top-header {
+    background: #2d3748;
+    padding: 16px 32px;
+    display: flex;
+    align-items: center;
+}
+
+.auth-top-logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.auth-top-logo-img {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+}
+
+.auth-top-logo-text {
+    color: #22c55e;
+    font-size: 18px;
+    font-weight: 600;
+    text-transform: lowercase;
+}
+
+/* Split Layout Container */
+.auth-split-container {
+    display: flex;
+    flex: 1;
+    min-height: calc(100vh - 64px);
+}
+
+/* Left Side - Form */
+.auth-left-side {
+    flex: 1;
+    display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    padding: 20px;
-}
-
-.auth-box {
-    background: white;
-    border-radius: 16px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-    width: 100%;
-    max-width: 420px;
-    padding: 40px;
-}
-
-.auth-header {
-    text-align: center;
-    margin-bottom: 32px;
-}
-
-.auth-logo {
-    width: 80px;
-    height: 80px;
-    margin-bottom: 16px;
-    border-radius: 12px;
-}
-
-.auth-header h1 {
-    font-size: 32px;
-    font-weight: 700;
-    color: #0f172a;
-    margin-bottom: 8px;
-}
-
-.auth-header p {
-    color: #64748b;
-    font-size: 14px;
+    background: #ffffff;
+    padding: 60px 80px;
 }
 
 .auth-form {
     display: none;
+    width: 100%;
+    max-width: 400px;
 }
 
 .auth-form.active {
     display: block;
 }
 
-.auth-form h2 {
-    font-size: 24px;
-    font-weight: 600;
+.auth-title {
+    font-size: 32px;
+    font-weight: 700;
     color: #0f172a;
-    margin-bottom: 24px;
+    margin-bottom: 40px;
     text-align: center;
 }
 
@@ -898,28 +910,25 @@ body {
     margin-bottom: 20px;
 }
 
-.auth-form .form-group label {
-    display: block;
-    margin-bottom: 8px;
-    font-weight: 500;
-    color: #475569;
-    font-size: 14px;
-}
-
 .auth-form .form-group input {
     width: 100%;
-    padding: 12px 16px;
+    padding: 14px 16px;
     border: 1px solid #e2e8f0;
     border-radius: 8px;
-    font-size: 14px;
+    font-size: 15px;
     transition: all 0.2s ease;
     font-family: inherit;
+    background: #ffffff;
+}
+
+.auth-form .form-group input::placeholder {
+    color: #94a3b8;
 }
 
 .auth-form .form-group input:focus {
     outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    border-color: #22c55e;
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
 }
 
 .password-input-wrapper {
@@ -963,9 +972,26 @@ body {
     stroke-width: 2;
 }
 
-.btn-full {
+.btn-continue {
     width: 100%;
     margin-top: 8px;
+    background: #166534;
+    color: white;
+    border: none;
+    padding: 14px 24px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.btn-continue:hover {
+    background: #15803d;
+}
+
+.btn-continue:active {
+    background: #14532d;
 }
 
 .auth-switch {
@@ -976,13 +1002,82 @@ body {
 }
 
 .auth-switch a {
-    color: #3b82f6;
-    text-decoration: none;
+    color: #166534;
+    text-decoration: underline;
     font-weight: 500;
 }
 
 .auth-switch a:hover {
-    text-decoration: underline;
+    color: #15803d;
+}
+
+/* Right Side - Marketing/Testimonial */
+.auth-right-side {
+    flex: 1;
+    background: #dcfce7;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 80px;
+}
+
+.auth-right-content {
+    width: 100%;
+    max-width: 500px;
+    text-align: center;
+}
+
+.auth-illustration {
+    margin-bottom: 60px;
+}
+
+.auth-right-logo {
+    width: 200px;
+    height: 200px;
+    object-fit: contain;
+    margin: 0 auto;
+}
+
+.auth-testimonial {
+    margin-bottom: 40px;
+}
+
+.testimonial-text {
+    font-size: 28px;
+    font-weight: 400;
+    color: #1e293b;
+    line-height: 1.4;
+    margin-bottom: 16px;
+}
+
+.testimonial-text strong {
+    font-weight: 700;
+}
+
+.testimonial-author {
+    font-size: 16px;
+    color: #475569;
+    font-weight: 500;
+}
+
+.auth-carousel-indicators {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 40px;
+}
+
+.carousel-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #cbd5e1;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.carousel-dot.active {
+    background: #1e293b;
 }
 
 .dashboard-container {
