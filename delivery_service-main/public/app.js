@@ -3219,7 +3219,7 @@ async function loadSettingsContent(itemId) {
         } else if (itemId === 'location') {
             content = await getLocationContent();
         } else {
-            content = getSettingsContent(itemId);
+            content = await getSettingsContent(itemId);
         }
         contentArea.innerHTML = content;
     } catch (error) {
