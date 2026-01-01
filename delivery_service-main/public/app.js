@@ -3267,8 +3267,27 @@ async function getBusinessSettingsContent() {
         const data = await response.json();
         if (data.success && data.merchants && data.merchants.length > 0) {
             merchant = data.merchants.find(m => m.is_active) || data.merchants[0];
-            merchantPhone = merchant.phone || '';
-            merchantAddress = merchant.address || '';
+            
+            // Try to get phone and address from recent orders
+            try {
+                const ordersResponse = await authenticatedFetch(`${API_BASE}/orders?limit=1`);
+                const ordersData = await ordersResponse.json();
+                if (ordersData.success && ordersData.orders && ordersData.orders.length > 0) {
+                    const order = ordersData.orders[0];
+                    // Try to extract phone and address from order data
+                    let rawData = {};
+                    try {
+                        if (order.raw_data) {
+                            rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+                        }
+                    } catch (e) {}
+                    
+                    merchantPhone = rawData.phone || rawData.merchant_phone || rawData.store_phone || order.phone || '';
+                    merchantAddress = rawData.address || rawData.store_address || rawData.restaurant_address || order.store_address || order.delivery_address || '';
+                }
+            } catch (e) {
+                console.error('Error fetching order data:', e);
+            }
         }
     } catch (error) {
         console.error('Error fetching merchant:', error);
