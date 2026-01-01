@@ -3873,7 +3873,7 @@ function createOrderRow(order) {
         try {
             const date = new Date(deliveryTime);
             if (!isNaN(date.getTime())) {
-                formattedDeliveryTime = formatDate(deliveryTime);
+                formattedDeliveryTime = formatDateShipday(deliveryTime);
             } else {
                 // If can't parse as date, show as string (might be time-only format)
                 formattedDeliveryTime = String(deliveryTime);
@@ -4110,6 +4110,57 @@ function formatDate(dateStr) {
     } catch (e) {
         // If formatting fails, return the string as-is
         return String(dateStr);
+    }
+}
+
+// Format date similar to Shipday: "Jan 01, 2026 3:30 p.m."
+function formatDateShipday(dateStr) {
+    if (!dateStr) return 'N/A';
+    try {
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) {
+            return String(dateStr);
+        }
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const month = months[date.getMonth()];
+        const day = String(date.getDate()).padStart(2, '0');
+        const year = date.getFullYear();
+        let hours = date.getHours();
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const ampm = hours >= 12 ? 'p.m.' : 'a.m.';
+        hours = hours % 12;
+        hours = hours ? hours : 12; // 0 should be 12
+        return `${month} ${day}, ${year} ${hours}:${minutes} ${ampm}`;
+    } catch (e) {
+        return String(dateStr);
+    }
+}
+
+// Calculate elapsed time in human-readable format (e.g., "3 mins.", "1 hour", "2 days")
+function calculateElapsedTime(dateStr) {
+    if (!dateStr) return 'N/A';
+    try {
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) {
+            return 'N/A';
+        }
+        const now = new Date();
+        const diffMs = now.getTime() - date.getTime();
+        const diffMins = Math.floor(diffMs / (1000 * 60));
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        
+        if (diffMins < 1) {
+            return 'Just now';
+        } else if (diffMins < 60) {
+            return `${diffMins} ${diffMins === 1 ? 'min.' : 'mins.'}`;
+        } else if (diffHours < 24) {
+            return `${diffHours} ${diffHours === 1 ? 'hour' : 'hours'}`;
+        } else {
+            return `${diffDays} ${diffDays === 1 ? 'day' : 'days'}`;
+        }
+    } catch (e) {
+        return 'N/A';
     }
 }
 
