@@ -124,17 +124,29 @@ function showLogin() {
 
 // Show dashboard
 function showDashboard() {
+    console.log('showDashboard() called');
     const authContainer = document.getElementById('authContainer');
     const dashboardContainer = document.getElementById('dashboardContainer');
     
-    if (authContainer) authContainer.classList.add('hidden');
-    if (dashboardContainer) dashboardContainer.classList.remove('hidden');
+    console.log('Auth container:', !!authContainer);
+    console.log('Dashboard container:', !!dashboardContainer);
+    
+    if (authContainer) {
+        authContainer.classList.add('hidden');
+        console.log('Auth container hidden');
+    }
+    if (dashboardContainer) {
+        dashboardContainer.classList.remove('hidden');
+        console.log('Dashboard container shown');
+    }
     
     // Show dashboard page by default
     showDashboardPage();
     
     // Start auto-refresh only when authenticated
     startAutoRefresh();
+    
+    console.log('Dashboard setup complete');
 }
 
 // Setup dashboard UI elements
@@ -189,6 +201,20 @@ function setupDashboardUI() {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM Content Loaded - Initializing app...');
+    
+    // Ensure login form is active on page load
+    const loginForm = document.getElementById('loginForm');
+    const signupForm = document.getElementById('signupForm');
+    if (loginForm) {
+        loginForm.classList.add('active');
+        console.log('Login form set to active');
+    }
+    if (signupForm) {
+        signupForm.classList.remove('active');
+        console.log('Signup form set to inactive');
+    }
+    
     // Setup authentication handlers first
     setupAuth();
     
@@ -268,9 +294,12 @@ function setupAuth() {
         
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+            console.log('Login form submitted');
             const email = document.getElementById('loginEmail')?.value;
             const password = document.getElementById('loginPassword')?.value;
             const errorDiv = document.getElementById('loginError');
+            
+            console.log('Login attempt with email:', email ? email.substring(0, 3) + '***' : 'empty');
             
             // Hide previous errors
             if (errorDiv) {
@@ -423,10 +452,13 @@ function setupAuth() {
         
         signupForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+            console.log('Signup form submitted');
             const name = document.getElementById('signupName')?.value;
             const email = document.getElementById('signupEmail')?.value;
             const password = document.getElementById('signupPassword')?.value;
             const errorDiv = document.getElementById('signupError');
+            
+            console.log('Signup attempt with email:', email ? email.substring(0, 3) + '***' : 'empty');
             
             // Hide previous errors
             if (errorDiv) {
@@ -535,11 +567,17 @@ function setupAuth() {
                 }
                 
                 if (data.success && data.user) {
+                    console.log('Signup successful, redirecting to dashboard...');
                     currentUser = data.user;
                     sessionId = data.sessionId;
                     saveSessionId(data.sessionId);
                     showNotification('Success', 'Account created successfully!');
-                    showDashboard();
+                    
+                    // Small delay to show notification, then redirect
+                    setTimeout(() => {
+                        showDashboard();
+                        console.log('Dashboard shown');
+                    }, 100);
                 } else {
                     const errorMsg = data.error || 'Failed to create account';
                     if (errorDiv) {
@@ -584,8 +622,24 @@ function setupAuth() {
         showSignupLink.addEventListener('click', (e) => {
             e.preventDefault();
             console.log('Switching to signup form...');
-            document.getElementById('loginForm')?.classList.remove('active');
-            document.getElementById('signupForm')?.classList.add('active');
+            const loginForm = document.getElementById('loginForm');
+            const signupForm = document.getElementById('signupForm');
+            
+            if (loginForm) {
+                loginForm.classList.remove('active');
+                console.log('Login form hidden');
+            }
+            if (signupForm) {
+                signupForm.classList.add('active');
+                console.log('Signup form shown');
+            }
+            
+            // Clear any error messages
+            const loginError = document.getElementById('loginError');
+            if (loginError) {
+                loginError.style.display = 'none';
+                loginError.textContent = '';
+            }
         });
     }
     
@@ -596,8 +650,24 @@ function setupAuth() {
         showLoginLink.addEventListener('click', (e) => {
             e.preventDefault();
             console.log('Switching to login form...');
-            document.getElementById('signupForm')?.classList.remove('active');
-            document.getElementById('loginForm')?.classList.add('active');
+            const loginForm = document.getElementById('loginForm');
+            const signupForm = document.getElementById('signupForm');
+            
+            if (signupForm) {
+                signupForm.classList.remove('active');
+                console.log('Signup form hidden');
+            }
+            if (loginForm) {
+                loginForm.classList.add('active');
+                console.log('Login form shown');
+            }
+            
+            // Clear any error messages
+            const signupError = document.getElementById('signupError');
+            if (signupError) {
+                signupError.style.display = 'none';
+                signupError.textContent = '';
+            }
         });
     }
     
