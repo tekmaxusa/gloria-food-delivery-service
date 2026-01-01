@@ -2849,13 +2849,54 @@ function hasScheduledDeliveryTime(order) {
         // Ignore parsing errors
     }
     
+    // Debug: Log order data to help diagnose scheduled detection (only first time)
+    const orderId = order.gloriafood_order_id || order.id;
+    if (orderId && Object.keys(rawData).length > 0) {
+        if (!window._scheduledCheckLogged) {
+            window._scheduledCheckLogged = new Set();
+        }
+        if (!window._scheduledCheckLogged.has(orderId)) {
+            console.log(`[DEBUG] Checking scheduled for order ${orderId}:`, {
+                delivery_type: rawData.delivery_type,
+                delivery_option: rawData.delivery_option,
+                available_time: rawData.available_time,
+                delivery_time: rawData.delivery_time,
+                requested_delivery_time: rawData.requested_delivery_time,
+                scheduled_delivery_time: rawData.scheduled_delivery_time,
+                delivery_date: rawData.delivery_date,
+                delivery_time_only: rawData.delivery_time_only,
+                asap: rawData.asap,
+                all_keys: Object.keys(rawData).slice(0, 20) // First 20 keys
+            });
+            window._scheduledCheckLogged.add(orderId);
+        }
+    }
+    
     // Check if "Later" option is selected (GloriaFood sends delivery_type or delivery_option)
-    const deliveryType = (rawData.delivery_type || rawData.deliveryOption || rawData.delivery_option || rawData.deliveryType || '').toLowerCase();
-    const deliveryOption = (rawData.delivery_option || rawData.deliveryOption || rawData.available_time || rawData.availableTime || '').toLowerCase();
+    // Also check for "asap" vs "later" indicators
+    const deliveryType = (rawData.delivery_type || rawData.deliveryOption || rawData.delivery_option || rawData.deliveryType || rawData.delivery_time_type || '').toLowerCase();
+    const deliveryOption = (rawData.delivery_option || rawData.deliveryOption || rawData.available_time || rawData.availableTime || rawData.time_option || '').toLowerCase();
+    const asapOption = (rawData.asap || rawData.as_soon_as_possible || rawData.asSoonAsPossible || '').toLowerCase();
     
     // If delivery type/option indicates "later" or "scheduled", it's scheduled
     if (deliveryType === 'later' || deliveryType === 'scheduled' || deliveryOption === 'later' || deliveryOption === 'scheduled') {
         return true;
+    }
+    
+    // If NOT "asap" and has delivery time, it's likely scheduled
+    if (asapOption !== 'true' && asapOption !== '1' && asapOption !== 'yes' && (rawData.delivery_time || rawData.requested_delivery_time || rawData.scheduled_delivery_time)) {
+        // Check if the delivery time is in the future
+        const checkTime = rawData.delivery_time || rawData.requested_delivery_time || rawData.scheduled_delivery_time;
+        if (checkTime) {
+            try {
+                const checkDate = new Date(checkTime);
+                if (checkDate > new Date()) {
+                    return true;
+                }
+            } catch (e) {
+                // Ignore
+            }
+        }
     }
     
     // Check for scheduled delivery time in various possible fields
@@ -2933,10 +2974,20 @@ function hasScheduledDeliveryTime(order) {
             // If scheduled time is in the future (even 1 minute), it's scheduled
             // This will catch orders scheduled for tomorrow, specific times, etc.
             if (scheduledDate > now) {
+                console.log(`[DEBUG] Order ${orderId || 'unknown'} is scheduled - scheduledTime found: ${scheduledTime}, date: ${scheduledDate}`);
+                return true;
+            }
+            // Also check if it's today but more than 1 hour in the future
+            const hoursDiff = (scheduledDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+            if (hoursDiff > 1) {
+                console.log(`[DEBUG] Order ${orderId || 'unknown'} is scheduled - more than 1 hour in future`);
                 return true;
             }
         } catch (e) {
-            // Ignore parsing errors, continue to check delivery time
+            // If can't parse, but we have a scheduledTime value, still consider it scheduled
+            // (might be a different format)
+            console.log(`[DEBUG] Order ${orderId || 'unknown'} has scheduledTime but can't parse: ${scheduledTime}`);
+            // Don't return true here - let it check delivery time instead
         }
     }
     
@@ -2985,6 +3036,8 @@ function hasScheduledDeliveryTime(order) {
             // If delivery time is in the future, it's scheduled
             // Be more lenient - any future time means scheduled (for tomorrow, specific times, etc.)
             if (deliveryDate > now) {
+                console.log(`[DEBUG] Order ${orderId || 'unknown'} delivery time is in future: ${deliveryTime} -> ${deliveryDate}`);
+                
                 // Check if it's significantly different from order creation time
                 // to distinguish scheduled orders from "as soon as possible"
                 const orderCreatedAt = order.created_at || order.fetched_at || order.updated_at;
@@ -2994,24 +3047,47 @@ function hasScheduledDeliveryTime(order) {
                         const timeDiff = deliveryDate.getTime() - orderDate.getTime();
                         const minutesDiff = timeDiff / (1000 * 60);
                         
-                        // If delivery time is more than 5 minutes from order creation, it's scheduled
-                        // This catches orders scheduled for tomorrow or specific times
+                        console.log(`[DEBUG] Order ${orderId || 'unknown'} time diff: ${minutesDiff} minutes from order creation`);
+                        
+                        // If delivery time is more than 1 minute from order creation, it's scheduled
                         // Very lenient threshold to catch all "Later" orders
-                        if (minutesDiff > 5) {
+                        if (minutesDiff > 1) {
+                            console.log(`[DEBUG] Order ${orderId || 'unknown'} is SCHEDULED (${minutesDiff} min difference)`);
                             return true;
+                        }
+                        // Also check if it's a different day (tomorrow or later)
+                        const deliveryDay = deliveryDate.toDateString();
+                        const orderDay = orderDate.toDateString();
+                        if (deliveryDay !== orderDay) {
+                            console.log(`[DEBUG] Order ${orderId || 'unknown'} is SCHEDULED (different day)`);
+                            return true; // Different day = scheduled
                         }
                     } catch (e) {
                         // If can't compare, still consider it scheduled if in future
+                        console.log(`[DEBUG] Order ${orderId || 'unknown'} is SCHEDULED (can't compare, but in future)`);
                         return true;
                     }
                 } else {
                     // No order creation time, but delivery is in future = scheduled
+                    console.log(`[DEBUG] Order ${orderId || 'unknown'} is SCHEDULED (no order date, but delivery in future)`);
                     return true;
                 }
+            } else {
+                console.log(`[DEBUG] Order ${orderId || 'unknown'} delivery time is NOT in future: ${deliveryTime} -> ${deliveryDate}, now: ${now}`);
             }
         } catch (e) {
             // Ignore parsing errors
         }
+    }
+    
+    // Debug: Log if order is NOT scheduled (only log once per order to avoid spam)
+    const orderId = order.gloriafood_order_id || order.id;
+    if (orderId && !window._scheduledDebugLogged) {
+        window._scheduledDebugLogged = new Set();
+    }
+    if (orderId && window._scheduledDebugLogged && !window._scheduledDebugLogged.has(orderId)) {
+        console.log(`[DEBUG] Order ${orderId} is NOT scheduled - checking raw_data keys:`, Object.keys(rawData || {}));
+        window._scheduledDebugLogged.add(orderId);
     }
     
     return false;
@@ -3022,7 +3098,16 @@ function getOrderCategory(order) {
     const status = (order.status || '').toUpperCase();
     const isCompleted = ['DELIVERED', 'COMPLETED', 'FULFILLED'].includes(status);
     const isIncomplete = ['CANCELLED', 'FAILED', 'REJECTED', 'CANCELED'].includes(status);
-    const isScheduled = hasScheduledDeliveryTime(order) && !isCompleted && !isIncomplete;
+    
+    // Check if scheduled BEFORE checking completed/incomplete
+    // This ensures scheduled orders are categorized correctly even if status changes
+    const isScheduled = hasScheduledDeliveryTime(order);
+    
+    // Debug logging
+    const orderId = order.gloriafood_order_id || order.id;
+    if (isScheduled && orderId) {
+        console.log(`[DEBUG] Order ${orderId} categorized as SCHEDULED`);
+    }
     
     if (isCompleted) return 'completed';
     if (isIncomplete) return 'incomplete';
@@ -3211,14 +3296,20 @@ function createOrderRow(order) {
                     null;
     
     // If no distance found, try to calculate from coordinates if available
-    if (!distance && rawData.latitude && rawData.longitude && restaurantObj.latitude && restaurantObj.longitude) {
+    // Check multiple possible locations for coordinates
+    const customerLat = rawData.latitude || rawData.lat || (rawData.delivery && rawData.delivery.latitude) || (rawData.delivery && rawData.delivery.lat) || (rawData.customer && rawData.customer.latitude) || (rawData.customer && rawData.customer.lat);
+    const customerLon = rawData.longitude || rawData.lng || rawData.lon || (rawData.delivery && rawData.delivery.longitude) || (rawData.delivery && rawData.delivery.lng) || (rawData.delivery && rawData.delivery.lon) || (rawData.customer && rawData.customer.longitude) || (rawData.customer && rawData.customer.lng);
+    const restaurantLat = restaurantObj.latitude || restaurantObj.lat || rawData.restaurant_latitude || rawData.restaurantLat;
+    const restaurantLon = restaurantObj.longitude || restaurantObj.lng || restaurantObj.lon || rawData.restaurant_longitude || rawData.restaurantLng;
+    
+    if (!distance && customerLat && customerLon && restaurantLat && restaurantLon) {
         try {
             // Haversine formula to calculate distance
             const R = 6371; // Earth's radius in km
-            const dLat = (rawData.latitude - restaurantObj.latitude) * Math.PI / 180;
-            const dLon = (rawData.longitude - restaurantObj.longitude) * Math.PI / 180;
+            const dLat = (parseFloat(customerLat) - parseFloat(restaurantLat)) * Math.PI / 180;
+            const dLon = (parseFloat(customerLon) - parseFloat(restaurantLon)) * Math.PI / 180;
             const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                      Math.cos(restaurantObj.latitude * Math.PI / 180) * Math.cos(rawData.latitude * Math.PI / 180) *
+                      Math.cos(parseFloat(restaurantLat) * Math.PI / 180) * Math.cos(parseFloat(customerLat) * Math.PI / 180) *
                       Math.sin(dLon/2) * Math.sin(dLon/2);
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
             distance = R * c;
@@ -3293,14 +3384,27 @@ function createOrderRow(order) {
     
     // If date and time are separate for pickup, combine them
     if (!pickupTime) {
-        const pickupDate = rawData.pickup_date || rawData.pickupDate || deliveryObj.pickup_date || scheduleObj.pickup_date;
-        const pickupTimeOnly = rawData.pickup_time_only || rawData.pickupTimeOnly || deliveryObj.pickup_time_only || scheduleObj.pickup_time_only;
+        const pickupDate = rawData.pickup_date || rawData.pickupDate || deliveryObj.pickup_date || scheduleObj.pickup_date || rawData.requested_pickup_date;
+        const pickupTimeOnly = rawData.pickup_time_only || rawData.pickupTimeOnly || deliveryObj.pickup_time_only || scheduleObj.pickup_time_only || rawData.requested_pickup_time_only;
         
         if (pickupDate && pickupTimeOnly) {
             pickupTime = `${pickupDate} ${pickupTimeOnly}`;
         } else if (pickupDate) {
             pickupTime = pickupDate;
+        } else if (pickupTimeOnly) {
+            // If only time, use today's date
+            const today = new Date().toISOString().split('T')[0];
+            pickupTime = `${today} ${pickupTimeOnly}`;
         }
+    }
+    
+    // Also check if pickup time is in raw_data at root level with different names
+    if (!pickupTime) {
+        pickupTime = rawData.pickup || rawData.pickup_datetime || rawData.pickupDateTime || 
+                     rawData.collection_time || rawData.collectionTime ||
+                     (rawData.times && rawData.times.pickup) ||
+                     (rawData.time && rawData.time.pickup) ||
+                     null;
     }
     
     // Get delivery time from various possible fields (comprehensive search)
@@ -3347,15 +3451,29 @@ function createOrderRow(order) {
     
     // If date and time are separate, combine them (for "Later" option)
     if (!deliveryTime) {
-        const deliveryDate = rawData.delivery_date || rawData.deliveryDate || deliveryObj.delivery_date || scheduleObj.delivery_date || rawData.scheduled_date || scheduleObj.scheduled_date;
-        const deliveryTimeOnly = rawData.delivery_time_only || rawData.deliveryTimeOnly || deliveryObj.delivery_time_only || scheduleObj.delivery_time_only || rawData.scheduled_time || scheduleObj.scheduled_time;
+        const deliveryDate = rawData.delivery_date || rawData.deliveryDate || deliveryObj.delivery_date || scheduleObj.delivery_date || rawData.scheduled_date || scheduleObj.scheduled_date || rawData.requested_delivery_date;
+        const deliveryTimeOnly = rawData.delivery_time_only || rawData.deliveryTimeOnly || deliveryObj.delivery_time_only || scheduleObj.delivery_time_only || rawData.scheduled_time || scheduleObj.scheduled_time || rawData.requested_delivery_time_only;
         
         if (deliveryDate && deliveryTimeOnly) {
             deliveryTime = `${deliveryDate} ${deliveryTimeOnly}`;
         } else if (deliveryDate) {
             // If only date, use date with default time
             deliveryTime = deliveryDate;
+        } else if (deliveryTimeOnly) {
+            // If only time, use today's date
+            const today = new Date().toISOString().split('T')[0];
+            deliveryTime = `${today} ${deliveryTimeOnly}`;
         }
+    }
+    
+    // Also check if delivery time is in raw_data at root level with different names
+    if (!deliveryTime) {
+        deliveryTime = rawData.delivery || rawData.delivery_datetime || rawData.deliveryDateTime ||
+                       rawData.requested_time || rawData.requestedTime ||
+                       rawData.preferred_time || rawData.preferredTime ||
+                       (rawData.times && rawData.times.delivery) ||
+                       (rawData.time && rawData.time.delivery) ||
+                       null;
     }
     
     // Get ready for pickup time (comprehensive search)
@@ -3421,12 +3539,19 @@ function createOrderRow(order) {
                   (rawData.courier && rawData.courier.full_name) ||
                   null;
     
-    // Format times - try to format, if invalid date, show raw value
+    // Format times - try to format, if invalid date, show raw value or formatted string
     let formattedPickupTime = 'N/A';
     if (pickupTime) {
         try {
-            formattedPickupTime = formatDate(pickupTime);
+            const date = new Date(pickupTime);
+            if (!isNaN(date.getTime())) {
+                formattedPickupTime = formatDate(pickupTime);
+            } else {
+                // If can't parse as date, show as string (might be time-only format)
+                formattedPickupTime = String(pickupTime);
+            }
         } catch (e) {
+            // Show raw value if formatting fails
             formattedPickupTime = String(pickupTime);
         }
     }
@@ -3434,33 +3559,64 @@ function createOrderRow(order) {
     let formattedDeliveryTime = 'N/A';
     if (deliveryTime) {
         try {
-            formattedDeliveryTime = formatDate(deliveryTime);
+            const date = new Date(deliveryTime);
+            if (!isNaN(date.getTime())) {
+                formattedDeliveryTime = formatDate(deliveryTime);
+            } else {
+                // If can't parse as date, show as string (might be time-only format)
+                formattedDeliveryTime = String(deliveryTime);
+            }
         } catch (e) {
+            // Show raw value if formatting fails
             formattedDeliveryTime = String(deliveryTime);
         }
     }
     
-    // Ready for pickup - show as switch/toggle based on status or time
-    let isReadyForPickup = false;
-    const statusLower = (order.status || '').toLowerCase();
-    if (readyForPickup) {
-        try {
-            const readyDate = new Date(readyForPickup);
-            const now = new Date();
-            isReadyForPickup = readyDate <= now; // Ready if time has passed
-        } catch (e) {
-            // If can't parse date, check if it's a boolean or status
-            isReadyForPickup = readyForPickup === true || readyForPickup === 'true' || readyForPickup === 'ready';
+    // Debug: Log if we found times
+    if (orderId && (pickupTime || deliveryTime)) {
+        if (!window._timeDebugLogged) {
+            window._timeDebugLogged = new Set();
+        }
+        if (!window._timeDebugLogged.has(orderId)) {
+            console.log(`[DEBUG] Order ${orderId} times:`, {
+                pickupTime: pickupTime,
+                deliveryTime: deliveryTime,
+                formattedPickup: formattedPickupTime,
+                formattedDelivery: formattedDeliveryTime
+            });
+            window._timeDebugLogged.add(orderId);
         }
     }
-    // Also check status - orders with "ready", "prepared", "out_for_delivery" are ready
-    if (!isReadyForPickup && (statusLower.includes('ready') || statusLower.includes('prepared') || statusLower.includes('out_for_delivery'))) {
-        isReadyForPickup = true;
+    
+    // Ready for pickup - show as switch/toggle based on status or time
+    // First check localStorage for user-set status
+    const readyStatusKey = `order_ready_${orderId}`;
+    let isReadyForPickup = localStorage.getItem(readyStatusKey) === 'true';
+    
+    // If not set in localStorage, determine from order data
+    if (localStorage.getItem(readyStatusKey) === null) {
+        const statusLower = (order.status || '').toLowerCase();
+        if (readyForPickup) {
+            try {
+                const readyDate = new Date(readyForPickup);
+                const now = new Date();
+                isReadyForPickup = readyDate <= now; // Ready if time has passed
+            } catch (e) {
+                // If can't parse date, check if it's a boolean or status
+                isReadyForPickup = readyForPickup === true || readyForPickup === 'true' || readyForPickup === 'ready';
+            }
+        }
+        // Also check status - orders with "ready", "prepared", "out_for_delivery" are ready
+        if (!isReadyForPickup && (statusLower.includes('ready') || statusLower.includes('prepared') || statusLower.includes('out_for_delivery'))) {
+            isReadyForPickup = true;
+        }
     }
     
+    // Make switch clickable - use order ID for identification
+    const switchId = `ready-switch-${orderId}`;
     const formattedReadyForPickup = isReadyForPickup 
-        ? `<label class="switch"><input type="checkbox" checked disabled><span class="slider"></span></label>`
-        : `<label class="switch"><input type="checkbox" disabled><span class="slider"></span></label>`;
+        ? `<label class="switch"><input type="checkbox" id="${switchId}" checked data-order-id="${escapeHtml(String(orderId))}" onchange="toggleReadyForPickup('${escapeHtml(String(orderId))}', this.checked)"><span class="slider"></span></label>`
+        : `<label class="switch"><input type="checkbox" id="${switchId}" data-order-id="${escapeHtml(String(orderId))}" onchange="toggleReadyForPickup('${escapeHtml(String(orderId))}', this.checked)"><span class="slider"></span></label>`;
     
     const formattedDriver = driver ? escapeHtml(String(driver)) : 'N/A';
     
@@ -3603,15 +3759,21 @@ function formatDate(dateStr) {
     
     try {
         const date = new Date(dateStr);
+        if (isNaN(date.getTime())) {
+            // Invalid date, return as string
+            return String(dateStr);
+        }
         return new Intl.DateTimeFormat('en-US', {
             year: 'numeric',
             month: 'short',
             day: 'numeric',
             hour: '2-digit',
-            minute: '2-digit'
+            minute: '2-digit',
+            hour12: true
         }).format(date);
     } catch (e) {
-        return dateStr;
+        // If formatting fails, return the string as-is
+        return String(dateStr);
     }
 }
 
@@ -3642,6 +3804,50 @@ async function deleteOrder(orderId) {
 }
 // Make deleteOrder available globally
 window.deleteOrder = deleteOrder;
+
+// Toggle ready for pickup status
+async function toggleReadyForPickup(orderId, isReady) {
+    try {
+        // Store in localStorage for persistence
+        const readyStatusKey = `order_ready_${orderId}`;
+        localStorage.setItem(readyStatusKey, isReady ? 'true' : 'false');
+        
+        // Update the order in the current display
+        const orderRow = document.querySelector(`tr[data-order-id="${orderId}"]`);
+        if (orderRow) {
+            // Visual feedback
+            showNotification('Success', `Order #${orderId} marked as ${isReady ? 'ready' : 'not ready'} for pickup`);
+        }
+        
+        // Try to update via API if endpoint exists
+        try {
+            const response = await authenticatedFetch(`${API_BASE}/orders/${orderId}`, {
+                method: 'PUT',
+                body: JSON.stringify({ ready_for_pickup: isReady })
+            });
+            
+            const data = await response.json();
+            if (data.success) {
+                // Success - reload orders
+                loadOrders();
+            }
+        } catch (apiError) {
+            // API update failed, but local state is updated
+            console.log('API update not available, using local state only');
+        }
+    } catch (error) {
+        console.error('Error toggling ready for pickup:', error);
+        showError('Error updating ready status: ' + error.message);
+        // Revert checkbox state
+        const checkbox = document.getElementById(`ready-switch-${orderId}`);
+        if (checkbox) {
+            checkbox.checked = !isReady;
+        }
+    }
+}
+
+// Make toggleReadyForPickup available globally
+window.toggleReadyForPickup = toggleReadyForPickup;
 
 // Delete selected orders
 async function deleteSelectedOrders() {
