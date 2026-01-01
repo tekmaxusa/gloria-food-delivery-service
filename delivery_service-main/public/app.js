@@ -3620,16 +3620,28 @@ function createOrderRow(order) {
     let formattedDistance = 'N/A';
     if (distance) {
         if (typeof distance === 'number') {
-            formattedDistance = distance.toFixed(2) + ' km';
+            // Convert km to miles if needed (assuming distance is in km)
+            const miles = distance * 0.621371;
+            formattedDistance = miles.toFixed(2) + ' miles';
         } else if (typeof distance === 'string') {
             // Check if already has unit
-            if (distance.includes('km') || distance.includes('miles') || distance.includes('mi')) {
+            if (distance.includes('miles') || distance.includes('mi')) {
                 formattedDistance = distance;
-            } else {
-                // Try to parse as number
+            } else if (distance.includes('km')) {
+                // Convert km to miles
                 const num = parseFloat(distance);
                 if (!isNaN(num)) {
-                    formattedDistance = num.toFixed(2) + ' km';
+                    const miles = num * 0.621371;
+                    formattedDistance = miles.toFixed(2) + ' miles';
+                } else {
+                    formattedDistance = distance;
+                }
+            } else {
+                // Try to parse as number (assume km, convert to miles)
+                const num = parseFloat(distance);
+                if (!isNaN(num)) {
+                    const miles = num * 0.621371;
+                    formattedDistance = miles.toFixed(2) + ' miles';
                 } else {
                     formattedDistance = distance;
                 }
