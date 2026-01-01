@@ -41,6 +41,8 @@ export interface IDatabase {
   // Drivers methods
   getAllDrivers(): Promise<any[]> | any[];
   getDriverById(id: number): Promise<any | null> | any | null;
+  createDriver(driverData: { name: string; phone?: string; email?: string; vehicle_type?: string; vehicle_plate?: string }): Promise<any | null> | any | null;
+  deleteDriver(id: number): Promise<boolean> | boolean;
   // Reviews methods
   getAllReviews(): Promise<any[]> | any[];
   getReviewsByOrderId(orderId: number): Promise<any[]> | any[];

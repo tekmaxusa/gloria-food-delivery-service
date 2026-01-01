@@ -810,14 +810,14 @@ function showDriversPage() {
                         <th style="width: 8%;"></th>
                         </tr>
                     </thead>
-                    <tbody>
-                    <tr>
-                        <td colspan="7" class="empty-state-cell">
-                            <div class="empty-state">
-                                <div class="empty-state-text">No drivers found</div>
-                </div>
-            </td>
-        </tr>
+                    <tbody id="driversTableBody">
+                        <tr>
+                            <td colspan="7" class="empty-state-cell">
+                                <div class="empty-state">
+                                    <div class="empty-state-text">Loading drivers...</div>
+                                </div>
+                            </td>
+                        </tr>
                     </tbody>
                 </table>
         </div>
@@ -3212,13 +3212,13 @@ function filterAndDisplayOrders() {
             });
         }
     } else if (currentStatusFilter === 'current') {
-        // Current = all active orders (not delivered, completed, or cancelled) AND not scheduled
+        // Current = all active orders (not delivered, completed, or cancelled)
+        // INCLUDING scheduled orders (scheduled orders appear in both Current and Scheduled)
         filtered = filtered.filter(order => {
             const status = (order.status || '').toUpperCase();
             const isActive = status && !['DELIVERED', 'COMPLETED', 'CANCELLED', 'CANCELED', 'FAILED', 'REJECTED'].includes(status);
-            const isScheduled = hasScheduledDeliveryTime(order);
-            // Current = active orders that are NOT scheduled
-            return isActive && !isScheduled;
+            // Current = all active orders (including scheduled ones)
+            return isActive;
         });
     }
     

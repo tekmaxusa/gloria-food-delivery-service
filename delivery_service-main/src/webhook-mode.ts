@@ -1437,18 +1437,47 @@ class GloriaFoodWebhookServer {
     this.app.post('/api/drivers', async (req: Request, res: Response) => {
       try {
         const { name, phone, email, vehicle_type, vehicle_plate } = req.body;
-        const db = this.database as any;
-        if (db.query) {
-          const [result]: any = await db.query(
-            'INSERT INTO drivers (name, phone, email, vehicle_type, vehicle_plate, status) VALUES (?, ?, ?, ?, ?, ?)',
-            [name, phone, email, vehicle_type, vehicle_plate, 'active']
-          );
-          res.json({ success: true, driver: { id: result.insertId, ...req.body } });
+        
+        if (!name) {
+          return res.status(400).json({ success: false, error: 'Driver name is required' });
+        }
+        
+        const driver = await this.handleAsync(this.database.createDriver({
+          name,
+          phone,
+          email,
+          vehicle_type,
+          vehicle_plate
+        }));
+        
+        if (driver) {
+          res.json({ success: true, driver });
         } else {
-          res.status(500).json({ success: false, error: 'Not supported with SQLite' });
+          res.status(500).json({ success: false, error: 'Failed to create driver' });
         }
       } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+        console.error('Error creating driver:', error);
+        res.status(500).json({ success: false, error: error.message || 'Failed to create driver' });
+      }
+    });
+
+    this.app.delete('/api/drivers/:id', async (req: Request, res: Response) => {
+      try {
+        const driverId = parseInt(req.params.id);
+        if (isNaN(driverId)) {
+          return res.status(400).json({ success: false, error: 'Invalid driver ID' });
+        }
+        
+        const deleted = await this.handleAsync(this.database.deleteDriver(driverId));
+        
+        if (deleted) {
+          res.json({ success: true, message: 'Driver deleted successfully' });
+        } else {
+          res.status(404).json({ success: false, error: 'Driver not found' });
+        }
+      } catch (error: any) {
+        console.error('Error deleting driver:', error);
+        res.status(500).json({ success: false, error: error.message || 'Failed to delete driver' });
       }
     });
 

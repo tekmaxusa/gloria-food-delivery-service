@@ -920,6 +920,64 @@ export class OrderDatabasePostgreSQL {
     }
   }
 
+  async createDriver(driverData: { name: string; phone?: string; email?: string; vehicle_type?: string; vehicle_plate?: string }): Promise<any | null> {
+    try {
+      const client = await this.pool.connect();
+      
+      // Create drivers table if not exists
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS drivers (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(255) NOT NULL,
+          phone VARCHAR(100),
+          email VARCHAR(255),
+          vehicle_type VARCHAR(100),
+          vehicle_plate VARCHAR(100),
+          rating DECIMAL(3, 2) DEFAULT 0.00,
+          status VARCHAR(50) DEFAULT 'active',
+          latitude DECIMAL(10, 8),
+          longitude DECIMAL(11, 8),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      
+      const result = await client.query(
+        `INSERT INTO drivers (name, phone, email, vehicle_type, vehicle_plate, status) 
+         VALUES ($1, $2, $3, $4, $5, 'active') 
+         RETURNING id, name, phone, email, vehicle_type, vehicle_plate, rating, status, created_at`,
+        [
+          driverData.name,
+          driverData.phone || null,
+          driverData.email || null,
+          driverData.vehicle_type || null,
+          driverData.vehicle_plate || null
+        ]
+      );
+      
+      client.release();
+      return result.rows[0] || null;
+    } catch (error) {
+      console.error('Error creating driver:', error);
+      return null;
+    }
+  }
+
+  async deleteDriver(id: number): Promise<boolean> {
+    try {
+      const client = await this.pool.connect();
+      const result = await client.query(
+        'DELETE FROM drivers WHERE id = $1',
+        [id]
+      );
+      client.release();
+      return result.rowCount > 0;
+    } catch (error) {
+      console.error('Error deleting driver:', error);
+      return false;
+    }
+  }
+
   // Reviews methods
   async getAllReviews(): Promise<any[]> {
     try {
