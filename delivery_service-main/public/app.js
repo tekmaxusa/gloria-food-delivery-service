@@ -670,6 +670,9 @@ function showOrdersPage() {
         </div>
     `;
     
+    // Set initial status filter to 'current' since that tab is active by default
+    currentStatusFilter = 'current';
+    
     // Re-initialize event listeners
     initializeOrdersPage();
     filterAndDisplayOrders();
@@ -688,6 +691,8 @@ function initializeOrdersPage() {
             // Get status from data attribute or text content
             const status = e.target.dataset.status || e.target.textContent.trim().toLowerCase();
             currentStatusFilter = status;
+            
+            console.log(`[DEBUG] Tab clicked: ${status}, filter set to: "${currentStatusFilter}"`);
             
             // Filter and display orders
             filterAndDisplayOrders();
@@ -5073,6 +5078,8 @@ function getOrderCategory(order) {
 function filterAndDisplayOrders() {
     let filtered = [...allOrders];
     
+    console.log(`[DEBUG] Filtering orders with status filter: "${currentStatusFilter}", total orders: ${allOrders.length}`);
+    
     // Apply status filter
     if (currentStatusFilter && currentStatusFilter !== 'current') {
         if (currentStatusFilter === 'scheduled') {
@@ -5081,24 +5088,28 @@ function filterAndDisplayOrders() {
                 const category = getOrderCategory(order);
                 return category === 'scheduled';
             });
+            console.log(`[DEBUG] Scheduled filter: ${filtered.length} orders found`);
         } else if (currentStatusFilter === 'completed') {
             // Completed = delivered, completed, fulfilled orders
             filtered = filtered.filter(order => {
                 const status = (order.status || '').toUpperCase();
                 return ['DELIVERED', 'COMPLETED', 'FULFILLED'].includes(status);
             });
+            console.log(`[DEBUG] Completed filter: ${filtered.length} orders found`);
         } else if (currentStatusFilter === 'incomplete') {
             // Incomplete = cancelled, failed, rejected orders
             filtered = filtered.filter(order => {
                 const status = (order.status || '').toUpperCase();
                 return ['CANCELLED', 'FAILED', 'REJECTED', 'CANCELED'].includes(status);
             });
+            console.log(`[DEBUG] Incomplete filter: ${filtered.length} orders found`);
         } else if (currentStatusFilter === 'history') {
             // History = all completed and incomplete orders (old orders)
             filtered = filtered.filter(order => {
                 const status = (order.status || '').toUpperCase();
                 return ['DELIVERED', 'COMPLETED', 'FULFILLED', 'CANCELLED', 'CANCELED', 'FAILED', 'REJECTED'].includes(status);
             });
+            console.log(`[DEBUG] History filter: ${filtered.length} orders found`);
         }
     } else if (currentStatusFilter === 'current') {
         // Current = all active orders (not delivered, completed, or cancelled)
@@ -5109,6 +5120,10 @@ function filterAndDisplayOrders() {
             // Current = all active orders (including scheduled ones)
             return isActive;
         });
+        console.log(`[DEBUG] Current filter: ${filtered.length} orders found`);
+    } else {
+        // No filter - show all orders
+        console.log(`[DEBUG] No filter applied: showing all ${filtered.length} orders`);
     }
     
     // Apply search filter
