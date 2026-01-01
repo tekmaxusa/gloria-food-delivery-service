@@ -296,70 +296,12 @@ function setupAuth() {
                     body: JSON.stringify({ email, password })
                 });
                 
-                // Read response body once (can only be read once)
-                let responseText = '';
-                try {
-                    responseText = await response.text();
-                } catch (readError) {
-                    console.error('Failed to read response:', readError);
-                    // Restore button
-                    if (submitButton) {
-                        submitButton.disabled = false;
-                        if (originalButtonText) submitButton.textContent = originalButtonText;
-                    }
-                    const errorMsg = 'Failed to read server response. Please check if the server is running.';
-                    if (errorDiv) {
-                        errorDiv.textContent = errorMsg;
-                        errorDiv.style.display = 'block';
-                    }
-                    showError(errorMsg);
-                    return;
-                }
+                const data = await response.json();
                 
-                // Parse JSON response
-                let data;
-                try {
-                    if (responseText) {
-                        data = JSON.parse(responseText);
-                    } else {
-                        throw new Error('Empty response');
-                    }
-                } catch (parseError) {
-                    console.error('Failed to parse login response:', parseError);
-                    // Check if response is not OK
-                    if (!response.ok) {
-                        const errorMsg = `Server error: ${response.status} ${response.statusText}. ${responseText ? responseText.substring(0, 100) : 'No response body'}`;
-                        if (errorDiv) {
-                            errorDiv.textContent = errorMsg;
-                            errorDiv.style.display = 'block';
-                        }
-                        showError(errorMsg);
-                    } else {
-                        const errorMsg = 'Invalid response from server. Please check if the server is running.';
-                        if (errorDiv) {
-                            errorDiv.textContent = errorMsg;
-                            errorDiv.style.display = 'block';
-                        }
-                        showError(errorMsg);
-                    }
-                    return;
-                }
-                
-                // Restore button after reading response
+                // Restore button
                 if (submitButton) {
                     submitButton.disabled = false;
                     if (originalButtonText) submitButton.textContent = originalButtonText;
-                }
-                
-                // Check if response is OK after parsing
-                if (!response.ok) {
-                    const errorText = data.error || data.message || `Server error: ${response.status} ${response.statusText}`;
-                    if (errorDiv) {
-                        errorDiv.textContent = errorText;
-                        errorDiv.style.display = 'block';
-                    }
-                    showError(errorText);
-                    return;
                 }
                 
                 if (data.success && data.user) {
@@ -379,23 +321,13 @@ function setupAuth() {
             } catch (error) {
                 console.error('Login error:', error);
                 
-                // Restore button if it was disabled
-                const submitButton = loginForm.querySelector('button[type="submit"]');
+                // Restore button
                 if (submitButton) {
                     submitButton.disabled = false;
-                    const originalButtonText = submitButton.getAttribute('data-original-text');
                     if (originalButtonText) submitButton.textContent = originalButtonText;
                 }
                 
-                let errorMsg = 'Error connecting to server';
-                if (error.message) {
-                    errorMsg += ': ' + error.message;
-                } else if (error.name === 'TypeError' && error.message && error.message.includes('fetch')) {
-                    errorMsg = 'Cannot connect to server. Please make sure the server is running at ' + API_BASE + '. If you just started the server, wait a few seconds and try again.';
-                } else if (error.name === 'TypeError') {
-                    errorMsg = 'Network error. Please check your internet connection and make sure the server is running.';
-                }
-                
+                const errorMsg = 'Error connecting to server: ' + (error.message || 'Please check if the server is running');
                 if (errorDiv) {
                     errorDiv.textContent = errorMsg;
                     errorDiv.style.display = 'block';
