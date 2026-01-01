@@ -2890,8 +2890,8 @@ function createProfileDropdown() {
     
     // Handle Settings click
     document.getElementById('settingsItem')?.addEventListener('click', () => {
-        showSettingsInfo();
         dropdown.classList.add('hidden');
+        showSettingsPage();
     });
     
     // Handle Log Out click
@@ -3111,42 +3111,198 @@ window.editField = editField;
 window.toggleApiKey = toggleApiKey;
 window.editPassword = editPassword;
 
-// Show Settings information
-function showSettingsInfo() {
-    const modal = document.createElement('div');
-    modal.className = 'modal';
-    modal.style.display = 'block';
-    modal.innerHTML = `
-        <div class="modal-content" style="max-width: 500px;">
-            <div class="modal-header">
-                <h2>Settings</h2>
-                <button class="modal-close" onclick="this.closest('.modal').remove()">&times;</button>
+// Show Settings page
+function showSettingsPage() {
+    const mainContainer = document.querySelector('.main-container');
+    if (!mainContainer) return;
+    
+    // Default selected item
+    let selectedItem = localStorage.getItem('settingsSelectedItem') || 'business-settings';
+    
+    mainContainer.innerHTML = `
+        <div class="settings-page-container">
+            <div class="settings-sidebar">
+                <h2 class="settings-sidebar-title">Settings</h2>
+                <div class="settings-menu">
+                    <div class="settings-menu-item ${selectedItem === 'business-settings' ? 'active' : ''}" onclick="selectSettingsItem('business-settings')">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                            <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                            <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                        </svg>
+                        <span>Business settings</span>
+                    </div>
+                    
+                    <div class="settings-menu-item ${selectedItem === 'brand-customization' ? 'active' : ''}" onclick="selectSettingsItem('brand-customization')">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="13.5" cy="6.5" r=".5"></circle>
+                            <circle cx="17.5" cy="10.5" r=".5"></circle>
+                            <circle cx="8.5" cy="7.5" r=".5"></circle>
+                            <circle cx="6.5" cy="12.5" r=".5"></circle>
+                            <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125 0-.87.695-1.562 1.562-1.562 1.102 0 2 .898 2 2 0 1.102-.898 2-2 2-2.48 0-4.5-2.02-4.5-4.5 0-3.584 2.916-6.5 6.5-6.5s6.5 2.916 6.5 6.5c0 2.48-2.02 4.5-4.5 4.5-1.102 0-2-.898-2-2 0-.87.695-1.562 1.562-1.562.473 0 .836.148 1.125.438.29.289.688.437 1.125.437.942 0 1.688-.722 1.688-1.648C22 6.5 17.5 2 12 2z"></path>
+                        </svg>
+                        <span>Brand customization</span>
+                    </div>
+                    
+                    <div class="settings-menu-item ${selectedItem === 'tracking-promotions' ? 'active' : ''}" onclick="selectSettingsItem('tracking-promotions')">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                            <path d="M12 2v4"></path>
+                            <path d="M6 6l2 2"></path>
+                            <path d="M18 6l-2 2"></path>
+                        </svg>
+                        <span>Tracking page promotions</span>
+                        <span class="settings-new-badge">New</span>
+                    </div>
+                    
+                    <div class="settings-menu-item ${selectedItem === 'dispatch-settings' ? 'active' : ''}" onclick="selectSettingsItem('dispatch-settings')">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 3h7v7H3z"></path>
+                            <path d="M14 3h7v7h-7z"></path>
+                            <path d="M14 14h7v7h-7z"></path>
+                            <path d="M3 14h7v7H3z"></path>
+                        </svg>
+                        <span>Dispatch settings</span>
+                    </div>
+                    
+                    <div class="settings-menu-item ${selectedItem === 'driver-settings' ? 'active' : ''}" onclick="selectSettingsItem('driver-settings')">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M5 17H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-1"></path>
+                            <polygon points="12 15 17 21 7 21 12 15"></polygon>
+                        </svg>
+                        <span>Driver settings</span>
+                    </div>
+                    
+                    <div class="settings-menu-item ${selectedItem === 'third-party-delivery' ? 'active' : ''}" onclick="selectSettingsItem('third-party-delivery')">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                        </svg>
+                        <span>Third-Party delivery</span>
+                    </div>
+                    
+                    <div class="settings-menu-item ${selectedItem === 'customer-notification' ? 'active' : ''}" onclick="selectSettingsItem('customer-notification')">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                        </svg>
+                        <span>Customer notification</span>
+                    </div>
+                    
+                    <div class="settings-menu-item ${selectedItem === 'route-planning' ? 'active' : ''}" onclick="selectSettingsItem('route-planning')">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="9 11 12 14 22 4"></polyline>
+                            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                        </svg>
+                        <span>Route planning</span>
+                    </div>
+                    
+                    <div class="settings-menu-item ${selectedItem === 'users' ? 'active' : ''}" onclick="selectSettingsItem('users')">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="9" cy="7" r="4"></circle>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                        </svg>
+                        <span>Users</span>
+                    </div>
+                    
+                    <div class="settings-menu-item ${selectedItem === 'location' ? 'active' : ''}" onclick="selectSettingsItem('location')">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="10" r="3"></circle>
+                            <path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 1 0-16 0c0 3 2.7 7 8 11.7z"></path>
+                        </svg>
+                        <span>Location</span>
+                    </div>
+                </div>
             </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label><strong>Auto-refresh Interval:</strong></label>
-                    <div style="padding: 8px 0; color: #475569;">${REFRESH_INTERVAL / 1000} seconds</div>
-                </div>
-                <div class="form-group">
-                    <label><strong>Theme:</strong></label>
-                    <div style="padding: 8px 0; color: #475569;">Light Mode</div>
-                </div>
-                <div class="form-group">
-                    <label><strong>Language:</strong></label>
-                    <div style="padding: 8px 0; color: #475569;">English</div>
-                </div>
-                <div class="form-group">
-                    <label><strong>Notifications:</strong></label>
-                    <div style="padding: 8px 0; color: #475569;">Enabled</div>
-                </div>
-                <div class="modal-actions">
-                    <button type="button" class="btn-primary" onclick="this.closest('.modal').remove()">Close</button>
+            
+            <div class="settings-content">
+                <div id="settingsContentArea">
+                    ${getSettingsContent(selectedItem)}
                 </div>
             </div>
         </div>
     `;
-    document.body.appendChild(modal);
 }
+
+// Select settings menu item
+function selectSettingsItem(itemId) {
+    localStorage.setItem('settingsSelectedItem', itemId);
+    showSettingsPage();
+}
+
+// Get settings content based on selected item
+function getSettingsContent(itemId) {
+    const content = {
+        'business-settings': `
+            <h1 class="settings-content-title">Business settings</h1>
+            <div class="settings-content-body">
+                <p>Configure your business settings here.</p>
+            </div>
+        `,
+        'brand-customization': `
+            <h1 class="settings-content-title">Brand customization</h1>
+            <div class="settings-content-body">
+                <p>Customize your brand appearance and settings.</p>
+            </div>
+        `,
+        'tracking-promotions': `
+            <h1 class="settings-content-title">Tracking page promotions</h1>
+            <div class="settings-content-body">
+                <p>Manage tracking page promotions and offers.</p>
+            </div>
+        `,
+        'dispatch-settings': `
+            <h1 class="settings-content-title">Dispatch settings</h1>
+            <div class="settings-content-body">
+                <p>Configure dispatch and delivery settings.</p>
+            </div>
+        `,
+        'driver-settings': `
+            <h1 class="settings-content-title">Driver settings</h1>
+            <div class="settings-content-body">
+                <p>Manage driver settings and preferences.</p>
+            </div>
+        `,
+        'third-party-delivery': `
+            <h1 class="settings-content-title">Third-Party delivery</h1>
+            <div class="settings-content-body">
+                <p>Configure third-party delivery integrations.</p>
+            </div>
+        `,
+        'customer-notification': `
+            <h1 class="settings-content-title">Customer notification</h1>
+            <div class="settings-content-body">
+                <p>Manage customer notification preferences.</p>
+            </div>
+        `,
+        'route-planning': `
+            <h1 class="settings-content-title">Route planning</h1>
+            <div class="settings-content-body">
+                <p>Configure route planning and optimization settings.</p>
+            </div>
+        `,
+        'users': `
+            <h1 class="settings-content-title">Users</h1>
+            <div class="settings-content-body">
+                <p>Manage user accounts and permissions.</p>
+            </div>
+        `,
+        'location': `
+            <h1 class="settings-content-title">Location</h1>
+            <div class="settings-content-body">
+                <p>Configure location and address settings.</p>
+            </div>
+        `
+    };
+    
+    return content[itemId] || content['business-settings'];
+}
+
+// Make functions globally available
+window.selectSettingsItem = selectSettingsItem;
 
 // Handle profile picture upload
 function handleProfilePictureUpload(e) {
