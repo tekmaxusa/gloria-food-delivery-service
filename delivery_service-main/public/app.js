@@ -291,6 +291,9 @@ function setupAuth() {
         
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            
             const email = document.getElementById('loginEmail')?.value;
             const password = document.getElementById('loginPassword')?.value;
             const errorDiv = document.getElementById('loginError');
@@ -414,13 +417,21 @@ function setupAuth() {
                         if (originalButtonText) submitButton.textContent = originalButtonText;
                     }
                     
+                    // Clear form
+                    loginForm.reset();
+                    
                     // Show notification
                     showNotification('Success', 'Login successful!');
                     
-                    // Redirect immediately to dashboard
+                    // Redirect immediately to dashboard - use setTimeout to ensure DOM is ready
                     console.log('Calling showDashboard()...');
-                    showDashboard();
-                    console.log('showDashboard() called');
+                    setTimeout(() => {
+                        showDashboard();
+                        console.log('showDashboard() called');
+                    }, 100);
+                    
+                    // Prevent any further form submission
+                    return false;
                 } else {
                     // Restore button
                     if (submitButton) {
@@ -460,7 +471,13 @@ function setupAuth() {
                     errorDiv.style.display = 'block';
                 }
                 showError(errorMsg);
+                
+                // Prevent form submission
+                return false;
             }
+            
+            // Always return false to prevent form submission
+            return false;
         });
     }
     
