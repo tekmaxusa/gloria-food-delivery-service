@@ -2796,17 +2796,29 @@ let notifications = [];
 
 // Handle Profile button
 function handleProfile() {
-    const panel = document.getElementById('profilePanel');
-    if (panel) {
-        if (panel.classList.contains('hidden')) {
-            panel.classList.remove('hidden');
-        } else {
-            panel.classList.add('hidden');
-        }
+    const dropdown = document.getElementById('profileDropdown');
+    if (dropdown) {
+        // Close all other dropdowns
+        document.querySelectorAll('.profile-dropdown').forEach(d => {
+            if (d.id !== 'profileDropdown') {
+                d.classList.add('hidden');
+            }
+        });
+        // Toggle current dropdown
+        dropdown.classList.toggle('hidden');
     } else {
-        createProfilePanel();
+        createProfileDropdown();
     }
 }
+
+// Close dropdown when clicking outside
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('#profileBtn') && !e.target.closest('.profile-dropdown')) {
+        document.querySelectorAll('.profile-dropdown').forEach(dropdown => {
+            dropdown.classList.add('hidden');
+        });
+    }
+});
 
 // Handle Notifications button
 function handleNotifications() {
@@ -2822,111 +2834,167 @@ function handleNotifications() {
     }
 }
 
-// Create profile panel
-function createProfilePanel() {
-    // Remove existing panel if any
-    const existing = document.getElementById('profilePanel');
+// Create profile dropdown menu
+function createProfileDropdown() {
+    // Remove existing dropdown if any
+    const existing = document.getElementById('profileDropdown');
     if (existing) {
         existing.remove();
     }
     
-    const panel = document.createElement('div');
-    panel.id = 'profilePanel';
-    panel.className = 'profile-panel';
+    const dropdown = document.createElement('div');
+    dropdown.id = 'profileDropdown';
+    dropdown.className = 'profile-dropdown';
     
-    // Get current user profile picture from localStorage
-    const profilePicture = localStorage.getItem('profilePicture') || '';
-    const userName = currentUser?.full_name || currentUser?.email || 'User';
-    const userEmail = currentUser?.email || '';
-    
-    panel.innerHTML = `
-        <div class="profile-header">
-            <h3>Profile</h3>
-            <button class="close-profile-btn" id="closeProfilePanel">×</button>
+    dropdown.innerHTML = `
+        <div class="profile-dropdown-item" id="myAccountItem">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+            <span>My Account</span>
         </div>
-        <div class="profile-content">
-            <div class="profile-picture-section">
-                <div class="profile-picture-container">
-                    <img id="profilePicturePreview" src="${profilePicture || 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22%3E%3Ccircle cx=%2250%22 cy=%2250%22 r=%2250%22 fill=%22%23e2e8f0%22/%3E%3Ctext x=%2250%22 y=%2255%22 font-size=%2230%22 text-anchor=%22middle%22 fill=%22%2364748b%22%3E${userName.charAt(0).toUpperCase()}%3C/text%3E%3C/svg%3E'}" alt="Profile Picture" class="profile-picture">
-                    <label for="profilePictureInput" class="upload-label">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                            <polyline points="17 8 12 3 7 8"></polyline>
-                            <line x1="12" y1="3" x2="12" y2="15"></line>
-                        </svg>
-                        Upload Photo
-                    </label>
-                    <input type="file" id="profilePictureInput" accept="image/*" style="display: none;">
-                </div>
-            </div>
-            <div class="profile-info">
-                <div class="profile-field">
-                    <label>Name</label>
-                    <div class="profile-value">${userName}</div>
-                </div>
-                <div class="profile-field">
-                    <label>Email</label>
-                    <div class="profile-value">${userEmail}</div>
-                </div>
-                <div class="profile-field">
-                    <label>Role</label>
-                    <div class="profile-value">${currentUser?.role || 'User'}</div>
-                </div>
-            </div>
-            <div class="profile-actions">
-                <button class="btn-logout" id="profileLogoutBtn" style="width: 100%; padding: 12px; background: #ef4444; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 20px;">
-                    Log Out
-                </button>
-            </div>
+        <div class="profile-dropdown-item" id="settingsItem">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M12 1v6m0 6v6m11-7h-6m-6 0H1m21 12h-6m-6 0H1m16-4a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm-8 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"></path>
+            </svg>
+            <span>Settings</span>
+        </div>
+        <div class="profile-dropdown-item" id="logoutItem">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                <polyline points="16 17 21 12 16 7"></polyline>
+                <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+            <span>Log Out</span>
         </div>
     `;
     
-    document.body.appendChild(panel);
+    // Position dropdown near profile button
+    const profileBtn = document.getElementById('profileBtn');
+    if (profileBtn) {
+        const rect = profileBtn.getBoundingClientRect();
+        dropdown.style.position = 'fixed';
+        dropdown.style.top = `${rect.bottom + 8}px`;
+        dropdown.style.right = `${window.innerWidth - rect.right}px`;
+    }
     
-    // Setup event listeners
-    document.getElementById('closeProfilePanel')?.addEventListener('click', () => {
-        panel.classList.add('hidden');
+    document.body.appendChild(dropdown);
+    
+    // Handle My Account click
+    document.getElementById('myAccountItem')?.addEventListener('click', () => {
+        showMyAccountInfo();
+        dropdown.classList.add('hidden');
     });
     
-    // Handle profile picture upload
-    const fileInput = document.getElementById('profilePictureInput');
-    if (fileInput) {
-        fileInput.addEventListener('change', handleProfilePictureUpload);
-    }
+    // Handle Settings click
+    document.getElementById('settingsItem')?.addEventListener('click', () => {
+        showSettingsInfo();
+        dropdown.classList.add('hidden');
+    });
     
-    // Handle logout button
-    const logoutBtn = document.getElementById('profileLogoutBtn');
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', async () => {
-            // Show confirmation dialog
-            const confirmed = confirm('Are you sure you want to log out?');
-            if (!confirmed) {
-                return;
-            }
-            
-            try {
-                await authenticatedFetch(`${API_BASE}/api/auth/logout`, {
-                    method: 'POST'
-                });
-            } catch (error) {
-                console.error('Logout error:', error);
-            }
-            
-            currentUser = null;
-            sessionId = null;
-            saveSessionId(null);
-            panel.classList.add('hidden');
-            showLogin();
-        });
-    }
-    
-    // Close when clicking outside
-    document.addEventListener('click', function closeOnOutsideClick(e) {
-        if (!panel.contains(e.target) && !e.target.closest('#profileBtn')) {
-            panel.classList.add('hidden');
-            document.removeEventListener('click', closeOnOutsideClick);
+    // Handle Log Out click
+    document.getElementById('logoutItem')?.addEventListener('click', async () => {
+        dropdown.classList.add('hidden');
+        // Show confirmation dialog
+        const confirmed = confirm('Are you sure you want to log out?');
+        if (!confirmed) {
+            return;
         }
+        
+        try {
+            await authenticatedFetch(`${API_BASE}/api/auth/logout`, {
+                method: 'POST'
+            });
+        } catch (error) {
+            console.error('Logout error:', error);
+        }
+        
+        currentUser = null;
+        sessionId = null;
+        saveSessionId(null);
+        showLogin();
     });
+}
+
+// Show My Account information
+function showMyAccountInfo() {
+    const userName = currentUser?.full_name || currentUser?.email || 'User';
+    const userEmail = currentUser?.email || '';
+    const userRole = currentUser?.role || 'User';
+    const profilePicture = localStorage.getItem('profilePicture') || '';
+    
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.style.display = 'block';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2>My Account</h2>
+                <button class="modal-close" onclick="this.closest('.modal').remove()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div style="text-align: center; margin-bottom: 24px;">
+                    <img src="${profilePicture || 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22%3E%3Ccircle cx=%2250%22 cy=%2250%22 r=%2250%22 fill=%22%23e2e8f0%22/%3E%3Ctext x=%2250%22 y=%2255%22 font-size=%2230%22 text-anchor=%22middle%22 fill=%22%2364748b%22%3E${userName.charAt(0).toUpperCase()}%3C/text%3E%3C/svg%3E'}" 
+                         alt="Profile Picture" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; margin-bottom: 16px;">
+                </div>
+                <div class="form-group">
+                    <label><strong>Name:</strong></label>
+                    <div style="padding: 8px 0; color: #475569;">${escapeHtml(userName)}</div>
+                </div>
+                <div class="form-group">
+                    <label><strong>Email:</strong></label>
+                    <div style="padding: 8px 0; color: #475569;">${escapeHtml(userEmail)}</div>
+                </div>
+                <div class="form-group">
+                    <label><strong>Role:</strong></label>
+                    <div style="padding: 8px 0; color: #475569;">${escapeHtml(userRole)}</div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-primary" onclick="this.closest('.modal').remove()">Close</button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+}
+
+// Show Settings information
+function showSettingsInfo() {
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.style.display = 'block';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2>Settings</h2>
+                <button class="modal-close" onclick="this.closest('.modal').remove()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label><strong>Auto-refresh Interval:</strong></label>
+                    <div style="padding: 8px 0; color: #475569;">${REFRESH_INTERVAL / 1000} seconds</div>
+                </div>
+                <div class="form-group">
+                    <label><strong>Theme:</strong></label>
+                    <div style="padding: 8px 0; color: #475569;">Light Mode</div>
+                </div>
+                <div class="form-group">
+                    <label><strong>Language:</strong></label>
+                    <div style="padding: 8px 0; color: #475569;">English</div>
+                </div>
+                <div class="form-group">
+                    <label><strong>Notifications:</strong></label>
+                    <div style="padding: 8px 0; color: #475569;">Enabled</div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-primary" onclick="this.closest('.modal').remove()">Close</button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
 }
 
 // Handle profile picture upload
