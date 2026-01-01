@@ -2054,3 +2054,244 @@ body {
     line-height: 1.5;
     margin: 0;
 }
+
+/* Driver Settings Styles */
+.driver-settings-section {
+    margin-bottom: 40px;
+    padding-bottom: 32px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.driver-settings-section:last-child {
+    border-bottom: none;
+}
+
+.driver-setting-item {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 20px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    margin-bottom: 16px;
+}
+
+.driver-setting-content {
+    flex: 1;
+    margin-right: 16px;
+}
+
+.driver-setting-label {
+    font-size: 15px;
+    font-weight: 500;
+    color: #0f172a;
+    margin-bottom: 8px;
+}
+
+.driver-setting-description {
+    font-size: 13px;
+    color: #64748b;
+    line-height: 1.5;
+    margin: 0;
+}
+
+.driver-time-input {
+    margin-top: 16px;
+}
+
+.driver-payment-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    margin-bottom: 12px;
+}
+
+.driver-payment-content {
+    flex: 1;
+}
+
+.driver-payment-summary {
+    margin-top: 24px;
+    padding: 16px;
+    background: #f8fafc;
+    border-radius: 8px;
+}
+
+.btn-upgrade {
+    padding: 6px 12px;
+    background: #fbbf24;
+    color: #1e293b;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.btn-upgrade:hover {
+    background: #f59e0b;
+}
+
+/* Third-Party Delivery Styles */
+.third-party-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 32px;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.third-party-tab {
+    padding: 12px 24px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: #64748b;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-bottom: -2px;
+}
+
+.third-party-tab:hover {
+    color: #0f172a;
+}
+
+.third-party-tab.active {
+    color: #22c55e;
+    border-bottom-color: #22c55e;
+}
+
+.third-party-section {
+    margin-bottom: 40px;
+}
+
+.third-party-service-card {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 20px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    margin-bottom: 16px;
+}
+
+.service-card-content {
+    flex: 1;
+    margin-right: 16px;
+}
+
+.service-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: #0f172a;
+    margin-bottom: 8px;
+}
+
+.service-description {
+    font-size: 14px;
+    color: #64748b;
+    line-height: 1.5;
+    margin: 0;
+}
+
+/* Customer Notification Styles */
+.notification-toggle-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    margin-bottom: 12px;
+}
+
+.notification-toggle-content {
+    flex: 1;
+}
+
+/* Users Page Styles */
+.users-page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 24px;
+}
+
+.users-subtitle {
+    font-size: 14px;
+    color: #64748b;
+    margin-top: 8px;
+}
+
+.users-search-box {
+    position: relative;
+    max-width: 300px;
+}
+
+.users-search-box .search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #94a3b8;
+}
+
+.users-search-box .search-input {
+    padding-left: 40px;
+}
+
+/* Location Styles */
+.location-field {
+    margin-bottom: 24px;
+}
+
+.location-value {
+    padding: 12px 16px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 15px;
+    color: #0f172a;
+    font-weight: 500;
+}
+
+.distance-unit-selector {
+    display: flex;
+    gap: 0;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 4px;
+    max-width: 200px;
+}
+
+.distance-unit-btn {
+    flex: 1;
+    padding: 10px 20px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #64748b;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.distance-unit-btn:hover {
+    color: #0f172a;
+}
+
+.distance-unit-btn.active {
+    background: #22c55e;
+    color: white;
+}

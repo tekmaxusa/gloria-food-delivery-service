@@ -3133,29 +3133,6 @@ function showSettingsPage() {
                         <span>Business settings</span>
                     </div>
                     
-                    <div class="settings-menu-item ${selectedItem === 'brand-customization' ? 'active' : ''}" onclick="selectSettingsItem('brand-customization')">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="13.5" cy="6.5" r=".5"></circle>
-                            <circle cx="17.5" cy="10.5" r=".5"></circle>
-                            <circle cx="8.5" cy="7.5" r=".5"></circle>
-                            <circle cx="6.5" cy="12.5" r=".5"></circle>
-                            <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125 0-.87.695-1.562 1.562-1.562 1.102 0 2 .898 2 2 0 1.102-.898 2-2 2-2.48 0-4.5-2.02-4.5-4.5 0-3.584 2.916-6.5 6.5-6.5s6.5 2.916 6.5 6.5c0 2.48-2.02 4.5-4.5 4.5-1.102 0-2-.898-2-2 0-.87.695-1.562 1.562-1.562.473 0 .836.148 1.125.438.29.289.688.437 1.125.437.942 0 1.688-.722 1.688-1.648C22 6.5 17.5 2 12 2z"></path>
-                        </svg>
-                        <span>Brand customization</span>
-                    </div>
-                    
-                    <div class="settings-menu-item ${selectedItem === 'tracking-promotions' ? 'active' : ''}" onclick="selectSettingsItem('tracking-promotions')">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-                            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-                            <path d="M12 2v4"></path>
-                            <path d="M6 6l2 2"></path>
-                            <path d="M18 6l-2 2"></path>
-                        </svg>
-                        <span>Tracking page promotions</span>
-                        <span class="settings-new-badge">New</span>
-                    </div>
-                    
                     <div class="settings-menu-item ${selectedItem === 'dispatch-settings' ? 'active' : ''}" onclick="selectSettingsItem('dispatch-settings')">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M3 3h7v7H3z"></path>
@@ -3188,14 +3165,6 @@ function showSettingsPage() {
                             <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
                         </svg>
                         <span>Customer notification</span>
-                    </div>
-                    
-                    <div class="settings-menu-item ${selectedItem === 'route-planning' ? 'active' : ''}" onclick="selectSettingsItem('route-planning')">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="9 11 12 14 22 4"></polyline>
-                            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
-                        </svg>
-                        <span>Route planning</span>
                     </div>
                     
                     <div class="settings-menu-item ${selectedItem === 'users' ? 'active' : ''}" onclick="selectSettingsItem('users')">
@@ -3239,6 +3208,16 @@ async function loadSettingsContent(itemId) {
         let content = '';
         if (itemId === 'business-settings') {
             content = await getBusinessSettingsContent();
+        } else if (itemId === 'driver-settings') {
+            content = await getDriverSettingsContent();
+        } else if (itemId === 'third-party-delivery') {
+            content = await getThirdPartyDeliveryContent();
+        } else if (itemId === 'customer-notification') {
+            content = await getCustomerNotificationContent();
+        } else if (itemId === 'users') {
+            content = await getUsersContent();
+        } else if (itemId === 'location') {
+            content = await getLocationContent();
         } else {
             content = getSettingsContent(itemId);
         }
@@ -3446,58 +3425,10 @@ async function getSettingsContent(itemId) {
     }
     
     const content = {
-        'brand-customization': `
-            <h1 class="settings-content-title">Brand customization</h1>
-            <div class="settings-content-body">
-                <p>Customize your brand appearance and settings.</p>
-            </div>
-        `,
-        'tracking-promotions': `
-            <h1 class="settings-content-title">Tracking page promotions</h1>
-            <div class="settings-content-body">
-                <p>Manage tracking page promotions and offers.</p>
-            </div>
-        `,
         'dispatch-settings': `
             <h1 class="settings-content-title">Dispatch settings</h1>
             <div class="settings-content-body">
                 <p>Configure dispatch and delivery settings.</p>
-            </div>
-        `,
-        'driver-settings': `
-            <h1 class="settings-content-title">Driver settings</h1>
-            <div class="settings-content-body">
-                <p>Manage driver settings and preferences.</p>
-            </div>
-        `,
-        'third-party-delivery': `
-            <h1 class="settings-content-title">Third-Party delivery</h1>
-            <div class="settings-content-body">
-                <p>Configure third-party delivery integrations.</p>
-            </div>
-        `,
-        'customer-notification': `
-            <h1 class="settings-content-title">Customer notification</h1>
-            <div class="settings-content-body">
-                <p>Manage customer notification preferences.</p>
-            </div>
-        `,
-        'route-planning': `
-            <h1 class="settings-content-title">Route planning</h1>
-            <div class="settings-content-body">
-                <p>Configure route planning and optimization settings.</p>
-            </div>
-        `,
-        'users': `
-            <h1 class="settings-content-title">Users</h1>
-            <div class="settings-content-body">
-                <p>Manage user accounts and permissions.</p>
-            </div>
-        `,
-        'location': `
-            <h1 class="settings-content-title">Location</h1>
-            <div class="settings-content-body">
-                <p>Configure location and address settings.</p>
             </div>
         `
     };
@@ -3602,6 +3533,137 @@ function editOrderPrepTime() {
     }
 }
 
+// Driver settings helper functions
+function toggleDriverSetting(setting, enabled) {
+    localStorage.setItem(setting, enabled);
+    showNotification('Success', 'Setting updated', 'success');
+}
+
+function saveDriverResponseTime() {
+    const input = document.getElementById('driverResponseTimeInput');
+    if (input) {
+        const value = parseInt(input.value);
+        if (!isNaN(value) && value > 0 && value <= 60) {
+            localStorage.setItem('driverResponseTime', value.toString());
+            showNotification('Success', 'Driver response time updated', 'success');
+        } else {
+            showNotification('Error', 'Please enter a valid number (1-60)', 'error');
+        }
+    }
+}
+
+function toggleDriverPayment(setting, enabled) {
+    localStorage.setItem(setting, enabled);
+    // Reload content to show/hide input fields
+    loadSettingsContent('driver-settings');
+    showNotification('Success', 'Payment setting updated', 'success');
+}
+
+function updateDriverPayment(setting, value) {
+    localStorage.setItem(setting, value);
+    // Update payment summary
+    const summary = document.getElementById('paymentSummary');
+    if (summary) {
+        summary.innerHTML = calculatePaymentSummary();
+    }
+}
+
+function calculatePaymentSummary() {
+    const fixPay = localStorage.getItem('fixPayPerDelivery') === 'true';
+    const fixPayAmount = localStorage.getItem('fixPayAmount') || '0';
+    const percentageDeliveryFee = localStorage.getItem('percentageDeliveryFee') === 'true';
+    const percentageDeliveryFeeValue = localStorage.getItem('percentageDeliveryFeeValue') || '0';
+    const percentageTips = localStorage.getItem('percentageTips') === 'true';
+    const percentageTipsValue = localStorage.getItem('percentageTipsValue') || '0';
+    
+    let parts = [];
+    if (fixPay) {
+        parts.push(`$${fixPayAmount}/Order`);
+    }
+    if (percentageDeliveryFee) {
+        parts.push(`${percentageDeliveryFeeValue}% of delivery fees`);
+    }
+    if (percentageTips) {
+        parts.push(`${percentageTipsValue}% of tips`);
+    }
+    
+    return parts.length > 0 ? `<p style="margin-top: 16px; padding: 12px; background: #f8fafc; border-radius: 8px; color: #0f172a; font-weight: 500;">Total pay = ${parts.join(' + ')}</p>` : '';
+}
+
+// Third-party delivery helper functions
+function switchThirdPartyTab(tab) {
+    localStorage.setItem('thirdPartyTab', tab);
+    loadSettingsContent('third-party-delivery');
+}
+
+function toggleThirdPartyService(service, enabled) {
+    localStorage.setItem(`${service}Enabled`, enabled);
+    showNotification('Success', `${service} ${enabled ? 'enabled' : 'disabled'}`, 'success');
+}
+
+function inviteLocalDelivery() {
+    showNotification('Info', 'Invite local delivery company functionality coming soon', 'info');
+}
+
+// Customer notification helper functions
+function toggleNotificationSetting(setting, enabled) {
+    localStorage.setItem(setting, enabled);
+    showNotification('Success', 'Notification setting updated', 'success');
+}
+
+function updateTrackingNotification(value) {
+    localStorage.setItem('trackingNotification', value);
+    showNotification('Success', 'Tracking notification setting updated', 'success');
+}
+
+// Users helper functions
+function inviteUser() {
+    showNotification('Info', 'Invite user functionality coming soon', 'info');
+}
+
+function filterUsers() {
+    const searchInput = document.getElementById('usersSearchInput');
+    const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
+    // TODO: Implement user filtering
+}
+
+function editUser(email) {
+    showNotification('Info', 'Edit user functionality coming soon', 'info');
+}
+
+function deleteUser(email) {
+    if (confirm(`Are you sure you want to delete user ${email}?`)) {
+        // TODO: Implement user deletion
+        showNotification('Success', 'User deleted successfully', 'success');
+        loadSettingsContent('users');
+    }
+}
+
+// Location helper functions
+function updateLocation(setting, value) {
+    localStorage.setItem(setting, value);
+    showNotification('Success', 'Location setting updated', 'success');
+}
+
+function toggleTimezoneAuto(enabled) {
+    localStorage.setItem('timezoneAuto', enabled);
+    const timezoneSelect = document.getElementById('timezoneSelect');
+    if (timezoneSelect) {
+        timezoneSelect.disabled = enabled;
+    }
+    showNotification('Success', `Timezone ${enabled ? 'auto' : 'manual'} setup`, 'success');
+}
+
+function selectDistanceUnit(unit) {
+    localStorage.setItem('distanceUnit', unit);
+    // Update UI
+    document.querySelectorAll('.distance-unit-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    event.target.classList.add('active');
+    showNotification('Success', `Distance unit set to ${unit}`, 'success');
+}
+
 // Make functions globally available
 window.selectSettingsItem = selectSettingsItem;
 window.editBusinessName = editBusinessName;
@@ -3611,6 +3673,22 @@ window.toggleDriverFleet = toggleDriverFleet;
 window.toggleTakeoutOrders = toggleTakeoutOrders;
 window.editMaxDeliveryTime = editMaxDeliveryTime;
 window.editOrderPrepTime = editOrderPrepTime;
+window.toggleDriverSetting = toggleDriverSetting;
+window.saveDriverResponseTime = saveDriverResponseTime;
+window.toggleDriverPayment = toggleDriverPayment;
+window.updateDriverPayment = updateDriverPayment;
+window.switchThirdPartyTab = switchThirdPartyTab;
+window.toggleThirdPartyService = toggleThirdPartyService;
+window.inviteLocalDelivery = inviteLocalDelivery;
+window.toggleNotificationSetting = toggleNotificationSetting;
+window.updateTrackingNotification = updateTrackingNotification;
+window.inviteUser = inviteUser;
+window.filterUsers = filterUsers;
+window.editUser = editUser;
+window.deleteUser = deleteUser;
+window.updateLocation = updateLocation;
+window.toggleTimezoneAuto = toggleTimezoneAuto;
+window.selectDistanceUnit = selectDistanceUnit;
 
 // Handle profile picture upload
 function handleProfilePictureUpload(e) {
