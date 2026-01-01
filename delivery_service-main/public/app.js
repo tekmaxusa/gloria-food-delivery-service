@@ -114,17 +114,23 @@ function showLogin() {
 
 // Show dashboard
 function showDashboard() {
+    // Hide login/signup container
     const authContainer = document.getElementById('authContainer');
+    if (authContainer) {
+        authContainer.classList.add('hidden');
+    }
+    
+    // Show dashboard container
     const dashboardContainer = document.getElementById('dashboardContainer');
-    
-    if (authContainer) authContainer.classList.add('hidden');
-    if (dashboardContainer) dashboardContainer.classList.remove('hidden');
-    
-    // Show dashboard page by default
-    showDashboardPage();
-    
-    // Start auto-refresh only when authenticated
-    startAutoRefresh();
+    if (dashboardContainer) {
+        dashboardContainer.classList.remove('hidden');
+        
+        // Show dashboard page by default
+        showDashboardPage();
+        
+        // Start auto-refresh only when authenticated
+        startAutoRefresh();
+    }
 }
 
 // Setup dashboard UI elements
@@ -296,19 +302,32 @@ function setupAuth() {
                     body: JSON.stringify({ email, password })
                 });
                 
-                const data = await response.json();
-                
                 // Restore button
                 if (submitButton) {
                     submitButton.disabled = false;
                     if (originalButtonText) submitButton.textContent = originalButtonText;
                 }
                 
-                if (data.success && data.user) {
+                let data;
+                try {
+                    data = await response.json();
+                } catch (parseError) {
+                    const errorMsg = 'Invalid response from server';
+                    if (errorDiv) {
+                        errorDiv.textContent = errorMsg;
+                        errorDiv.style.display = 'block';
+                    }
+                    showError(errorMsg);
+                    return;
+                }
+                
+                if (response.ok && data.success && data.user) {
                     currentUser = data.user;
                     sessionId = data.sessionId;
                     saveSessionId(data.sessionId);
                     showNotification('Success', 'Login successful!');
+                    
+                    // Redirect to dashboard
                     showDashboard();
                 } else {
                     const errorMsg = data.error || 'Invalid email or password';
@@ -1292,6 +1311,10 @@ window.deleteMerchant = deleteMerchant;
 // Show Dashboard page
 function showDashboardPage() {
     const mainContainer = document.querySelector('.main-container');
+    if (!mainContainer) {
+        console.error('Main container not found');
+        return;
+    }
     mainContainer.innerHTML = `
         <div class="orders-header">
             <h1 class="page-title">Dashboard</h1>
