@@ -259,19 +259,12 @@ function setupAuth() {
     // Login form
     const loginForm = document.getElementById('loginFormElement');
     if (loginForm) {
-        // Store original button text
-        const submitButton = loginForm.querySelector('button[type="submit"]');
-        if (submitButton && !submitButton.getAttribute('data-original-text')) {
-            submitButton.setAttribute('data-original-text', submitButton.textContent || 'Login');
-        }
-        
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const email = document.getElementById('loginEmail')?.value;
             const password = document.getElementById('loginPassword')?.value;
             const errorDiv = document.getElementById('loginError');
             
-            // Hide previous errors
             if (errorDiv) {
                 errorDiv.style.display = 'none';
                 errorDiv.textContent = '';
@@ -283,51 +276,23 @@ function setupAuth() {
                     errorDiv.textContent = errorMsg;
                     errorDiv.style.display = 'block';
                 }
-                showError(errorMsg);
                 return;
             }
             
             try {
-                // Show loading state
-                const submitButton = loginForm.querySelector('button[type="submit"]');
-                const originalButtonText = submitButton?.textContent;
-                if (submitButton) {
-                    submitButton.disabled = true;
-                    submitButton.textContent = 'Logging in...';
-                }
-                
                 const response = await fetch(`${API_BASE}/api/auth/login`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email, password })
                 });
                 
-                // Restore button
-                if (submitButton) {
-                    submitButton.disabled = false;
-                    if (originalButtonText) submitButton.textContent = originalButtonText;
-                }
+                const data = await response.json();
                 
-                let data;
-                try {
-                    data = await response.json();
-                } catch (parseError) {
-                    const errorMsg = 'Invalid response from server';
-                    if (errorDiv) {
-                        errorDiv.textContent = errorMsg;
-                        errorDiv.style.display = 'block';
-                    }
-                    showError(errorMsg);
-                    return;
-                }
-                
-                if (response.ok && data.success && data.user) {
+                if (data.success && data.user) {
                     currentUser = data.user;
                     sessionId = data.sessionId;
                     saveSessionId(data.sessionId);
                     showNotification('Success', 'Login successful!');
-                    
-                    // Redirect to dashboard
                     showDashboard();
                 } else {
                     const errorMsg = data.error || 'Invalid email or password';
@@ -335,23 +300,13 @@ function setupAuth() {
                         errorDiv.textContent = errorMsg;
                         errorDiv.style.display = 'block';
                     }
-                    showError(errorMsg);
                 }
             } catch (error) {
-                console.error('Login error:', error);
-                
-                // Restore button
-                if (submitButton) {
-                    submitButton.disabled = false;
-                    if (originalButtonText) submitButton.textContent = originalButtonText;
-                }
-                
-                const errorMsg = 'Error connecting to server: ' + (error.message || 'Please check if the server is running');
+                const errorMsg = 'Error connecting to server';
                 if (errorDiv) {
                     errorDiv.textContent = errorMsg;
                     errorDiv.style.display = 'block';
                 }
-                showError(errorMsg);
             }
         });
     }
@@ -359,12 +314,6 @@ function setupAuth() {
     // Signup form
     const signupForm = document.getElementById('signupFormElement');
     if (signupForm) {
-        // Store original button text
-        const submitButton = signupForm.querySelector('button[type="submit"]');
-        if (submitButton && !submitButton.getAttribute('data-original-text')) {
-            submitButton.setAttribute('data-original-text', submitButton.textContent || 'Sign Up');
-        }
-        
         signupForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const name = document.getElementById('signupName')?.value;
@@ -372,7 +321,6 @@ function setupAuth() {
             const password = document.getElementById('signupPassword')?.value;
             const errorDiv = document.getElementById('signupError');
             
-            // Hide previous errors
             if (errorDiv) {
                 errorDiv.style.display = 'none';
                 errorDiv.textContent = '';
@@ -384,7 +332,6 @@ function setupAuth() {
                     errorDiv.textContent = errorMsg;
                     errorDiv.style.display = 'block';
                 }
-                showError(errorMsg);
                 return;
             }
             
@@ -394,161 +341,37 @@ function setupAuth() {
                     errorDiv.textContent = errorMsg;
                     errorDiv.style.display = 'block';
                 }
-                showError(errorMsg);
                 return;
             }
             
             try {
-                // Show loading state
-                const submitButton = signupForm.querySelector('button[type="submit"]');
-                const originalButtonText = submitButton?.textContent;
-                if (submitButton) {
-                    submitButton.disabled = true;
-                    submitButton.textContent = 'Creating account...';
-                }
-                
-                console.log('Attempting signup to:', `${API_BASE}/api/auth/signup`);
                 const response = await fetch(`${API_BASE}/api/auth/signup`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email, password, fullName: name })
                 });
                 
-                // Restore button
-                if (submitButton) {
-                    submitButton.disabled = false;
-                    if (originalButtonText) submitButton.textContent = originalButtonText;
-                }
-                
-                console.log('Signup response status:', response.status, response.statusText);
-                
-                // Read response body once (can only be read once)
-                let responseText = '';
-                try {
-                    responseText = await response.text();
-                    console.log('Signup response text:', responseText.substring(0, 200));
-                } catch (readError) {
-                    console.error('Failed to read response:', readError);
-                    // Restore button
-                    if (submitButton) {
-                        submitButton.disabled = false;
-                        if (originalButtonText) submitButton.textContent = originalButtonText;
-                    }
-                    const errorMsg = 'Failed to read server response. Please check if the server is running.';
-                    if (errorDiv) {
-                        errorDiv.textContent = errorMsg;
-                        errorDiv.style.display = 'block';
-                    }
-                    showError(errorMsg);
-                    return;
-                }
-                
-                // Parse JSON response
-                let data;
-                try {
-                    if (responseText) {
-                        data = JSON.parse(responseText);
-                    } else {
-                        throw new Error('Empty response');
-                    }
-                } catch (parseError) {
-                    console.error('Failed to parse signup response:', parseError);
-                    // Restore button
-                    if (submitButton) {
-                        submitButton.disabled = false;
-                        if (originalButtonText) submitButton.textContent = originalButtonText;
-                    }
-                    // Check if response is not OK
-                    if (!response.ok) {
-                        const errorMsg = `Server error: ${response.status} ${response.statusText}. ${responseText ? responseText.substring(0, 100) : 'No response body'}`;
-                        if (errorDiv) {
-                            errorDiv.textContent = errorMsg;
-                            errorDiv.style.display = 'block';
-                        }
-                        showError(errorMsg);
-                    } else {
-                        const errorMsg = 'Invalid response from server. Please check if the server is running.';
-                        if (errorDiv) {
-                            errorDiv.textContent = errorMsg;
-                            errorDiv.style.display = 'block';
-                        }
-                        showError(errorMsg);
-                    }
-                    return;
-                }
-                
-                // Restore button after reading response
-                if (submitButton) {
-                    submitButton.disabled = false;
-                    if (originalButtonText) submitButton.textContent = originalButtonText;
-                }
-                
-                // Restore button after reading response
-                if (submitButton) {
-                    submitButton.disabled = false;
-                    if (originalButtonText) submitButton.textContent = originalButtonText;
-                }
-                
-                // Check if response is OK after parsing
-                if (!response.ok) {
-                    const errorText = data.error || data.message || `Server error: ${response.status} ${response.statusText}`;
-                    if (errorDiv) {
-                        errorDiv.textContent = errorText;
-                        errorDiv.style.display = 'block';
-                    }
-                    showError(errorText);
-                    return;
-                }
-                
-                // Debug: Log the response data
-                console.log('Login response data:', data);
-                console.log('data.success:', data.success);
-                console.log('data.user:', data.user);
-                console.log('response.ok:', response.ok);
+                const data = await response.json();
                 
                 if (data.success && data.user) {
                     currentUser = data.user;
                     sessionId = data.sessionId;
                     saveSessionId(data.sessionId);
                     showNotification('Success', 'Account created successfully!');
-                    
-                    // Small delay to show notification, then redirect
-                    setTimeout(() => {
-                        showDashboard();
-                    }, 100);
+                    showDashboard();
                 } else {
                     const errorMsg = data.error || 'Failed to create account';
                     if (errorDiv) {
                         errorDiv.textContent = errorMsg;
                         errorDiv.style.display = 'block';
                     }
-                    showError(errorMsg);
                 }
             } catch (error) {
-                console.error('Signup error:', error);
-                
-                // Restore button if it was disabled
-                const submitButton = signupForm.querySelector('button[type="submit"]');
-                if (submitButton) {
-                    submitButton.disabled = false;
-                    const originalButtonText = submitButton.getAttribute('data-original-text');
-                    if (originalButtonText) submitButton.textContent = originalButtonText;
-                }
-                
-                let errorMsg = 'Error connecting to server';
-                if (error.message) {
-                    errorMsg += ': ' + error.message;
-                } else if (error.name === 'TypeError' && error.message && error.message.includes('fetch')) {
-                    errorMsg = 'Cannot connect to server. Please make sure the server is running at ' + API_BASE + '. If you just started the server, wait a few seconds and try again.';
-                } else if (error.name === 'TypeError') {
-                    errorMsg = 'Network error. Please check your internet connection and make sure the server is running.';
-                }
-                
+                const errorMsg = 'Error connecting to server';
                 if (errorDiv) {
                     errorDiv.textContent = errorMsg;
                     errorDiv.style.display = 'block';
                 }
-                showError(errorMsg);
             }
         });
     }
