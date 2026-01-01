@@ -3220,11 +3220,33 @@ function showSettingsPage() {
             
             <div class="settings-content">
                 <div id="settingsContentArea">
-                    ${getSettingsContent(selectedItem)}
+                    Loading...
                 </div>
             </div>
         </div>
     `;
+    
+    // Load content asynchronously
+    loadSettingsContent(selectedItem);
+}
+
+// Load settings content asynchronously
+async function loadSettingsContent(itemId) {
+    const contentArea = document.getElementById('settingsContentArea');
+    if (!contentArea) return;
+    
+    try {
+        let content = '';
+        if (itemId === 'business-settings') {
+            content = await getBusinessSettingsContent();
+        } else {
+            content = getSettingsContent(itemId);
+        }
+        contentArea.innerHTML = content;
+    } catch (error) {
+        console.error('Error loading settings content:', error);
+        contentArea.innerHTML = '<p>Error loading settings content</p>';
+    }
 }
 
 // Select settings menu item
@@ -3233,15 +3255,178 @@ function selectSettingsItem(itemId) {
     showSettingsPage();
 }
 
-// Get settings content based on selected item
-function getSettingsContent(itemId) {
-    const content = {
-        'business-settings': `
-            <h1 class="settings-content-title">Business settings</h1>
-            <div class="settings-content-body">
-                <p>Configure your business settings here.</p>
+// Get Business Settings content with actual merchant data
+async function getBusinessSettingsContent() {
+    // Get merchant data
+    let merchant = null;
+    let merchantPhone = '';
+    let merchantAddress = '';
+    
+    try {
+        const response = await authenticatedFetch(`${API_BASE}/merchants`);
+        const data = await response.json();
+        if (data.success && data.merchants && data.merchants.length > 0) {
+            merchant = data.merchants.find(m => m.is_active) || data.merchants[0];
+            merchantPhone = merchant.phone || '';
+            merchantAddress = merchant.address || '';
+        }
+    } catch (error) {
+        console.error('Error fetching merchant:', error);
+    }
+    
+    const businessName = merchant?.merchant_name || 'Not set';
+    const businessType = localStorage.getItem('businessType') || 'merchant';
+    const useDriverFleet = localStorage.getItem('useDriverFleet') === 'true';
+    const acceptTakeoutOrders = localStorage.getItem('acceptTakeoutOrders') === 'true';
+    const maxDeliveryTime = localStorage.getItem('maxDeliveryTime') || '60';
+    const orderPrepTime = localStorage.getItem('orderPrepTime') || '60';
+    
+    return `
+        <h1 class="settings-content-title">Business settings</h1>
+        
+        <!-- Business Details Section -->
+        <div class="business-settings-section">
+            <h3 class="settings-section-subtitle">Set your business details</h3>
+            
+            <div class="business-detail-field">
+                <div class="business-detail-label">Business name</div>
+                <div class="business-detail-value-container">
+                    <div class="business-detail-value" id="businessNameValue">${escapeHtml(businessName)}</div>
+                    <button class="btn-edit-icon" onclick="editBusinessName()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                        </svg>
+                    </button>
+                </div>
             </div>
-        `,
+            
+            <div class="business-detail-field">
+                <div class="business-detail-label">Business logo</div>
+                <div class="business-detail-value-container">
+                    <div class="business-logo-placeholder" id="businessLogoPlaceholder">
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                            <polyline points="21 15 16 10 5 21"></polyline>
+                        </svg>
+                    </div>
+                    <button class="btn-edit-icon" onclick="editBusinessLogo()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Business Type Details Section -->
+        <div class="business-settings-section">
+            <h3 class="settings-section-subtitle">Set your business type details</h3>
+            <p class="settings-instruction-text">If you are a delivery only business like Pizza shop where pick up is always from the same place, please choose the business type delivery only. Otherwise keep it pick up and delivery.</p>
+            
+            <div class="business-type-selection">
+                <div class="business-type-card ${businessType === 'merchant' ? 'active' : ''}" onclick="selectBusinessType('merchant')">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                        <polyline points="10 9 9 9 8 9"></polyline>
+                    </svg>
+                    <span>Merchant</span>
+                </div>
+                
+                <div class="business-type-card ${businessType === 'delivery-company' ? 'active' : ''}" onclick="selectBusinessType('delivery-company')">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M1 3h15v13H1z"></path>
+                        <path d="M16 8h4l3 3v5h-7V8z"></path>
+                        <circle cx="5.5" cy="18.5" r="2.5"></circle>
+                        <circle cx="18.5" cy="18.5" r="2.5"></circle>
+                    </svg>
+                    <span>Delivery company</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Contact and Address Information -->
+        <div class="business-settings-section">
+            <div class="business-input-field">
+                <label class="business-input-label">Merchant phone number</label>
+                <input type="tel" class="business-input" id="merchantPhone" value="${escapeHtml(merchantPhone)}" placeholder="Enter phone number">
+            </div>
+            
+            <div class="business-input-field">
+                <label class="business-input-label">Merchant store address</label>
+                <input type="text" class="business-input" id="merchantAddress" value="${escapeHtml(merchantAddress)}" placeholder="Enter store address">
+            </div>
+        </div>
+        
+        <!-- Operational Settings Toggles -->
+        <div class="business-settings-section">
+            <div class="business-toggle-field">
+                <div class="business-toggle-content">
+                    <label class="business-toggle-label">I will use my own driver fleet for delivery</label>
+                </div>
+                <label class="switch">
+                    <input type="checkbox" id="driverFleetToggle" ${useDriverFleet ? 'checked' : ''} onchange="toggleDriverFleet(this.checked)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            
+            <div class="business-toggle-field">
+                <div class="business-toggle-content">
+                    <label class="business-toggle-label">Accept takeout orders from integrations</label>
+                    <p class="business-toggle-description">Seamlessly accept and manage takeout orders from integrated delivery platforms in one centralized hub.</p>
+                </div>
+                <label class="switch">
+                    <input type="checkbox" id="takeoutOrdersToggle" ${acceptTakeoutOrders ? 'checked' : ''} onchange="toggleTakeoutOrders(this.checked)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+        </div>
+        
+        <!-- Service Times Section -->
+        <div class="business-settings-section">
+            <h3 class="settings-section-subtitle">Set your service times</h3>
+            
+            <div class="business-detail-field">
+                <div class="business-detail-label">Maximum time allowed for delivery (on-demand)</div>
+                <div class="business-detail-value-container">
+                    <div class="business-detail-value" id="maxDeliveryTimeValue">${maxDeliveryTime} Minutes</div>
+                    <button class="btn-edit-icon" onclick="editMaxDeliveryTime()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="business-detail-field">
+                <div class="business-detail-label">Order preparation time</div>
+                <div class="business-detail-value-container">
+                    <div class="business-detail-value" id="orderPrepTimeValue">${orderPrepTime} Minutes</div>
+                    <button class="btn-edit-icon" onclick="editOrderPrepTime()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// Get settings content based on selected item
+async function getSettingsContent(itemId) {
+    if (itemId === 'business-settings') {
+        return await getBusinessSettingsContent();
+    }
+    
+    const content = {
         'brand-customization': `
             <h1 class="settings-content-title">Brand customization</h1>
             <div class="settings-content-body">
@@ -3301,8 +3486,112 @@ function getSettingsContent(itemId) {
     return content[itemId] || content['business-settings'];
 }
 
+// Business settings helper functions
+function editBusinessName() {
+    const valueElement = document.getElementById('businessNameValue');
+    if (!valueElement) return;
+    
+    const currentValue = valueElement.textContent;
+    const newValue = prompt('Enter business name:', currentValue);
+    
+    if (newValue !== null && newValue.trim() !== '') {
+        valueElement.textContent = newValue.trim();
+        // TODO: Save to backend
+        showNotification('Success', 'Business name updated', 'success');
+    }
+}
+
+function editBusinessLogo() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const logoPlaceholder = document.getElementById('businessLogoPlaceholder');
+                if (logoPlaceholder) {
+                    logoPlaceholder.innerHTML = `<img src="${event.target.result}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 8px;">`;
+                }
+                // TODO: Save to backend
+                showNotification('Success', 'Business logo updated', 'success');
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+    input.click();
+}
+
+function selectBusinessType(type) {
+    localStorage.setItem('businessType', type);
+    // Update UI
+    document.querySelectorAll('.business-type-card').forEach(card => {
+        card.classList.remove('active');
+    });
+    event.target.closest('.business-type-card')?.classList.add('active');
+    showNotification('Success', 'Business type updated', 'success');
+}
+
+function toggleDriverFleet(enabled) {
+    localStorage.setItem('useDriverFleet', enabled);
+    showNotification('Success', `Driver fleet ${enabled ? 'enabled' : 'disabled'}`, 'success');
+}
+
+function toggleTakeoutOrders(enabled) {
+    localStorage.setItem('acceptTakeoutOrders', enabled);
+    showNotification('Success', `Takeout orders ${enabled ? 'enabled' : 'disabled'}`, 'success');
+}
+
+function editMaxDeliveryTime() {
+    const valueElement = document.getElementById('maxDeliveryTimeValue');
+    if (!valueElement) return;
+    
+    const currentValue = valueElement.textContent.replace(' Minutes', '');
+    const newValue = prompt('Enter maximum delivery time (minutes):', currentValue);
+    
+    if (newValue !== null && newValue.trim() !== '') {
+        const minutes = parseInt(newValue.trim());
+        if (!isNaN(minutes) && minutes > 0) {
+            valueElement.textContent = `${minutes} Minutes`;
+            localStorage.setItem('maxDeliveryTime', minutes.toString());
+            // TODO: Save to backend
+            showNotification('Success', 'Maximum delivery time updated', 'success');
+        } else {
+            showNotification('Error', 'Please enter a valid number', 'error');
+        }
+    }
+}
+
+function editOrderPrepTime() {
+    const valueElement = document.getElementById('orderPrepTimeValue');
+    if (!valueElement) return;
+    
+    const currentValue = valueElement.textContent.replace(' Minutes', '');
+    const newValue = prompt('Enter order preparation time (minutes):', currentValue);
+    
+    if (newValue !== null && newValue.trim() !== '') {
+        const minutes = parseInt(newValue.trim());
+        if (!isNaN(minutes) && minutes > 0) {
+            valueElement.textContent = `${minutes} Minutes`;
+            localStorage.setItem('orderPrepTime', minutes.toString());
+            // TODO: Save to backend
+            showNotification('Success', 'Order preparation time updated', 'success');
+        } else {
+            showNotification('Error', 'Please enter a valid number', 'error');
+        }
+    }
+}
+
 // Make functions globally available
 window.selectSettingsItem = selectSettingsItem;
+window.editBusinessName = editBusinessName;
+window.editBusinessLogo = editBusinessLogo;
+window.selectBusinessType = selectBusinessType;
+window.toggleDriverFleet = toggleDriverFleet;
+window.toggleTakeoutOrders = toggleTakeoutOrders;
+window.editMaxDeliveryTime = editMaxDeliveryTime;
+window.editOrderPrepTime = editOrderPrepTime;
 
 // Handle profile picture upload
 function handleProfilePictureUpload(e) {

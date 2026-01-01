@@ -1861,3 +1861,196 @@ body {
     color: #475569;
     line-height: 1.6;
 }
+
+/* Business Settings Styles */
+.business-settings-section {
+    margin-bottom: 40px;
+    padding-bottom: 32px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.business-settings-section:last-child {
+    border-bottom: none;
+}
+
+.settings-section-subtitle {
+    font-size: 18px;
+    font-weight: 600;
+    color: #0f172a;
+    margin-bottom: 16px;
+}
+
+.settings-instruction-text {
+    font-size: 14px;
+    color: #64748b;
+    line-height: 1.6;
+    margin-bottom: 24px;
+}
+
+.business-detail-field {
+    margin-bottom: 24px;
+}
+
+.business-detail-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: #475569;
+    margin-bottom: 8px;
+}
+
+.business-detail-value-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+
+.business-detail-value {
+    font-size: 15px;
+    font-weight: 500;
+    color: #0f172a;
+    flex: 1;
+}
+
+.btn-edit-icon {
+    background: transparent;
+    border: none;
+    color: #64748b;
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.btn-edit-icon:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+}
+
+.business-logo-placeholder {
+    width: 60px;
+    height: 60px;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #94a3b8;
+}
+
+.business-type-selection {
+    display: flex;
+    gap: 16px;
+    margin-top: 16px;
+}
+
+.business-type-card {
+    flex: 1;
+    padding: 20px;
+    background: #f8fafc;
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+.business-type-card:hover {
+    border-color: #cbd5e1;
+    background: #f1f5f9;
+}
+
+.business-type-card.active {
+    background: #dcfce7;
+    border-color: #22c55e;
+    color: #166534;
+}
+
+.business-type-card svg {
+    color: #64748b;
+}
+
+.business-type-card.active svg {
+    color: #166534;
+}
+
+.business-type-card span {
+    font-size: 15px;
+    font-weight: 600;
+    color: #475569;
+}
+
+.business-type-card.active span {
+    color: #166534;
+}
+
+.business-input-field {
+    margin-bottom: 20px;
+}
+
+.business-input-label {
+    display: block;
+    font-size: 14px;
+    font-weight: 500;
+    color: #475569;
+    margin-bottom: 8px;
+}
+
+.business-input {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 15px;
+    color: #0f172a;
+    background: #ffffff;
+    transition: all 0.2s ease;
+}
+
+.business-input:focus {
+    outline: none;
+    border-color: #22c55e;
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
+}
+
+.business-toggle-field {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 20px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    margin-bottom: 16px;
+}
+
+.business-toggle-content {
+    flex: 1;
+    margin-right: 16px;
+}
+
+.business-toggle-label {
+    display: block;
+    font-size: 15px;
+    font-weight: 500;
+    color: #0f172a;
+    margin-bottom: 8px;
+    cursor: pointer;
+}
+
+.business-toggle-description {
+    font-size: 13px;
+    color: #64748b;
+    line-height: 1.5;
+    margin: 0;
+}
