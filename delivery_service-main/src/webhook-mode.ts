@@ -221,6 +221,30 @@ class GloriaFoodWebhookServer {
       return null;
     }
 
+    // Check if order was already sent to DoorDash
+    const orderId = this.getOrderIdentifier(orderData);
+    if (orderId) {
+      try {
+        const existingOrder = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId));
+        if (existingOrder && (existingOrder as any).sent_to_doordash) {
+          console.log(chalk.yellow(`⚠️  Order ${orderId} already sent to DoorDash, skipping duplicate`));
+          // Return existing DoorDash info if available
+          if ((existingOrder as any).doordash_order_id || (existingOrder as any).doordash_tracking_url) {
+            return {
+              id: (existingOrder as any).doordash_order_id,
+              external_delivery_id: orderId,
+              status: 'existing',
+              tracking_url: (existingOrder as any).doordash_tracking_url
+            };
+          }
+          return null;
+        }
+      } catch (error: any) {
+        console.log(chalk.yellow(`⚠️  Could not check if order already sent: ${error.message}`));
+        // Continue anyway
+      }
+    }
+
     try {
       // Convert to DoorDash Drive delivery payload
       const drivePayload = this.doorDashClient.convertGloriaFoodToDrive(orderData);
@@ -244,6 +268,28 @@ class GloriaFoodWebhookServer {
         tracking_url: response.tracking_url 
       };
     } catch (error: any) {
+      // Handle duplicate delivery ID error (409)
+      if (error.message && error.message.includes('409') && error.message.includes('duplicate_delivery_id')) {
+        console.log(chalk.yellow(`⚠️  Order ${orderId || 'unknown'} already exists in DoorDash (duplicate delivery ID)`));
+        // Try to get existing order info from database
+        if (orderId) {
+          try {
+            const existingOrder = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId));
+            if (existingOrder && (existingOrder as any).doordash_order_id) {
+              return {
+                id: (existingOrder as any).doordash_order_id,
+                external_delivery_id: orderId,
+                status: 'existing',
+                tracking_url: (existingOrder as any).doordash_tracking_url
+              };
+            }
+          } catch (dbError) {
+            // Ignore database errors
+          }
+        }
+        return null;
+      }
+      
       // Log error but don't fail the webhook
       console.error(chalk.red(`❌ Failed to send order to DoorDash: ${error.message}`));
       console.error(chalk.red(`   Error details: ${error.stack || 'No stack trace'}`));

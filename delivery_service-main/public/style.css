@@ -44,14 +44,6 @@ body {
     object-fit: contain;
 }
 
-.tekmax-company-name {
-    font-size: 18px;
-    font-weight: 700;
-    color: #0f172a;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, sans-serif;
-    letter-spacing: -0.3px;
-}
-
 .tekmax-text {
     font-size: 26px;
     font-weight: 700;
@@ -297,6 +289,32 @@ body {
 }
 
 .btn-primary:active {
+    transform: translateY(0);
+}
+
+.btn-danger {
+    background: #ef4444;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-danger:hover {
+    background: #dc2626;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+.btn-danger:active {
+    background: #b91c1c;
     transform: translateY(0);
 }
 
@@ -583,11 +601,6 @@ body {
     border: 1px solid #e2e8f0;
 }
 
-.merchant-modal-content {
-    max-width: 500px;
-    margin: 20px;
-}
-
 @keyframes slideUp {
     from {
         transform: translateY(20px);
@@ -676,26 +689,6 @@ body {
 .form-group textarea {
     resize: vertical;
     min-height: 100px;
-}
-
-/* Checkbox group styling - left align checkbox */
-.checkbox-group {
-    margin-bottom: 24px;
-}
-
-.checkbox-group .checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 4px;
-    cursor: pointer;
-}
-
-.checkbox-group .checkbox-label input[type="checkbox"] {
-    width: auto;
-    margin: 0;
-    cursor: pointer;
-    flex-shrink: 0;
 }
 
 .modal-actions {
@@ -848,30 +841,8 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    background-image: url('https://media.licdn.com/dms/image/v2/D560BAQHPtxnF-6ws_w/company-logo_200_200/company-logo_200_200/0/1730509053465/hellotekmax_logo?e=2147483647&v=beta&t=1Ztf8UScfnTQjphAVDFVwr9Ket7fhIUFP2PSz43nyJE');
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
-    background-attachment: fixed;
-    position: relative;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     padding: 20px;
-}
-
-/* Add overlay for better readability */
-.auth-container::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(255, 255, 255, 0.85);
-    z-index: 0;
-}
-
-.auth-container > * {
-    position: relative;
-    z-index: 1;
 }
 
 .auth-box {
@@ -888,26 +859,11 @@ body {
     margin-bottom: 32px;
 }
 
-.auth-logo-container {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 16px;
-    margin-bottom: 16px;
-}
-
 .auth-logo {
     width: 80px;
     height: 80px;
+    margin-bottom: 16px;
     border-radius: 12px;
-}
-
-.auth-company-name {
-    font-size: 28px;
-    font-weight: 700;
-    color: #0f172a;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, sans-serif;
-    letter-spacing: -0.5px;
 }
 
 .auth-header h1 {
@@ -1555,4 +1511,55 @@ body {
     font-size: 14px;
     color: #0f172a;
     font-weight: 500;
+}
+
+/* Switch/Toggle for Ready for Pickup */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #cbd5e1;
+    transition: .4s;
+    border-radius: 24px;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+
+.switch input:checked + .slider {
+    background-color: #22c55e;
+}
+
+.switch input:checked + .slider:before {
+    transform: translateX(20px);
+}
+
+.switch input:disabled + .slider {
+    cursor: not-allowed;
+    opacity: 0.6;
 }

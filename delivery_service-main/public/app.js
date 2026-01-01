@@ -458,9 +458,6 @@ function navigateToPage(page) {
         case 'orders':
             showOrdersPage();
             break;
-        case 'merchants':
-            showMerchantsPage();
-            break;
         case 'dispatch':
             showDispatchPage();
             break;
@@ -510,6 +507,13 @@ function showOrdersPage() {
                             <line x1="12" y1="15" x2="12" y2="3"></line>
                         </svg>
                         Export to Excel
+                    </button>
+                    <button class="btn-danger" id="deleteSelectedBtn" style="display: flex; align-items: center; gap: 8px; background-color: #ef4444; color: white;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        </svg>
+                        Delete Selected
                     </button>
                     <button class="btn-primary" id="newOrderBtn">+ New order</button>
                 </div>
@@ -657,6 +661,12 @@ function initializeOrdersPage() {
     const exportOrdersBtn = document.getElementById('exportOrdersBtn');
     if (exportOrdersBtn) {
         exportOrdersBtn.addEventListener('click', exportOrdersToExcel);
+    }
+    
+    // Delete selected orders button
+    const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
+    if (deleteSelectedBtn) {
+        deleteSelectedBtn.addEventListener('click', deleteSelectedOrders);
     }
 }
 
@@ -2892,24 +2902,89 @@ function hasScheduledDeliveryTime(order) {
                          timeObj.scheduled_delivery ||
                          null;
     
-    if (!scheduledTime) return false;
-    
-    // Check if scheduled time is in the future (not "as soon as possible")
+    // Check if scheduled time is in the future (any future time means it's scheduled)
     try {
         const scheduledDate = new Date(scheduledTime);
         const now = new Date();
         
-        // If scheduled time is in the future (more than current time), it's scheduled
-        // Also check if it's more than 30 minutes from now to avoid showing "as soon as possible" orders
-        const timeDiffFromNow = scheduledDate.getTime() - now.getTime();
-        const minutesDiffFromNow = timeDiffFromNow / (1000 * 60);
-        
-        // Scheduled if: time is in the future AND more than 30 minutes from now
-        // This ensures orders scheduled for tomorrow or later appear in Scheduled tab
-        return scheduledDate > now && minutesDiffFromNow > 30;
+        // If scheduled time is in the future (even 1 minute), it's scheduled
+        // This will catch orders scheduled for tomorrow, specific times, etc.
+        if (scheduledDate > now) {
+            return true;
+        }
     } catch (e) {
-        return false;
+        // Ignore parsing errors
     }
+    
+    // Also check delivery time if scheduled time not found - use same comprehensive extraction
+    const deliveryTime = order.delivery_time || 
+                        order.deliveryTime || 
+                        order.delivery_at ||
+                        order.deliveryAt ||
+                        order.delivery_datetime ||
+                        order.deliveryDateTime ||
+                        order.scheduled_delivery_time ||
+                        order.scheduledDeliveryTime ||
+                        rawData.delivery_time ||
+                        rawData.deliveryTime ||
+                        rawData.delivery_at ||
+                        rawData.deliveryAt ||
+                        rawData.delivery_datetime ||
+                        rawData.deliveryDateTime ||
+                        rawData.requested_delivery_time ||
+                        rawData.requestedDeliveryTime ||
+                        rawData.scheduled_delivery_time ||
+                        rawData.scheduledDeliveryTime ||
+                        rawData.preferred_delivery_time ||
+                        rawData.preferredDeliveryTime ||
+                        deliveryObj.delivery_time ||
+                        deliveryObj.deliveryTime ||
+                        deliveryObj.scheduled_delivery_time ||
+                        deliveryObj.requested_delivery_time ||
+                        deliveryObj.delivery_at ||
+                        scheduleObj.delivery_time ||
+                        scheduleObj.scheduled_delivery_time ||
+                        scheduleObj.requested_delivery_time ||
+                        timeObj.delivery ||
+                        timeObj.delivery_time ||
+                        null;
+    
+    if (deliveryTime) {
+        try {
+            const deliveryDate = new Date(deliveryTime);
+            const now = new Date();
+            const orderCreatedAt = order.created_at || order.fetched_at || order.updated_at;
+            
+            // If delivery time is in the future, it's scheduled
+            if (deliveryDate > now) {
+                // Also check if it's significantly different from order creation time
+                // (to distinguish scheduled orders from "as soon as possible")
+                if (orderCreatedAt) {
+                    try {
+                        const orderDate = new Date(orderCreatedAt);
+                        const timeDiff = deliveryDate.getTime() - orderDate.getTime();
+                        const minutesDiff = timeDiff / (1000 * 60);
+                        
+                        // If delivery time is more than 15 minutes from order creation, it's scheduled
+                        // This catches orders scheduled for tomorrow or specific times
+                        if (minutesDiff > 15) {
+                            return true;
+                        }
+                    } catch (e) {
+                        // If can't compare, still consider it scheduled if in future
+                        return true;
+                    }
+                } else {
+                    // No order creation time, but delivery is in future = scheduled
+                    return true;
+                }
+            }
+        } catch (e) {
+            // Ignore parsing errors
+        }
+    }
+    
+    return false;
 }
 
 // Helper function to get order category
@@ -3085,7 +3160,11 @@ function createOrderRow(order) {
     const orderPlaced = formatDate(order.fetched_at || order.created_at || order.updated_at);
     
     // Get distance from various possible fields (more comprehensive)
-    const distance = order.distance || 
+    const deliveryObj = rawData.delivery || {};
+    const locationObj = rawData.location || {};
+    const restaurantObj = rawData.restaurant || rawData.store || {};
+    
+    let distance = order.distance || 
                     rawData.distance || 
                     rawData.delivery_distance ||
                     rawData.distance_km ||
@@ -3093,14 +3172,30 @@ function createOrderRow(order) {
                     rawData.distanceKm ||
                     rawData.distanceMiles ||
                     rawData.deliveryDistance ||
-                    (rawData.delivery && rawData.delivery.distance) ||
-                    (rawData.delivery && rawData.delivery.delivery_distance) ||
-                    (rawData.delivery && rawData.delivery.distance_km) ||
-                    (rawData.delivery && rawData.delivery.distanceKm) ||
-                    (rawData.location && rawData.location.distance) ||
-                    (rawData.restaurant && rawData.restaurant.distance) ||
-                    (rawData.store && rawData.store.distance) ||
+                    deliveryObj.distance ||
+                    deliveryObj.delivery_distance ||
+                    deliveryObj.distance_km ||
+                    deliveryObj.distanceKm ||
+                    locationObj.distance ||
+                    restaurantObj.distance ||
                     null;
+    
+    // If no distance found, try to calculate from coordinates if available
+    if (!distance && rawData.latitude && rawData.longitude && restaurantObj.latitude && restaurantObj.longitude) {
+        try {
+            // Haversine formula to calculate distance
+            const R = 6371; // Earth's radius in km
+            const dLat = (rawData.latitude - restaurantObj.latitude) * Math.PI / 180;
+            const dLon = (rawData.longitude - restaurantObj.longitude) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(restaurantObj.latitude * Math.PI / 180) * Math.cos(rawData.latitude * Math.PI / 180) *
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            distance = R * c;
+        } catch (e) {
+            // Ignore calculation errors
+        }
+    }
     let formattedDistance = 'N/A';
     if (distance) {
         if (typeof distance === 'number') {
@@ -3126,7 +3221,6 @@ function createOrderRow(order) {
     // Get pickup time from various possible fields (comprehensive search)
     const scheduleObj = rawData.schedule || {};
     const timeObj = rawData.time || rawData.times || {};
-    const deliveryObj = rawData.delivery || {};
     
     const pickupTime = order.pickup_time || 
                       order.pickupTime || 
@@ -3134,6 +3228,8 @@ function createOrderRow(order) {
                       order.pickupAt ||
                       order.pickup_datetime ||
                       order.pickupDateTime ||
+                      order.requested_pickup_time ||
+                      order.requestedPickupTime ||
                       rawData.pickup_time || 
                       rawData.pickupTime || 
                       rawData.requested_pickup_time ||
@@ -3147,12 +3243,14 @@ function createOrderRow(order) {
                       rawData.requested_pickup_datetime ||
                       rawData.estimated_pickup_time ||
                       rawData.estimatedPickupTime ||
+                      rawData.pickup_time_iso ||
                       deliveryObj.pickup_time ||
                       deliveryObj.pickupTime ||
                       deliveryObj.requested_pickup_time ||
                       deliveryObj.requestedPickupTime ||
                       deliveryObj.pickup_at ||
                       deliveryObj.pickupAt ||
+                      deliveryObj.pickup_datetime ||
                       scheduleObj.pickup_time ||
                       scheduleObj.pickupTime ||
                       scheduleObj.requested_pickup_time ||
@@ -3160,6 +3258,7 @@ function createOrderRow(order) {
                       scheduleObj.scheduled_pickup_time ||
                       timeObj.pickup ||
                       timeObj.pickup_time ||
+                      (rawData.restaurant && rawData.restaurant.pickup_time) ||
                       null;
     
     // Get delivery time from various possible fields (comprehensive search)
@@ -3285,14 +3384,27 @@ function createOrderRow(order) {
         }
     }
     
-    let formattedReadyForPickup = 'N/A';
+    // Ready for pickup - show as switch/toggle based on status or time
+    let isReadyForPickup = false;
+    const statusLower = (order.status || '').toLowerCase();
     if (readyForPickup) {
         try {
-            formattedReadyForPickup = formatDate(readyForPickup);
+            const readyDate = new Date(readyForPickup);
+            const now = new Date();
+            isReadyForPickup = readyDate <= now; // Ready if time has passed
         } catch (e) {
-            formattedReadyForPickup = String(readyForPickup);
+            // If can't parse date, check if it's a boolean or status
+            isReadyForPickup = readyForPickup === true || readyForPickup === 'true' || readyForPickup === 'ready';
         }
     }
+    // Also check status - orders with "ready", "prepared", "out_for_delivery" are ready
+    if (!isReadyForPickup && (statusLower.includes('ready') || statusLower.includes('prepared') || statusLower.includes('out_for_delivery'))) {
+        isReadyForPickup = true;
+    }
+    
+    const formattedReadyForPickup = isReadyForPickup 
+        ? `<label class="switch"><input type="checkbox" checked disabled><span class="slider"></span></label>`
+        : `<label class="switch"><input type="checkbox" disabled><span class="slider"></span></label>`;
     
     const formattedDriver = driver ? escapeHtml(String(driver)) : 'N/A';
     
@@ -3474,4 +3586,58 @@ async function deleteOrder(orderId) {
 }
 // Make deleteOrder available globally
 window.deleteOrder = deleteOrder;
+
+// Delete selected orders
+async function deleteSelectedOrders() {
+    const checkboxes = document.querySelectorAll('.order-checkbox:checked');
+    
+    if (checkboxes.length === 0) {
+        showNotification('Info', 'Please select at least one order to delete', 'info');
+        return;
+    }
+    
+    const orderIds = Array.from(checkboxes).map(cb => cb.value);
+    const count = orderIds.length;
+    
+    if (!confirm(`Are you sure you want to delete ${count} order(s)? This action cannot be undone.`)) {
+        return;
+    }
+    
+    try {
+        let successCount = 0;
+        let failCount = 0;
+        
+        // Delete orders one by one
+        for (const orderId of orderIds) {
+            try {
+                const response = await authenticatedFetch(`${API_BASE}/orders/${orderId}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    successCount++;
+                } else {
+                    failCount++;
+                    console.error(`Failed to delete order ${orderId}:`, data.error);
+                }
+            } catch (error) {
+                failCount++;
+                console.error(`Error deleting order ${orderId}:`, error);
+            }
+        }
+        
+        if (successCount > 0) {
+            showNotification('Success', `Successfully deleted ${successCount} order(s)${failCount > 0 ? `. ${failCount} failed.` : ''}`);
+            // Reload orders
+            loadOrders();
+        } else {
+            showError(`Failed to delete all orders. ${failCount} order(s) failed.`);
+        }
+    } catch (error) {
+        console.error('Error deleting selected orders:', error);
+        showError('Error deleting selected orders: ' + error.message);
+    }
+}
 
