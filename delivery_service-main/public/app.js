@@ -4772,6 +4772,13 @@ async function loadOrders() {
         const response = await authenticatedFetch(url);
         
         if (!response.ok) {
+            // Handle 401 (Unauthorized) - session might have expired
+            if (response.status === 401) {
+                console.warn('Authentication failed (401), redirecting to login...');
+                saveSessionId(null);
+                showLogin();
+                return;
+            }
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         
@@ -5128,8 +5135,8 @@ function filterAndDisplayOrders() {
 function displayOrders(orders) {
     const tbody = document.getElementById('ordersTableBody');
     
+    // Silently return if orders table doesn't exist (we might be on a different page)
     if (!tbody) {
-        console.error('Orders table body not found!');
         return;
     }
     
