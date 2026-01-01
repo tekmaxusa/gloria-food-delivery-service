@@ -286,6 +286,16 @@ function setupAuth() {
                     body: JSON.stringify({ email, password })
                 });
                 
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    const errorMsg = errorData.error || `Server error: ${response.status}`;
+                    if (errorDiv) {
+                        errorDiv.textContent = errorMsg;
+                        errorDiv.style.display = 'block';
+                    }
+                    return;
+                }
+                
                 const data = await response.json();
                 
                 if (data.success && data.user) {
@@ -293,6 +303,8 @@ function setupAuth() {
                     sessionId = data.sessionId;
                     saveSessionId(data.sessionId);
                     showNotification('Success', 'Login successful!');
+                    
+                    // Redirect to dashboard
                     showDashboard();
                 } else {
                     const errorMsg = data.error || 'Invalid email or password';
@@ -302,7 +314,8 @@ function setupAuth() {
                     }
                 }
             } catch (error) {
-                const errorMsg = 'Error connecting to server';
+                console.error('Login error:', error);
+                const errorMsg = 'Error connecting to server: ' + (error.message || 'Please check if the server is running');
                 if (errorDiv) {
                     errorDiv.textContent = errorMsg;
                     errorDiv.style.display = 'block';
@@ -351,6 +364,16 @@ function setupAuth() {
                     body: JSON.stringify({ email, password, fullName: name })
                 });
                 
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    const errorMsg = errorData.error || `Server error: ${response.status}`;
+                    if (errorDiv) {
+                        errorDiv.textContent = errorMsg;
+                        errorDiv.style.display = 'block';
+                    }
+                    return;
+                }
+                
                 const data = await response.json();
                 
                 if (data.success && data.user) {
@@ -367,7 +390,8 @@ function setupAuth() {
                     }
                 }
             } catch (error) {
-                const errorMsg = 'Error connecting to server';
+                console.error('Signup error:', error);
+                const errorMsg = 'Error connecting to server: ' + (error.message || 'Please check if the server is running');
                 if (errorDiv) {
                     errorDiv.textContent = errorMsg;
                     errorDiv.style.display = 'block';
