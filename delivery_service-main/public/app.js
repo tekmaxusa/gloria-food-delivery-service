@@ -114,47 +114,17 @@ function showLogin() {
 
 // Show dashboard
 function showDashboard() {
-    console.log('showDashboard() called');
     const authContainer = document.getElementById('authContainer');
     const dashboardContainer = document.getElementById('dashboardContainer');
     
-    console.log('Auth container:', authContainer);
-    console.log('Dashboard container:', dashboardContainer);
-    
-    if (authContainer) {
-        authContainer.classList.add('hidden');
-        console.log('Auth container hidden');
-    } else {
-        console.error('Auth container not found!');
-    }
-    
-    if (dashboardContainer) {
-        dashboardContainer.classList.remove('hidden');
-        console.log('Dashboard container shown');
-    } else {
-        console.error('Dashboard container not found!');
-    }
+    if (authContainer) authContainer.classList.add('hidden');
+    if (dashboardContainer) dashboardContainer.classList.remove('hidden');
     
     // Show dashboard page by default
-    try {
-        showDashboardPage();
-        console.log('Dashboard page shown');
-        // Load dashboard data
-        loadDashboardData();
-    } catch (error) {
-        console.error('Error showing dashboard page:', error);
-        // Still show the dashboard container even if page setup fails
-    }
+    showDashboardPage();
     
     // Start auto-refresh only when authenticated
-    try {
-        startAutoRefresh();
-        console.log('Auto-refresh started');
-    } catch (error) {
-        console.error('Error starting auto-refresh:', error);
-    }
-    
-    console.log('showDashboard() completed');
+    startAutoRefresh();
 }
 
 // Setup dashboard UI elements
@@ -291,9 +261,6 @@ function setupAuth() {
         
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            e.stopPropagation();
-            e.stopImmediatePropagation();
-            
             const email = document.getElementById('loginEmail')?.value;
             const password = document.getElementById('loginPassword')?.value;
             const errorDiv = document.getElementById('loginError');
@@ -359,11 +326,6 @@ function setupAuth() {
                     }
                 } catch (parseError) {
                     console.error('Failed to parse login response:', parseError);
-                    // Restore button
-                    if (submitButton) {
-                        submitButton.disabled = false;
-                        if (originalButtonText) submitButton.textContent = originalButtonText;
-                    }
                     // Check if response is not OK
                     if (!response.ok) {
                         const errorMsg = `Server error: ${response.status} ${response.statusText}. ${responseText ? responseText.substring(0, 100) : 'No response body'}`;
@@ -383,13 +345,14 @@ function setupAuth() {
                     return;
                 }
                 
+                // Restore button after reading response
+                if (submitButton) {
+                    submitButton.disabled = false;
+                    if (originalButtonText) submitButton.textContent = originalButtonText;
+                }
+                
                 // Check if response is OK after parsing
                 if (!response.ok) {
-                    // Restore button
-                    if (submitButton) {
-                        submitButton.disabled = false;
-                        if (originalButtonText) submitButton.textContent = originalButtonText;
-                    }
                     const errorText = data.error || data.message || `Server error: ${response.status} ${response.statusText}`;
                     if (errorDiv) {
                         errorDiv.textContent = errorText;
@@ -399,46 +362,13 @@ function setupAuth() {
                     return;
                 }
                 
-                // Debug: Log the response data
-                console.log('Login response data:', data);
-                console.log('data.success:', data.success);
-                console.log('data.user:', data.user);
-                console.log('response.ok:', response.ok);
-                
                 if (data.success && data.user) {
-                    console.log('Login successful, setting user and redirecting...');
                     currentUser = data.user;
                     sessionId = data.sessionId;
                     saveSessionId(data.sessionId);
-                    
-                    // Restore button before redirecting
-                    if (submitButton) {
-                        submitButton.disabled = false;
-                        if (originalButtonText) submitButton.textContent = originalButtonText;
-                    }
-                    
-                    // Clear form
-                    loginForm.reset();
-                    
-                    // Show notification
                     showNotification('Success', 'Login successful!');
-                    
-                    // Redirect immediately to dashboard - use setTimeout to ensure DOM is ready
-                    console.log('Calling showDashboard()...');
-                    setTimeout(() => {
-                        showDashboard();
-                        console.log('showDashboard() called');
-                    }, 100);
-                    
-                    // Prevent any further form submission
-                    return false;
+                    showDashboard();
                 } else {
-                    // Restore button
-                    if (submitButton) {
-                        submitButton.disabled = false;
-                        if (originalButtonText) submitButton.textContent = originalButtonText;
-                    }
-                    console.log('Login failed - success:', data.success, 'user:', data.user);
                     const errorMsg = data.error || 'Invalid email or password';
                     if (errorDiv) {
                         errorDiv.textContent = errorMsg;
@@ -471,13 +401,7 @@ function setupAuth() {
                     errorDiv.style.display = 'block';
                 }
                 showError(errorMsg);
-                
-                // Prevent form submission
-                return false;
             }
-            
-            // Always return false to prevent form submission
-            return false;
         });
     }
     
@@ -678,77 +602,44 @@ function setupAuth() {
         });
     }
     
-    // Show signup form - use a named function to allow removal
-    function handleShowSignup(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        console.log('Show signup clicked');
-        const loginForm = document.getElementById('loginForm');
-        const signupForm = document.getElementById('signupForm');
-        
-        console.log('Login form:', loginForm);
-        console.log('Signup form:', signupForm);
-        
-        if (loginForm) {
-            loginForm.classList.remove('active');
-            console.log('Login form active class removed');
-        }
-        if (signupForm) {
-            signupForm.classList.add('active');
-            console.log('Signup form active class added, has active:', signupForm.classList.contains('active'));
-        }
-        
-        // Clear any error messages
-        const loginError = document.getElementById('loginError');
-        if (loginError) {
-            loginError.style.display = 'none';
-            loginError.textContent = '';
-        }
-    }
-    
+    // Show signup form
     const showSignupLink = document.getElementById('showSignup');
     if (showSignupLink) {
-        // Remove existing listener if any
-        showSignupLink.removeEventListener('click', handleShowSignup);
-        showSignupLink.addEventListener('click', handleShowSignup);
-        console.log('Signup link listener attached');
-    } else {
-        console.error('showSignup element not found!');
+        showSignupLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            const loginForm = document.getElementById('loginForm');
+            const signupForm = document.getElementById('signupForm');
+            
+            if (loginForm) loginForm.classList.remove('active');
+            if (signupForm) signupForm.classList.add('active');
+            
+            // Clear any error messages
+            const loginError = document.getElementById('loginError');
+            if (loginError) {
+                loginError.style.display = 'none';
+                loginError.textContent = '';
+            }
+        });
     }
     
-    // Show login form - use a named function to allow removal
-    function handleShowLogin(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        console.log('Show login clicked');
-        const loginForm = document.getElementById('loginForm');
-        const signupForm = document.getElementById('signupForm');
-        
-        if (signupForm) {
-            signupForm.classList.remove('active');
-            console.log('Signup form active class removed');
-        }
-        if (loginForm) {
-            loginForm.classList.add('active');
-            console.log('Login form active class added');
-        }
-        
-        // Clear any error messages
-        const signupError = document.getElementById('signupError');
-        if (signupError) {
-            signupError.style.display = 'none';
-            signupError.textContent = '';
-        }
-    }
-    
+    // Show login form
     const showLoginLink = document.getElementById('showLogin');
     if (showLoginLink) {
-        // Remove existing listener if any
-        showLoginLink.removeEventListener('click', handleShowLogin);
-        showLoginLink.addEventListener('click', handleShowLogin);
-        console.log('Login link listener attached');
-    } else {
-        console.error('showLogin element not found!');
+        showLoginLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            const loginForm = document.getElementById('loginForm');
+            const signupForm = document.getElementById('signupForm');
+            
+            if (signupForm) signupForm.classList.remove('active');
+            if (loginForm) loginForm.classList.add('active');
+            
+            // Clear any error messages
+            const signupError = document.getElementById('signupError');
+            if (signupError) {
+                signupError.style.display = 'none';
+                signupError.textContent = '';
+            }
+        });
     }
     
     // Logout button is handled in setupHeaderButtons()
@@ -1468,11 +1359,7 @@ window.deleteMerchant = deleteMerchant;
 
 // Show Dashboard page
 function showDashboardPage() {
-    const mainContainer = document.querySelector('.main-container') || document.getElementById('mainContainer');
-    if (!mainContainer) {
-        console.error('Main container not found!');
-        return;
-    }
+    const mainContainer = document.querySelector('.main-container');
     mainContainer.innerHTML = `
         <div class="orders-header">
             <h1 class="page-title">Dashboard</h1>
