@@ -821,16 +821,253 @@ function showDriversPage() {
                     </tbody>
                 </table>
         </div>
+        
+        <!-- Driver Modal -->
+        <div id="driverModal" class="modal hidden">
+            <div class="modal-content merchant-modal-content">
+                <div class="modal-header">
+                    <h2 id="driverModalTitle">Add New Driver</h2>
+                    <button class="modal-close" id="closeDriverModal">&times;</button>
+                </div>
+                <form id="driverForm" class="modal-body">
+                    <div class="form-group">
+                        <label>Driver Name <span style="color: red;">*</span></label>
+                        <input type="text" id="driverName" required placeholder="Enter Driver Name">
+                    </div>
+                    <div class="form-group">
+                        <label>Phone</label>
+                        <input type="tel" id="driverPhone" placeholder="Enter Phone Number">
+                    </div>
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="driverEmail" placeholder="Enter Email Address">
+                    </div>
+                    <div class="form-group">
+                        <label>Vehicle Type</label>
+                        <input type="text" id="driverVehicleType" placeholder="e.g., Car, Motorcycle, Bike">
+                    </div>
+                    <div class="form-group">
+                        <label>Vehicle Plate</label>
+                        <input type="text" id="driverVehiclePlate" placeholder="Enter Vehicle Plate Number">
+                    </div>
+                    <div id="driverError" class="error-message" style="display: none; color: #ef4444; margin-top: 12px; padding: 8px; background: #fee2e2; border-radius: 4px; font-size: 14px;"></div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn-secondary" id="cancelDriverBtn">Cancel</button>
+                        <button type="submit" class="btn-primary">Add Driver</button>
+                    </div>
+                </form>
+            </div>
+        </div>
     `;
     
+    // Initialize drivers page
+    initializeDriversPage();
+    loadDrivers();
+}
+
+// Initialize Drivers page
+function initializeDriversPage() {
     // Setup new driver button
     const newDriverBtn = document.getElementById('newDriverBtn');
     if (newDriverBtn) {
         newDriverBtn.addEventListener('click', () => {
-            showNotification('Info', 'New driver functionality coming soon!');
+            openDriverModal();
+        });
+    }
+    
+    // Modal close buttons
+    const closeModal = document.getElementById('closeDriverModal');
+    const cancelBtn = document.getElementById('cancelDriverBtn');
+    if (closeModal) closeModal.addEventListener('click', closeDriverModal);
+    if (cancelBtn) cancelBtn.addEventListener('click', closeDriverModal);
+    
+    // Form submission
+    const driverForm = document.getElementById('driverForm');
+    if (driverForm) {
+        driverForm.addEventListener('submit', handleDriverSubmit);
+    }
+    
+    // Close modal on outside click
+    const modal = document.getElementById('driverModal');
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeDriverModal();
+            }
         });
     }
 }
+
+// Open driver modal
+function openDriverModal() {
+    const modal = document.getElementById('driverModal');
+    const form = document.getElementById('driverForm');
+    const title = document.getElementById('driverModalTitle');
+    const errorDiv = document.getElementById('driverError');
+    
+    if (!modal || !form || !title) return;
+    
+    title.textContent = 'Add New Driver';
+    form.reset();
+    form.dataset.editingDriverId = '';
+    
+    if (errorDiv) {
+        errorDiv.style.display = 'none';
+        errorDiv.textContent = '';
+    }
+    
+    modal.classList.remove('hidden');
+}
+
+// Close driver modal
+function closeDriverModal() {
+    const modal = document.getElementById('driverModal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+}
+
+// Handle driver form submission
+async function handleDriverSubmit(e) {
+    e.preventDefault();
+    
+    const form = e.target;
+    const name = document.getElementById('driverName').value.trim();
+    const phone = document.getElementById('driverPhone').value.trim();
+    const email = document.getElementById('driverEmail').value.trim();
+    const vehicleType = document.getElementById('driverVehicleType').value.trim();
+    const vehiclePlate = document.getElementById('driverVehiclePlate').value.trim();
+    const errorDiv = document.getElementById('driverError');
+    
+    if (!name) {
+        if (errorDiv) {
+            errorDiv.textContent = 'Driver name is required';
+            errorDiv.style.display = 'block';
+        }
+        return;
+    }
+    
+    try {
+        const response = await authenticatedFetch(`${API_BASE}/api/drivers`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name,
+                phone: phone || undefined,
+                email: email || undefined,
+                vehicle_type: vehicleType || undefined,
+                vehicle_plate: vehiclePlate || undefined
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showNotification('Success', 'Driver added successfully!');
+            closeDriverModal();
+            loadDrivers();
+        } else {
+            const errorMsg = data.error || 'Failed to add driver';
+            if (errorDiv) {
+                errorDiv.textContent = errorMsg;
+                errorDiv.style.display = 'block';
+            }
+            showError(errorMsg);
+        }
+    } catch (error) {
+        console.error('Error adding driver:', error);
+        const errorMsg = 'Error connecting to server: ' + (error.message || 'Please check if the server is running');
+        if (errorDiv) {
+            errorDiv.textContent = errorMsg;
+            errorDiv.style.display = 'block';
+        }
+        showError(errorMsg);
+    }
+}
+
+// Load drivers
+async function loadDrivers() {
+    try {
+        const response = await authenticatedFetch(`${API_BASE}/api/drivers`);
+        const data = await response.json();
+        
+        if (data.success && data.drivers) {
+            displayDrivers(data.drivers);
+        } else {
+            displayDrivers([]);
+        }
+    } catch (error) {
+        console.error('Error loading drivers:', error);
+        displayDrivers([]);
+    }
+}
+
+// Display drivers in table
+function displayDrivers(drivers) {
+    const tbody = document.getElementById('driversTableBody');
+    
+    if (!tbody) return;
+    
+    if (drivers.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="7" class="empty-state-cell">
+                    <div class="empty-state">
+                        <div class="empty-state-text">No drivers found</div>
+                    </div>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    tbody.innerHTML = drivers.map(driver => `
+        <tr>
+            <td>${escapeHtml(driver.name || 'N/A')}</td>
+            <td>${driver.rating ? parseFloat(driver.rating).toFixed(1) : '0.0'}</td>
+            <td>${escapeHtml(driver.phone || 'N/A')}</td>
+            <td>${escapeHtml(driver.email || 'N/A')}</td>
+            <td>${escapeHtml((driver.vehicle_type || 'N/A') + (driver.vehicle_plate ? ' - ' + driver.vehicle_plate : ''))}</td>
+            <td><span class="status-badge status-${(driver.status || 'active').toLowerCase()}">${escapeHtml((driver.status || 'active').toUpperCase())}</span></td>
+            <td>
+                <button class="btn-icon" onclick="deleteDriver(${driver.id})" title="Delete" style="color: #ef4444;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+// Delete driver
+async function deleteDriver(driverId) {
+    if (!confirm(`Are you sure you want to delete this driver?`)) {
+        return;
+    }
+    
+    try {
+        const response = await authenticatedFetch(`${API_BASE}/api/drivers/${driverId}`, {
+            method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showNotification('Success', 'Driver deleted successfully!');
+            loadDrivers();
+        } else {
+            showError(data.error || 'Failed to delete driver');
+        }
+    } catch (error) {
+        console.error('Error deleting driver:', error);
+        showError('Error deleting driver: ' + error.message);
+    }
+}
+
+// Make deleteDriver available globally
+window.deleteDriver = deleteDriver;
 
 // Show Merchants page
 function showMerchantsPage() {
