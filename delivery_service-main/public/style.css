@@ -1025,15 +1025,21 @@ body {
     width: 100%;
     max-width: 500px;
     text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
 }
 
 .auth-illustration {
-    margin-bottom: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .auth-right-logo {
-    width: 200px;
-    height: 200px;
+    width: 300px;
+    height: 300px;
     object-fit: contain;
     margin: 0 auto;
 }
