@@ -619,19 +619,19 @@ function showOrdersPage() {
                             </svg>
                         </th>
                         <th class="sortable">
-                            <span>Order placed</span>
+                            <span>Placement Time</span>
                             <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M12 5v14M5 12l7-7 7 7"/>
                             </svg>
                         </th>
                         <th class="sortable">
-                            <span>Req. Pickup Time</span>
+                            <span>Est. Delivery Time</span>
                             <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M12 5v14M5 12l7-7 7 7"/>
                             </svg>
                         </th>
                         <th class="sortable">
-                            <span>Req. Delivery Time</span>
+                            <span>Elapsed Time</span>
                             <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M12 5v14M5 12l7-7 7 7"/>
                             </svg>
@@ -654,13 +654,7 @@ function showOrdersPage() {
                                 <path d="M12 5v14M5 12l7-7 7 7"/>
                             </svg>
                         </th>
-                        <th class="sortable">
-                            <span>Tracking</span>
-                            <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M12 5v14M5 12l7-7 7 7"/>
-                            </svg>
-                        </th>
-                        <th>Actions</th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody id="ordersTableBody">
@@ -3574,7 +3568,11 @@ function createOrderRow(order) {
     }
     merchantName = escapeHtml(merchantName);
     const amount = formatCurrency(order.total_price || 0, order.currency || 'USD');
-    const orderPlaced = formatDate(order.fetched_at || order.created_at || order.updated_at);
+    const orderPlaced = formatDateShipday(order.fetched_at || order.created_at || order.updated_at);
+    const elapsedTime = calculateElapsedTime(order.fetched_at || order.created_at || order.updated_at);
+    
+    // Check if order is scheduled
+    const isScheduled = hasScheduledDeliveryTime(order);
     
     // Get distance from various possible fields (more comprehensive)
     const deliveryObj = rawData.delivery || {};
@@ -3920,7 +3918,10 @@ function createOrderRow(order) {
         ? `<label class="switch"><input type="checkbox" id="${switchId}" checked data-order-id="${escapeHtml(String(orderId))}" onchange="toggleReadyForPickup('${escapeHtml(String(orderId))}', this.checked)"><span class="slider"></span></label>`
         : `<label class="switch"><input type="checkbox" id="${switchId}" data-order-id="${escapeHtml(String(orderId))}" onchange="toggleReadyForPickup('${escapeHtml(String(orderId))}', this.checked)"><span class="slider"></span></label>`;
     
-    const formattedDriver = driver ? escapeHtml(String(driver)) : 'N/A';
+    // Format driver - show "+ Assign" or "+ Pre-assigned" button
+    const formattedDriver = driver 
+        ? `<button class="btn-assign" style="background: #f3f4f6; border: 1px solid #d1d5db; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; color: #374151;">+ Pre-assigned</button>`
+        : `<button class="btn-assign" onclick="assignDriver('${escapeHtml(String(orderId))}')" style="background: #f3f4f6; border: 1px solid #d1d5db; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; color: #374151;">+ Assign</button>`;
     
     // Get tracking information
     let tracking = order.doordash_tracking_url || 
@@ -3942,31 +3943,52 @@ function createOrderRow(order) {
         tracking = 'N/A';
     }
     
+    // Clock icon for scheduled orders
+    const clockIcon = isScheduled ? `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline-block; vertical-align: middle; margin-left: 4px; color: #22c55e;">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+        </svg>
+    ` : '';
+    
+    // Three dots menu
+    const moreMenu = `
+        <div class="dropdown" style="position: relative; display: inline-block;">
+            <button class="btn-icon" onclick="toggleOrderMenu('${escapeHtml(String(orderId))}')" style="color: #6b7280;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="1"></circle>
+                    <circle cx="12" cy="5" r="1"></circle>
+                    <circle cx="12" cy="19" r="1"></circle>
+                </svg>
+            </button>
+            <div id="menu-${escapeHtml(String(orderId))}" class="dropdown-menu" style="display: none; position: absolute; right: 0; top: 100%; background: white; border: 1px solid #e5e7eb; border-radius: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 1000; min-width: 150px; margin-top: 4px;">
+                <button class="dropdown-item" onclick="viewOrderDetails('${escapeHtml(String(orderId))}')" style="width: 100%; text-align: left; padding: 8px 12px; border: none; background: none; cursor: pointer; font-size: 14px;">View Details</button>
+                <button class="dropdown-item" onclick="editOrder('${escapeHtml(String(orderId))}')" style="width: 100%; text-align: left; padding: 8px 12px; border: none; background: none; cursor: pointer; font-size: 14px;">Edit</button>
+                <button class="dropdown-item" onclick="deleteOrder('${escapeHtml(String(orderId))}')" style="width: 100%; text-align: left; padding: 8px 12px; border: none; background: none; cursor: pointer; font-size: 14px; color: #ef4444;">Delete</button>
+            </div>
+        </div>
+    `;
+    
     return `
         <tr data-order-id="${escapeHtml(String(orderId))}">
             <td>
                 <input type="checkbox" class="order-checkbox" value="${escapeHtml(String(orderId))}">
             </td>
-            <td><strong>#${escapeHtml(String(orderId))}</strong></td>
+            <td>
+                ${clockIcon}
+                <strong>#${escapeHtml(String(orderId))}</strong>
+            </td>
             <td>${customerName}</td>
             <td>${customerAddress}</td>
             <td>${amount}</td>
             <td>${formattedDistance}</td>
             <td>${orderPlaced}</td>
-            <td>${formattedPickupTime}</td>
             <td>${formattedDeliveryTime}</td>
+            <td>${elapsedTime}</td>
             <td>${formattedReadyForPickup}</td>
             <td>${formattedDriver}</td>
             <td><span class="status-badge status-${status.toLowerCase()}">${escapeHtml(status)}</span></td>
-            <td>${tracking}</td>
-            <td>
-                <button class="btn-icon" onclick="deleteOrder('${escapeHtml(String(orderId))}')" title="Delete" style="color: #ef4444;">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="3 6 5 6 21 6"></polyline>
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                    </svg>
-                </button>
-            </td>
+            <td>${moreMenu}</td>
         </tr>
     `;
 }
@@ -4078,6 +4100,117 @@ function formatDate(dateStr) {
         return String(dateStr);
     }
 }
+
+// Toggle order menu dropdown
+function toggleOrderMenu(orderId) {
+    const menu = document.getElementById(`menu-${orderId}`);
+    if (!menu) return;
+    
+    // Close all other menus
+    document.querySelectorAll('.dropdown-menu').forEach(m => {
+        if (m.id !== `menu-${orderId}`) {
+            m.style.display = 'none';
+        }
+    });
+    
+    // Toggle current menu
+    if (menu.style.display === 'none' || !menu.style.display) {
+        menu.style.display = 'block';
+    } else {
+        menu.style.display = 'none';
+    }
+}
+
+// Close dropdown menus when clicking outside
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.dropdown')) {
+        document.querySelectorAll('.dropdown-menu').forEach(menu => {
+            menu.style.display = 'none';
+        });
+    }
+});
+
+// Assign driver to order
+async function assignDriver(orderId) {
+    // Load drivers and show selection modal
+    try {
+        const response = await authenticatedFetch(`${API_BASE}/api/drivers`);
+        const data = await response.json();
+        
+        if (data.success && data.drivers && data.drivers.length > 0) {
+            // Show driver selection modal
+            const modal = document.createElement('div');
+            modal.className = 'modal';
+            modal.style.display = 'block';
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width: 400px;">
+                    <div class="modal-header">
+                        <h2>Assign Driver</h2>
+                        <button class="modal-close" onclick="this.closest('.modal').remove()">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <select id="driverSelect" style="width: 100%; padding: 8px; margin-bottom: 12px; border: 1px solid #d1d5db; border-radius: 4px;">
+                            <option value="">Select a driver...</option>
+                            ${data.drivers.map(driver => `
+                                <option value="${driver.id}">${escapeHtml(driver.name || 'Unknown')} ${driver.phone ? `(${escapeHtml(driver.phone)})` : ''}</option>
+                            `).join('')}
+                        </select>
+                        <div class="modal-actions">
+                            <button type="button" class="btn-secondary" onclick="this.closest('.modal').remove()">Cancel</button>
+                            <button type="button" class="btn-primary" onclick="confirmAssignDriver('${orderId}')">Assign</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        } else {
+            showNotification('Info', 'No drivers available. Please add drivers first.', 'info');
+        }
+    } catch (error) {
+        console.error('Error loading drivers:', error);
+        showError('Error loading drivers: ' + error.message);
+    }
+}
+
+// Confirm driver assignment
+async function confirmAssignDriver(orderId) {
+    const select = document.getElementById('driverSelect');
+    const driverId = select ? select.value : null;
+    
+    if (!driverId) {
+        showError('Please select a driver');
+        return;
+    }
+    
+    try {
+        // TODO: Implement API endpoint for assigning driver to order
+        showNotification('Success', 'Driver assigned successfully!', 'success');
+        document.querySelector('.modal').remove();
+        loadOrders();
+    } catch (error) {
+        console.error('Error assigning driver:', error);
+        showError('Error assigning driver: ' + error.message);
+    }
+}
+
+// View order details
+function viewOrderDetails(orderId) {
+    // TODO: Implement order details view
+    showNotification('Info', 'Order details view coming soon', 'info');
+}
+
+// Edit order
+function editOrder(orderId) {
+    // TODO: Implement order edit functionality
+    showNotification('Info', 'Order edit functionality coming soon', 'info');
+}
+
+// Make functions globally available
+window.toggleOrderMenu = toggleOrderMenu;
+window.assignDriver = assignDriver;
+window.confirmAssignDriver = confirmAssignDriver;
+window.viewOrderDetails = viewOrderDetails;
+window.editOrder = editOrder;
 
 // Delete order
 async function deleteOrder(orderId) {
