@@ -773,17 +773,6 @@ function showMerchantsPage() {
     mainContainer.innerHTML = `
         <div class="orders-header">
             <h1 class="page-title">Merchants</h1>
-            <div class="orders-controls">
-                <div class="action-bar">
-                    <button class="btn-primary" id="newMerchantBtn">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">
-                            <line x1="12" y1="5" x2="12" y2="19"></line>
-                            <line x1="5" y1="12" x2="19" y2="12"></line>
-                        </svg>
-                        Add New Merchant
-                    </button>
-                </div>
-            </div>
         </div>
         <div class="table-container">
             <table class="orders-table">
@@ -808,18 +797,18 @@ function showMerchantsPage() {
             </table>
         </div>
         
-        <!-- Merchant Modal -->
+        <!-- Merchant Modal (for editing only) -->
         <div id="merchantModal" class="modal hidden">
             <div class="modal-content merchant-modal-content">
                 <div class="modal-header">
-                    <h2 id="merchantModalTitle">Add New Merchant</h2>
+                    <h2 id="merchantModalTitle">Edit Merchant</h2>
                     <button class="modal-close" id="closeMerchantModal">&times;</button>
                 </div>
                 <form id="merchantForm" class="modal-body">
                     <div class="form-group">
                         <label>Store ID <span style="color: red;">*</span></label>
                         <input type="text" id="merchantStoreId" required placeholder="Enter Store ID" 
-                               pattern="[A-Za-z0-9_-]+" title="Store ID should contain only letters, numbers, hyphens, and underscores">
+                               pattern="[A-Za-z0-9_-]+" title="Store ID should contain only letters, numbers, hyphens, and underscores" disabled>
                     </div>
                     <div class="form-group">
                         <label>Merchant Name <span style="color: red;">*</span></label>
@@ -862,14 +851,6 @@ function showMerchantsPage() {
 
 // Initialize Merchants page
 function initializeMerchantsPage() {
-    // New merchant button
-    const newMerchantBtn = document.getElementById('newMerchantBtn');
-    if (newMerchantBtn) {
-        newMerchantBtn.addEventListener('click', () => {
-            openMerchantModal();
-        });
-    }
-    
     // Modal close buttons
     const closeModal = document.getElementById('closeMerchantModal');
     const cancelBtn = document.getElementById('cancelMerchantBtn');
@@ -928,9 +909,6 @@ function displayMerchants(merchants) {
                             </svg>
                         </div>
                         <div class="empty-state-text">No merchants found</div>
-                        <button class="btn-primary" onclick="document.getElementById('newMerchantBtn')?.click()">
-                            Add Your First Merchant
-                        </button>
                     </div>
                 </td>
             </tr>
@@ -966,35 +944,35 @@ function displayMerchants(merchants) {
     `).join('');
 }
 
-// Open merchant modal for adding new merchant
-function openMerchantModal(merchant = null) {
+// Open merchant modal for editing merchant (adding new merchants is disabled)
+function openMerchantModal(merchant) {
+    if (!merchant) {
+        showError('Merchant data is required');
+        return;
+    }
+    
     const modal = document.getElementById('merchantModal');
     const form = document.getElementById('merchantForm');
     const title = document.getElementById('merchantModalTitle');
     
     if (!modal || !form || !title) return;
     
-    // Set title
-    title.textContent = merchant ? 'Edit Merchant' : 'Add New Merchant';
+    // Set title (only editing is allowed)
+    title.textContent = 'Edit Merchant';
     
     // Reset form
     form.reset();
     
-    // Populate form if editing
-    if (merchant) {
-        document.getElementById('merchantStoreId').value = merchant.store_id;
-        document.getElementById('merchantStoreId').disabled = true; // Can't change store_id
-        document.getElementById('merchantName').value = merchant.merchant_name || '';
-        document.getElementById('merchantApiUrl').value = merchant.api_url || '';
-        document.getElementById('merchantIsActive').checked = merchant.is_active !== false;
-        // Don't populate API key and master key for security
-    } else {
-        document.getElementById('merchantStoreId').disabled = false;
-        document.getElementById('merchantIsActive').checked = true;
-    }
+    // Populate form for editing
+    document.getElementById('merchantStoreId').value = merchant.store_id;
+    document.getElementById('merchantStoreId').disabled = true; // Can't change store_id
+    document.getElementById('merchantName').value = merchant.merchant_name || '';
+    document.getElementById('merchantApiUrl').value = merchant.api_url || '';
+    document.getElementById('merchantIsActive').checked = merchant.is_active !== false;
+    // Don't populate API key and master key for security
     
     // Store current merchant for form submission
-    form.dataset.editingStoreId = merchant ? merchant.store_id : '';
+    form.dataset.editingStoreId = merchant.store_id;
     
     // Show modal
     modal.classList.remove('hidden');
@@ -1046,15 +1024,9 @@ async function handleMerchantSubmit(e) {
                 body: JSON.stringify(merchantData)
             });
         } else {
-            // Create new merchant
-            if (!apiKey) {
-                showError('API Key is required when creating a new merchant');
-                return;
-            }
-            response = await authenticatedFetch(`${API_BASE}/merchants`, {
-                method: 'POST',
-                body: JSON.stringify(merchantData)
-            });
+            // Adding new merchants is disabled
+            showError('Adding new merchants is not allowed through the UI');
+            return;
         }
         
         const data = await response.json();
@@ -2876,16 +2848,32 @@ function hasScheduledDeliveryTime(order) {
     }
     
     // Check for scheduled delivery time in various possible fields
+    // Also check nested delivery object
+    const deliveryObj = rawData.delivery || order.delivery || {};
     const scheduledTime = order.scheduled_delivery_time || 
                          order.scheduledDeliveryTime ||
                          order.delivery_time ||
                          order.deliveryTime ||
+                         order.delivery_datetime ||
+                         order.deliveryDateTime ||
+                         order.estimated_delivery_time ||
+                         order.estimatedDeliveryTime ||
                          rawData.scheduled_delivery_time ||
                          rawData.scheduledDeliveryTime ||
                          rawData.delivery_time ||
                          rawData.deliveryTime ||
+                         rawData.delivery_datetime ||
+                         rawData.deliveryDateTime ||
+                         rawData.estimated_delivery_time ||
+                         rawData.estimatedDeliveryTime ||
                          rawData.requested_delivery_time ||
                          rawData.requestedDeliveryTime ||
+                         deliveryObj.delivery_time ||
+                         deliveryObj.deliveryTime ||
+                         deliveryObj.scheduled_delivery_time ||
+                         deliveryObj.scheduledDeliveryTime ||
+                         deliveryObj.estimated_delivery_time ||
+                         deliveryObj.estimatedDeliveryTime ||
                          null;
     
     if (!scheduledTime) return false;
