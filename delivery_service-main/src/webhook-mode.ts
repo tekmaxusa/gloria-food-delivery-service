@@ -1496,7 +1496,7 @@ class GloriaFoodWebhookServer {
         }
         
         // Check if order is already sent to DoorDash
-        let rawData = {};
+        let rawData: any = {};
         try {
           if (order.raw_data) {
             rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
@@ -1505,7 +1505,7 @@ class GloriaFoodWebhookServer {
           // Ignore parsing errors
         }
         
-        const doordashOrderId = order.doordash_order_id || rawData.doordash_order_id || rawData.doordashOrderId;
+        const doordashOrderId = (order as any).doordash_order_id || rawData.doordash_order_id || rawData.doordashOrderId;
         
         if (doordashOrderId) {
           // Order already sent to DoorDash, driver is automatically assigned
