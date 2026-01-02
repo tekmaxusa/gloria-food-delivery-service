@@ -700,6 +700,29 @@ export class OrderDatabasePostgreSQL {
     // Check for scheduled delivery time in various possible fields
     const deliveryObj = orderData.delivery || {};
     const scheduleObj = orderData.schedule || {};
+    const timeObj = orderData.time || {};
+    
+    // Check if "Later" option is selected (not ASAP)
+    const isAsap = orderData.asap === true || 
+                   orderData.is_asap === true ||
+                   orderData.isAsap === true ||
+                   String(orderData.asap || '').toLowerCase() === 'true' ||
+                   String(orderData.asap || '').toLowerCase() === '1' ||
+                   String(orderData.asap || '').toLowerCase() === 'yes';
+    
+    const deliveryType = String(orderData.delivery_type || orderData.delivery_option || orderData.deliveryOption || '').toLowerCase();
+    const isLaterSelected = deliveryType === 'later' || 
+                           deliveryType === 'scheduled' ||
+                           orderData.is_scheduled === true ||
+                           orderData.isScheduled === true ||
+                           orderData.scheduled === true ||
+                           orderData.is_later === true ||
+                           orderData.isLater === true;
+    
+    // If explicitly "Later" or not ASAP and has date/time, extract it
+    if (!isLaterSelected && isAsap) {
+      return null; // It's ASAP, not scheduled
+    }
     
     // Try to get scheduled time from various fields
     let scheduledTime = orderData.scheduled_delivery_time ||
@@ -712,12 +735,18 @@ export class OrderDatabasePostgreSQL {
                        orderData.requestedDeliveryTime ||
                        orderData.preferred_delivery_time ||
                        orderData.preferredDeliveryTime ||
+                       orderData.selected_delivery_time ||
+                       orderData.selectedDeliveryTime ||
+                       orderData.chosen_delivery_time ||
+                       orderData.chosenDeliveryTime ||
                        deliveryObj.scheduled_delivery_time ||
                        deliveryObj.scheduledDeliveryTime ||
                        deliveryObj.delivery_time ||
                        deliveryObj.deliveryTime ||
                        scheduleObj.delivery_time ||
                        scheduleObj.scheduled_delivery_time ||
+                       timeObj.delivery_time ||
+                       timeObj.scheduled_delivery_time ||
                        null;
     
     // If date and time are separate, combine them
@@ -725,19 +754,59 @@ export class OrderDatabasePostgreSQL {
       const deliveryDate = orderData.delivery_date || 
                           orderData.deliveryDate || 
                           orderData.scheduled_date ||
+                          orderData.scheduledDate ||
+                          orderData.selected_delivery_date ||
+                          orderData.selectedDeliveryDate ||
+                          orderData.chosen_delivery_date ||
+                          orderData.chosenDeliveryDate ||
+                          orderData.preferred_delivery_date ||
+                          orderData.preferredDeliveryDate ||
                           deliveryObj.delivery_date ||
-                          scheduleObj.delivery_date;
+                          deliveryObj.deliveryDate ||
+                          scheduleObj.delivery_date ||
+                          scheduleObj.scheduled_date ||
+                          (orderData.schedule && orderData.schedule.date) ||
+                          (orderData.schedule && orderData.schedule.delivery_date);
                           
       const deliveryTimeOnly = orderData.delivery_time_only || 
                               orderData.deliveryTimeOnly || 
                               orderData.scheduled_time ||
+                              orderData.scheduledTime ||
+                              orderData.selected_delivery_time ||
+                              orderData.selectedDeliveryTime ||
+                              orderData.chosen_delivery_time ||
+                              orderData.chosenDeliveryTime ||
+                              orderData.preferred_delivery_time ||
+                              orderData.preferredDeliveryTime ||
+                              orderData.time_slot ||
+                              orderData.delivery_time_slot ||
                               deliveryObj.delivery_time_only ||
-                              scheduleObj.delivery_time_only;
+                              deliveryObj.deliveryTimeOnly ||
+                              scheduleObj.delivery_time_only ||
+                              scheduleObj.deliveryTimeOnly ||
+                              scheduleObj.scheduled_time ||
+                              (orderData.schedule && orderData.schedule.time) ||
+                              (orderData.schedule && orderData.schedule.delivery_time);
       
       if (deliveryDate && deliveryTimeOnly) {
+        // Combine date and time
         scheduledTime = `${deliveryDate} ${deliveryTimeOnly}`;
+        // Try to parse and validate
+        try {
+          const testDate = new Date(scheduledTime);
+          if (isNaN(testDate.getTime())) {
+            // Try ISO format
+            scheduledTime = `${deliveryDate}T${deliveryTimeOnly}`;
+          }
+        } catch (e) {
+          // Use combined string as is
+        }
       } else if (deliveryDate) {
         scheduledTime = deliveryDate;
+      } else if (deliveryTimeOnly) {
+        // If only time, combine with today's date
+        const today = new Date().toISOString().split('T')[0];
+        scheduledTime = `${today} ${deliveryTimeOnly}`;
       }
     }
     

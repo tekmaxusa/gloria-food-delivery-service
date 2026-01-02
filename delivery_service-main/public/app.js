@@ -4975,50 +4975,130 @@ function hasScheduledDeliveryTime(order) {
     
     // Debug: Log order data to help diagnose scheduled detection (only first time)
     const orderId = order.gloriafood_order_id || order.id;
-    if (orderId && Object.keys(rawData).length > 0) {
+        if (orderId && Object.keys(rawData).length > 0) {
         if (!window._scheduledCheckLogged) {
             window._scheduledCheckLogged = new Set();
         }
         if (!window._scheduledCheckLogged.has(orderId)) {
-            console.log(`[DEBUG] Checking scheduled for order ${orderId}:`, {
+            // Log all possible scheduled-related fields for debugging
+            const scheduledFields = {
                 delivery_type: rawData.delivery_type,
                 delivery_option: rawData.delivery_option,
                 available_time: rawData.available_time,
                 delivery_time: rawData.delivery_time,
                 requested_delivery_time: rawData.requested_delivery_time,
                 scheduled_delivery_time: rawData.scheduled_delivery_time,
+                preferred_delivery_time: rawData.preferred_delivery_time,
+                selected_delivery_time: rawData.selected_delivery_time,
+                chosen_delivery_time: rawData.chosen_delivery_time,
                 delivery_date: rawData.delivery_date,
+                scheduled_date: rawData.scheduled_date,
+                selected_delivery_date: rawData.selected_delivery_date,
+                preferred_delivery_date: rawData.preferred_delivery_date,
                 delivery_time_only: rawData.delivery_time_only,
+                time_slot: rawData.time_slot,
+                delivery_time_slot: rawData.delivery_time_slot,
                 asap: rawData.asap,
-                all_keys: Object.keys(rawData).slice(0, 20) // First 20 keys
-            });
+                is_asap: rawData.is_asap,
+                is_scheduled: rawData.is_scheduled,
+                scheduled: rawData.scheduled,
+                is_later: rawData.is_later,
+                // Check nested objects
+                delivery: rawData.delivery,
+                schedule: rawData.schedule,
+                time: rawData.time,
+                all_keys: Object.keys(rawData).slice(0, 30) // First 30 keys
+            };
+            console.log(`[DEBUG] Checking scheduled for order ${orderId}:`, scheduledFields);
             window._scheduledCheckLogged.add(orderId);
         }
     }
     
     // Check if "Later" option is selected (GloriaFood sends delivery_type or delivery_option)
     // Also check for "asap" vs "later" indicators
-    const deliveryType = (rawData.delivery_type || rawData.deliveryOption || rawData.delivery_option || rawData.deliveryType || rawData.delivery_time_type || '').toLowerCase();
-    const deliveryOption = (rawData.delivery_option || rawData.deliveryOption || rawData.available_time || rawData.availableTime || rawData.time_option || '').toLowerCase();
-    const asapOption = (rawData.asap || rawData.as_soon_as_possible || rawData.asSoonAsPossible || '').toLowerCase();
+    const deliveryType = (rawData.delivery_type || rawData.deliveryOption || rawData.delivery_option || rawData.deliveryType || rawData.delivery_time_type || rawData.time_type || rawData.delivery_method || '').toLowerCase();
+    const deliveryOption = (rawData.delivery_option || rawData.deliveryOption || rawData.available_time || rawData.availableTime || rawData.time_option || rawData.timeOption || rawData.selected_time_option || '').toLowerCase();
+    const asapOption = (rawData.asap || rawData.as_soon_as_possible || rawData.asSoonAsPossible || rawData.is_asap || rawData.isAsap || '').toLowerCase();
     
-    // If delivery type/option indicates "later" or "scheduled", it's scheduled
-    if (deliveryType === 'later' || deliveryType === 'scheduled' || deliveryOption === 'later' || deliveryOption === 'scheduled') {
+    // Check for "Later" or "Scheduled" in various fields
+    const isLaterSelected = deliveryType === 'later' || 
+                           deliveryType === 'scheduled' || 
+                           deliveryOption === 'later' || 
+                           deliveryOption === 'scheduled' ||
+                           deliveryOption === 'schedule' ||
+                           rawData.is_scheduled === true ||
+                           rawData.isScheduled === true ||
+                           rawData.scheduled === true ||
+                           rawData.is_later === true ||
+                           rawData.isLater === true;
+    
+    // If "Later" is explicitly selected, it's scheduled
+    if (isLaterSelected) {
+        console.log(`[DEBUG] Order ${orderId || 'unknown'} is scheduled - Later option selected`);
         return true;
     }
     
-    // If NOT "asap" and has delivery time, it's likely scheduled
-    if (asapOption !== 'true' && asapOption !== '1' && asapOption !== 'yes' && (rawData.delivery_time || rawData.requested_delivery_time || rawData.scheduled_delivery_time)) {
-        // Check if the delivery time is in the future
-        const checkTime = rawData.delivery_time || rawData.requested_delivery_time || rawData.scheduled_delivery_time;
-        if (checkTime) {
-            try {
-                const checkDate = new Date(checkTime);
-                if (checkDate > new Date()) {
-                    return true;
+    // If NOT "asap" and has delivery date/time, it's likely scheduled
+    const isAsap = asapOption === 'true' || 
+                   asapOption === '1' || 
+                   asapOption === 'yes' ||
+                   rawData.asap === true ||
+                   rawData.is_asap === true ||
+                   rawData.isAsap === true;
+    
+    // If NOT "asap" and has delivery date/time, it's likely scheduled
+    if (!isAsap) {
+        // Check if we have any delivery date/time fields
+        const hasDeliveryDate = rawData.delivery_date || 
+                               rawData.deliveryDate || 
+                               rawData.scheduled_date ||
+                               rawData.selected_delivery_date ||
+                               rawData.chosen_delivery_date ||
+                               rawData.preferred_delivery_date;
+        
+        const hasDeliveryTime = rawData.delivery_time || 
+                               rawData.requested_delivery_time || 
+                               rawData.scheduled_delivery_time ||
+                               rawData.delivery_time_only ||
+                               rawData.selected_delivery_time ||
+                               rawData.chosen_delivery_time ||
+                               rawData.preferred_delivery_time ||
+                               rawData.time_slot ||
+                               rawData.delivery_time_slot;
+        
+        // If we have date or time, and it's not ASAP, check if it's in the future
+        if (hasDeliveryDate || hasDeliveryTime) {
+            const checkTime = rawData.delivery_time || 
+                            rawData.requested_delivery_time || 
+                            rawData.scheduled_delivery_time ||
+                            rawData.preferred_delivery_time ||
+                            rawData.selected_delivery_time;
+            
+            if (checkTime) {
+                try {
+                    const checkDate = new Date(checkTime);
+                    if (checkDate > new Date()) {
+                        console.log(`[DEBUG] Order ${orderId || 'unknown'} is scheduled - future delivery time found: ${checkTime}`);
+                        return true;
+                    }
+                } catch (e) {
+                    // Ignore parsing errors, will check date/time separately below
                 }
-            } catch (e) {
-                // Ignore
+            }
+            
+            // If we have date but no time yet, still consider it scheduled (time might be in separate field)
+            if (hasDeliveryDate && !isAsap) {
+                try {
+                    const dateOnly = new Date(hasDeliveryDate);
+                    const now = new Date();
+                    // If date is today or future, it's likely scheduled
+                    if (dateOnly >= new Date(now.toDateString())) {
+                        console.log(`[DEBUG] Order ${orderId || 'unknown'} is scheduled - future delivery date found: ${hasDeliveryDate}`);
+                        return true;
+                    }
+                } catch (e) {
+                    // Ignore
+                }
             }
         }
     }
@@ -5083,6 +5163,12 @@ function hasScheduledDeliveryTime(order) {
                            rawData.deliveryDate || 
                            rawData.scheduled_date ||
                            rawData.scheduledDate ||
+                           rawData.selected_delivery_date ||
+                           rawData.selectedDeliveryDate ||
+                           rawData.chosen_delivery_date ||
+                           rawData.chosenDeliveryDate ||
+                           rawData.preferred_delivery_date ||
+                           rawData.preferredDeliveryDate ||
                            deliveryObj.delivery_date || 
                            deliveryObj.deliveryDate ||
                            scheduleObj.delivery_date ||
@@ -5095,6 +5181,14 @@ function hasScheduledDeliveryTime(order) {
                                 rawData.deliveryTimeOnly || 
                                 rawData.scheduled_time ||
                                 rawData.scheduledTime ||
+                                rawData.selected_delivery_time ||
+                                rawData.selectedDeliveryTime ||
+                                rawData.chosen_delivery_time ||
+                                rawData.chosenDeliveryTime ||
+                                rawData.preferred_delivery_time ||
+                                rawData.preferredDeliveryTime ||
+                                rawData.time_slot ||
+                                rawData.delivery_time_slot ||
                                 rawData.requested_delivery_time_only ||
                                 deliveryObj.delivery_time_only || 
                                 deliveryObj.deliveryTimeOnly ||
@@ -5123,11 +5217,17 @@ function hasScheduledDeliveryTime(order) {
             try {
                 const dateOnly = new Date(deliveryDate);
                 const now = new Date();
+                // If date is in the future (not today), it's definitely scheduled
+                if (dateOnly > new Date(now.toDateString())) {
+                    console.log(`[DEBUG] Order ${orderId || 'unknown'} is scheduled - future date found: ${deliveryDate}`);
+                    return true; // Future date = scheduled
+                }
                 // If date is today or future, and we have a time component somewhere, it's scheduled
                 if (dateOnly >= new Date(now.toDateString())) {
                     // Check if there's a time component in other fields
-                    if (deliveryTimeOnly || rawData.delivery_time || rawData.requested_delivery_time || rawData.scheduled_delivery_time) {
+                    if (deliveryTimeOnly || rawData.delivery_time || rawData.requested_delivery_time || rawData.scheduled_delivery_time || rawData.preferred_delivery_time || rawData.selected_delivery_time) {
                         // Has date + time somewhere = scheduled
+                        console.log(`[DEBUG] Order ${orderId || 'unknown'} is scheduled - has date and time: ${deliveryDate}`);
                         return true;
                     }
                 }
@@ -5139,6 +5239,11 @@ function hasScheduledDeliveryTime(order) {
             const now = new Date();
             const today = now.toISOString().split('T')[0];
             scheduledTime = `${today} ${deliveryTimeOnly}`;
+            // If we have a time slot and it's not ASAP, it's likely scheduled
+            if (!isAsap) {
+                console.log(`[DEBUG] Order ${orderId || 'unknown'} is scheduled - has time slot and not ASAP: ${deliveryTimeOnly}`);
+                return true;
+            }
         }
     }
     
