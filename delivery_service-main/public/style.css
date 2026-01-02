@@ -824,40 +824,94 @@ body {
     .top-header {
         flex-direction: column;
         gap: 16px;
-        padding: 16px 20px;
+        padding: 12px 16px;
+    }
+    
+    .header-left {
+        width: 100%;
+        justify-content: space-between;
+    }
+    
+    .tekmax-logo {
+        gap: 8px;
+    }
+    
+    .logo-img {
+        height: 40px;
+        width: 40px;
+    }
+    
+    .tekmax-company-name {
+        font-size: 16px;
     }
     
     .header-right {
         width: 100%;
         justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
     }
     
     .main-nav {
         flex-wrap: wrap;
         gap: 4px;
+        width: 100%;
+        justify-content: flex-start;
     }
     
     .nav-link {
-        font-size: 13px;
+        font-size: 12px;
         padding: 8px 12px;
+        flex: 1;
+        min-width: auto;
+        text-align: center;
     }
     
     .main-container {
-        padding: 20px;
+        padding: 16px;
+    }
+    
+    .orders-header {
+        margin-bottom: 16px;
+    }
+    
+    .page-title {
+        font-size: 24px;
+        margin-bottom: 16px;
     }
     
     .orders-controls {
         flex-direction: column;
         align-items: stretch;
+        gap: 16px;
     }
     
     .order-status-tabs {
         overflow-x: auto;
         flex-wrap: nowrap;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+    
+    .order-status-tabs::-webkit-scrollbar {
+        display: none;
+    }
+    
+    .status-tab {
+        font-size: 13px;
+        padding: 10px 16px;
+        white-space: nowrap;
+        flex-shrink: 0;
     }
     
     .action-bar {
-        flex-wrap: wrap;
+        flex-direction: column;
+        gap: 12px;
+        width: 100%;
+    }
+    
+    .search-box {
         width: 100%;
     }
     
@@ -866,12 +920,113 @@ body {
         flex: 1;
     }
     
+    .action-bar .btn-primary,
+    .action-bar .btn-secondary,
+    .action-bar .btn-danger {
+        width: 100%;
+        justify-content: center;
+    }
+    
     .table-container {
         overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        margin: 0 -16px;
+        padding: 0 16px;
     }
     
     .orders-table {
         min-width: 1200px;
+        font-size: 12px;
+    }
+    
+    .orders-table th,
+    .orders-table td {
+        padding: 10px 8px;
+    }
+    
+    .orders-table th:first-child,
+    .orders-table td:first-child {
+        padding-left: 12px;
+    }
+    
+    .orders-table th:last-child,
+    .orders-table td:last-child {
+        padding-right: 12px;
+    }
+    
+    /* Dashboard cards */
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+    
+    /* Settings panels */
+    .settings-panel {
+        padding: 20px 16px;
+    }
+    
+    .settings-panel-header h3 {
+        font-size: 18px;
+    }
+    
+    /* Modals */
+    .modal-content {
+        width: 95%;
+        max-width: 95%;
+        margin: 20px auto;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+    
+    .merchant-modal-content {
+        width: 95%;
+        max-width: 95%;
+    }
+    
+    /* Auth pages */
+    .auth-split-container {
+        flex-direction: column;
+    }
+    
+    .auth-left-side {
+        padding: 40px 24px;
+        width: 100%;
+    }
+    
+    .auth-right-side {
+        display: none;
+    }
+    
+    .auth-form {
+        max-width: 100%;
+    }
+    
+    .auth-title {
+        font-size: 24px;
+        margin-bottom: 24px;
+    }
+    
+    .auth-top-header {
+        padding: 12px 16px;
+    }
+    
+    .auth-top-logo-text {
+        font-size: 16px;
+    }
+    
+    /* Buttons */
+    .btn-primary,
+    .btn-secondary,
+    .btn-danger {
+        padding: 12px 16px;
+        font-size: 14px;
+    }
+    
+    /* Notifications */
+    .notification {
+        max-width: calc(100% - 32px);
+        left: 16px;
+        right: 16px;
     }
 }
 
