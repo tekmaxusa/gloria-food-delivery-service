@@ -1661,17 +1661,6 @@ function showReportsPage() {
                 <h3>Customer Analytics</h3>
                 <p>Customer insights including order frequency, average order value, and customer retention metrics.</p>
             </div>
-            
-            <div class="report-card" onclick="generateReport('merchants')">
-                <div class="report-icon">
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
-                    </svg>
-                </div>
-                <h3>Merchant Reports</h3>
-                <p>Merchant-specific reports showing order volume, revenue, and performance comparisons.</p>
-            </div>
         </div>
     `;
 }
@@ -1736,11 +1725,6 @@ async function showReportView(reportType) {
                 currentReportData = reportData;
                 reportHTML = renderCustomersReport(reportData);
                 break;
-            case 'merchants':
-                reportData = await fetchMerchantsReport();
-                currentReportData = reportData;
-                reportHTML = renderMerchantsReport(reportData);
-                break;
             default:
                 reportHTML = '<div class="empty-state-text">Invalid report type</div>';
         }
@@ -1792,8 +1776,7 @@ function getReportTitle(type) {
         'orders': 'Orders Report',
         'revenue': 'Revenue Report',
         'drivers': 'Driver Performance Report',
-        'customers': 'Customer Analytics Report',
-        'merchants': 'Merchant Reports'
+        'customers': 'Customer Analytics Report'
     };
     return titles[type] || 'Report';
 }
@@ -1838,13 +1821,6 @@ async function fetchCustomersReport() {
     const response = await authenticatedFetch(`${API_BASE}/orders?limit=1000`);
     const data = await response.json();
     return data.orders || data || [];
-}
-
-// Fetch merchants report data
-async function fetchMerchantsReport() {
-    const response = await authenticatedFetch(`${API_BASE}/merchants`);
-    const data = await response.json();
-    return data.merchants || [];
 }
 
 // Render sales report
@@ -2150,54 +2126,6 @@ function renderCustomersReport(orders) {
                             <td>${customer.orders}</td>
                             <td>${formatCurrency(customer.totalSpent, 'USD')}</td>
                             <td>${formatCurrency(customer.orders > 0 ? customer.totalSpent / customer.orders : 0, 'USD')}</td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>
-        </div>
-    `;
-}
-
-// Render merchants report
-function renderMerchantsReport(merchants) {
-    return `
-        <div class="dashboard-grid" style="margin-bottom: 24px;">
-            <div class="dashboard-card">
-                <div class="dashboard-card-header">
-                    <h3>Total Merchants</h3>
-                </div>
-                <div class="dashboard-card-value">${merchants.length}</div>
-                <div class="dashboard-card-change">All merchants</div>
-            </div>
-            <div class="dashboard-card">
-                <div class="dashboard-card-header">
-                    <h3>Active Merchants</h3>
-                </div>
-                <div class="dashboard-card-value">${merchants.filter(m => m.is_active).length}</div>
-                <div class="dashboard-card-change">Active</div>
-            </div>
-        </div>
-        <div class="table-container">
-            <h2 style="margin-bottom: 16px; font-size: 20px; font-weight: 600; color: #0f172a;">Merchant Reports</h2>
-            <table class="orders-table">
-                <thead>
-                    <tr>
-                        <th>Store ID</th>
-                        <th>Merchant Name</th>
-                        <th>API URL</th>
-                        <th>Status</th>
-                        <th>Created</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${merchants.length === 0 ? '<tr><td colspan="5" class="empty-state-cell"><div class="empty-state"><div class="empty-state-text">No merchants available</div></div></td></tr>' : 
-                      merchants.map(merchant => `
-                        <tr>
-                            <td>${merchant.store_id || 'N/A'}</td>
-                            <td>${merchant.merchant_name || 'N/A'}</td>
-                            <td>${merchant.api_url || 'N/A'}</td>
-                            <td><span class="status-badge ${merchant.is_active ? 'status-active' : 'status-inactive'}">${merchant.is_active ? 'Active' : 'Inactive'}</span></td>
-                            <td>${formatDate(merchant.created_at)}</td>
                         </tr>
                     `).join('')}
                 </tbody>
@@ -2688,27 +2616,6 @@ window.exportReport = function(type) {
                     ];
                 });
                 filename = `customers_report_${new Date().toISOString().split('T')[0]}.csv`;
-                break;
-                
-            case 'merchants':
-                headers = ['Store ID', 'Merchant Name', 'API URL', 'Status', 'Created At'];
-                rows = currentReportData.map(merchant => {
-                    const escapeCSV = (val) => {
-                        const str = String(val || 'N/A');
-                        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-                            return '"' + str.replace(/"/g, '""') + '"';
-                        }
-                        return str;
-                    };
-                    return [
-                        escapeCSV(merchant.store_id),
-                        escapeCSV(merchant.merchant_name),
-                        escapeCSV(merchant.api_url),
-                        escapeCSV(merchant.is_active ? 'Active' : 'Inactive'),
-                        escapeCSV(formatDate(merchant.created_at))
-                    ];
-                });
-                filename = `merchants_report_${new Date().toISOString().split('T')[0]}.csv`;
                 break;
                 
             default:
