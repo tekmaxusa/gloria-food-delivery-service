@@ -4949,6 +4949,21 @@ async function loadOrders() {
 
 // Helper function to check if order has scheduled delivery time
 function hasScheduledDeliveryTime(order) {
+    // First check if scheduled_delivery_time is already extracted and stored in the order object
+    if (order.scheduled_delivery_time) {
+        try {
+            const scheduledDate = new Date(order.scheduled_delivery_time);
+            const now = new Date();
+            if (scheduledDate > now) {
+                const orderId = order.gloriafood_order_id || order.id;
+                console.log(`[DEBUG] Order ${orderId || 'unknown'} is scheduled - using order.scheduled_delivery_time: ${order.scheduled_delivery_time}`);
+                return true;
+            }
+        } catch (e) {
+            // Continue to check other fields
+        }
+    }
+    
     let rawData = {};
     try {
         if (order.raw_data) {
@@ -5062,15 +5077,68 @@ function hasScheduledDeliveryTime(order) {
                          timeObj.scheduled_delivery ||
                          null;
     
-    // If date and time are separate, combine them
+    // If date and time are separate, combine them (GloriaFood "Later" option)
     if (!scheduledTime) {
-        const deliveryDate = rawData.delivery_date || rawData.deliveryDate || deliveryObj.delivery_date || scheduleObj.delivery_date;
-        const deliveryTimeOnly = rawData.delivery_time_only || rawData.deliveryTimeOnly || deliveryObj.delivery_time_only || scheduleObj.delivery_time_only;
+        const deliveryDate = rawData.delivery_date || 
+                           rawData.deliveryDate || 
+                           rawData.scheduled_date ||
+                           rawData.scheduledDate ||
+                           deliveryObj.delivery_date || 
+                           deliveryObj.deliveryDate ||
+                           scheduleObj.delivery_date ||
+                           scheduleObj.deliveryDate ||
+                           scheduleObj.scheduled_date ||
+                           (rawData.schedule && rawData.schedule.date) ||
+                           (rawData.schedule && rawData.schedule.delivery_date);
+                           
+        const deliveryTimeOnly = rawData.delivery_time_only || 
+                                rawData.deliveryTimeOnly || 
+                                rawData.scheduled_time ||
+                                rawData.scheduledTime ||
+                                rawData.requested_delivery_time_only ||
+                                deliveryObj.delivery_time_only || 
+                                deliveryObj.deliveryTimeOnly ||
+                                scheduleObj.delivery_time_only ||
+                                scheduleObj.deliveryTimeOnly ||
+                                scheduleObj.scheduled_time ||
+                                (rawData.schedule && rawData.schedule.time) ||
+                                (rawData.schedule && rawData.schedule.delivery_time);
         
         if (deliveryDate && deliveryTimeOnly) {
+            // Combine date and time - try different formats
             scheduledTime = `${deliveryDate} ${deliveryTimeOnly}`;
+            // Also try ISO format if needed
+            try {
+                const testDate = new Date(scheduledTime);
+                if (isNaN(testDate.getTime())) {
+                    // Try alternative format
+                    scheduledTime = `${deliveryDate}T${deliveryTimeOnly}`;
+                }
+            } catch (e) {
+                // Use the combined string as is
+            }
         } else if (deliveryDate) {
+            // If only date is provided, check if it's in the future
             scheduledTime = deliveryDate;
+            try {
+                const dateOnly = new Date(deliveryDate);
+                const now = new Date();
+                // If date is today or future, and we have a time component somewhere, it's scheduled
+                if (dateOnly >= new Date(now.toDateString())) {
+                    // Check if there's a time component in other fields
+                    if (deliveryTimeOnly || rawData.delivery_time || rawData.requested_delivery_time || rawData.scheduled_delivery_time) {
+                        // Has date + time somewhere = scheduled
+                        return true;
+                    }
+                }
+            } catch (e) {
+                // Ignore parsing errors
+            }
+        } else if (deliveryTimeOnly) {
+            // If only time is provided, check if it's later today
+            const now = new Date();
+            const today = now.toISOString().split('T')[0];
+            scheduledTime = `${today} ${deliveryTimeOnly}`;
         }
     }
     
@@ -5083,20 +5151,30 @@ function hasScheduledDeliveryTime(order) {
             // If scheduled time is in the future (even 1 minute), it's scheduled
             // This will catch orders scheduled for tomorrow, specific times, etc.
             if (scheduledDate > now) {
-                console.log(`[DEBUG] Order ${orderId || 'unknown'} is scheduled - scheduledTime found: ${scheduledTime}, date: ${scheduledDate}`);
-                return true;
+                const minutesDiff = (scheduledDate.getTime() - now.getTime()) / (1000 * 60);
+                // If more than 1 minute in the future, it's scheduled
+                if (minutesDiff > 1) {
+                    console.log(`[DEBUG] Order ${orderId || 'unknown'} is scheduled - scheduledTime found: ${scheduledTime}, date: ${scheduledDate}, ${minutesDiff.toFixed(1)} min in future`);
+                    return true;
+                }
             }
-            // Also check if it's today but more than 1 hour in the future
-            const hoursDiff = (scheduledDate.getTime() - now.getTime()) / (1000 * 60 * 60);
-            if (hoursDiff > 1) {
-                console.log(`[DEBUG] Order ${orderId || 'unknown'} is scheduled - more than 1 hour in future`);
+            
+            // Also check if it's a different day (tomorrow or later) - definitely scheduled
+            const scheduledDay = scheduledDate.toDateString();
+            const today = now.toDateString();
+            if (scheduledDay !== today && scheduledDate >= now) {
+                console.log(`[DEBUG] Order ${orderId || 'unknown'} is scheduled - different day (${scheduledDay} vs ${today})`);
                 return true;
             }
         } catch (e) {
-            // If can't parse, but we have a scheduledTime value, still consider it scheduled
-            // (might be a different format)
-            console.log(`[DEBUG] Order ${orderId || 'unknown'} has scheduledTime but can't parse: ${scheduledTime}`);
-            // Don't return true here - let it check delivery time instead
+            // If can't parse, but we have both date and time, it's likely scheduled
+            // Check if we have both delivery_date and delivery_time_only
+            const hasDate = rawData.delivery_date || rawData.deliveryDate || rawData.scheduled_date;
+            const hasTime = rawData.delivery_time_only || rawData.deliveryTimeOnly || rawData.scheduled_time;
+            if (hasDate && hasTime) {
+                console.log(`[DEBUG] Order ${orderId || 'unknown'} has both date and time (scheduled): date=${hasDate}, time=${hasTime}`);
+                return true; // Has both date and time = scheduled order
+            }
         }
     }
     
@@ -5192,19 +5270,19 @@ function getOrderCategory(order) {
     const isCompleted = ['DELIVERED', 'COMPLETED', 'FULFILLED'].includes(status);
     const isIncomplete = ['CANCELLED', 'FAILED', 'REJECTED', 'CANCELED'].includes(status);
     
-    // Check if scheduled BEFORE checking completed/incomplete
-    // This ensures scheduled orders are categorized correctly even if status changes
-    const isScheduled = hasScheduledDeliveryTime(order);
-    
-    // Debug logging
-    const orderId = order.gloriafood_order_id || order.id;
-    if (isScheduled && orderId) {
-        console.log(`[DEBUG] Order ${orderId} categorized as SCHEDULED`);
-    }
-    
+    // Priority: completed/incomplete override scheduled
+    // Completed and incomplete orders should not be in scheduled tab
     if (isCompleted) return 'completed';
     if (isIncomplete) return 'incomplete';
-    if (isScheduled) return 'scheduled';
+    
+    // Check if scheduled (only if not completed/incomplete)
+    const isScheduled = hasScheduledDeliveryTime(order);
+    if (isScheduled) {
+        const orderId = order.gloriafood_order_id || order.id;
+        console.log(`[DEBUG] Order ${orderId} categorized as SCHEDULED`);
+        return 'scheduled';
+    }
+    
     return 'current';
 }
 
@@ -5238,12 +5316,9 @@ function filterAndDisplayOrders() {
             });
             console.log(`[DEBUG] Incomplete filter: ${filtered.length} orders found`);
         } else if (currentStatusFilter === 'history') {
-            // History = all completed and incomplete orders (old orders)
-            filtered = filtered.filter(order => {
-                const status = (order.status || '').toUpperCase();
-                return ['DELIVERED', 'COMPLETED', 'FULFILLED', 'CANCELLED', 'CANCELED', 'FAILED', 'REJECTED'].includes(status);
-            });
-            console.log(`[DEBUG] History filter: ${filtered.length} orders found`);
+            // History = ALL orders (current, scheduled, completed, incomplete)
+            // Show everything - no filtering
+            console.log(`[DEBUG] History filter: showing all ${filtered.length} orders`);
         }
     } else if (currentStatusFilter === 'current') {
         // Current = all active orders (not delivered, completed, or cancelled)

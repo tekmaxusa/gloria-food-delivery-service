@@ -16,6 +16,7 @@ export interface Order {
   order_type: string;
   items: string; // JSON string
   raw_data: string; // Full JSON from API
+  scheduled_delivery_time?: string;
   created_at: string;
   updated_at: string;
   fetched_at: string;
@@ -243,6 +244,7 @@ export class OrderDatabasePostgreSQL {
             order_type VARCHAR(50),
             items TEXT,
             raw_data TEXT,
+            scheduled_delivery_time TIMESTAMP,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -252,6 +254,19 @@ export class OrderDatabasePostgreSQL {
             doordash_tracking_url TEXT
           )
         `);
+        
+        // Add scheduled_delivery_time column if it doesn't exist (for existing databases)
+        try {
+          await client.query(`
+            ALTER TABLE orders 
+            ADD COLUMN IF NOT EXISTS scheduled_delivery_time TIMESTAMP
+          `);
+        } catch (e: any) {
+          // Column might already exist, ignore error
+          if (e.code !== '42701') {
+            console.log('   Note: scheduled_delivery_time column may already exist');
+          }
+        }
 
         // Create indexes
         await client.query(`
@@ -510,6 +525,7 @@ export class OrderDatabasePostgreSQL {
       const customerPhone = this.extractCustomerPhone(orderData);
       const customerEmail = this.extractCustomerEmail(orderData);
       const deliveryAddress = this.extractDeliveryAddress(orderData);
+      const scheduledDeliveryTime = this.extractScheduledDeliveryTime(orderData);
       
       const order: Order = {
         id: '',
@@ -525,6 +541,7 @@ export class OrderDatabasePostgreSQL {
         order_type: orderData.order_type || orderData.type || 'unknown',
         items: JSON.stringify(orderData.items || orderData.order_items || []),
         raw_data: JSON.stringify(orderData),
+        scheduled_delivery_time: scheduledDeliveryTime || undefined,
         created_at: orderData.created_at || orderData.order_date || new Date().toISOString(),
         updated_at: new Date().toISOString(),
         fetched_at: new Date().toISOString()
@@ -536,8 +553,8 @@ export class OrderDatabasePostgreSQL {
         INSERT INTO orders (
           gloriafood_order_id, store_id, customer_name, customer_phone,
           customer_email, delivery_address, total_price, currency,
-          status, order_type, items, raw_data, created_at, updated_at, fetched_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+          status, order_type, items, raw_data, scheduled_delivery_time, created_at, updated_at, fetched_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         ON CONFLICT (gloriafood_order_id) DO UPDATE SET
           customer_name = EXCLUDED.customer_name,
           customer_phone = EXCLUDED.customer_phone,
@@ -547,6 +564,7 @@ export class OrderDatabasePostgreSQL {
           total_price = EXCLUDED.total_price,
           order_type = EXCLUDED.order_type,
           items = EXCLUDED.items,
+          scheduled_delivery_time = EXCLUDED.scheduled_delivery_time,
           updated_at = EXCLUDED.updated_at,
           fetched_at = EXCLUDED.fetched_at,
           raw_data = EXCLUDED.raw_data
@@ -564,6 +582,7 @@ export class OrderDatabasePostgreSQL {
         order.order_type,
         order.items,
         order.raw_data,
+        order.scheduled_delivery_time || null,
         order.created_at,
         order.updated_at,
         order.fetched_at
@@ -677,6 +696,71 @@ export class OrderDatabasePostgreSQL {
     return '';
   }
 
+  private extractScheduledDeliveryTime(orderData: any): string | null {
+    // Check for scheduled delivery time in various possible fields
+    const deliveryObj = orderData.delivery || {};
+    const scheduleObj = orderData.schedule || {};
+    
+    // Try to get scheduled time from various fields
+    let scheduledTime = orderData.scheduled_delivery_time ||
+                       orderData.scheduledDeliveryTime ||
+                       orderData.delivery_time ||
+                       orderData.deliveryTime ||
+                       orderData.delivery_datetime ||
+                       orderData.deliveryDateTime ||
+                       orderData.requested_delivery_time ||
+                       orderData.requestedDeliveryTime ||
+                       orderData.preferred_delivery_time ||
+                       orderData.preferredDeliveryTime ||
+                       deliveryObj.scheduled_delivery_time ||
+                       deliveryObj.scheduledDeliveryTime ||
+                       deliveryObj.delivery_time ||
+                       deliveryObj.deliveryTime ||
+                       scheduleObj.delivery_time ||
+                       scheduleObj.scheduled_delivery_time ||
+                       null;
+    
+    // If date and time are separate, combine them
+    if (!scheduledTime) {
+      const deliveryDate = orderData.delivery_date || 
+                          orderData.deliveryDate || 
+                          orderData.scheduled_date ||
+                          deliveryObj.delivery_date ||
+                          scheduleObj.delivery_date;
+                          
+      const deliveryTimeOnly = orderData.delivery_time_only || 
+                              orderData.deliveryTimeOnly || 
+                              orderData.scheduled_time ||
+                              deliveryObj.delivery_time_only ||
+                              scheduleObj.delivery_time_only;
+      
+      if (deliveryDate && deliveryTimeOnly) {
+        scheduledTime = `${deliveryDate} ${deliveryTimeOnly}`;
+      } else if (deliveryDate) {
+        scheduledTime = deliveryDate;
+      }
+    }
+    
+    // Validate and format the scheduled time
+    if (scheduledTime) {
+      try {
+        const date = new Date(scheduledTime);
+        if (!isNaN(date.getTime())) {
+          // Check if it's in the future (scheduled order)
+          const now = new Date();
+          if (date > now) {
+            return date.toISOString();
+          }
+        }
+      } catch (e) {
+        // Invalid date format, return null
+        return null;
+      }
+    }
+    
+    return null;
+  }
+
   async getOrderByGloriaFoodId(orderId: string): Promise<Order | null> {
     try {
       const client = await this.pool.connect();
@@ -770,6 +854,7 @@ export class OrderDatabasePostgreSQL {
       order_type: row.order_type || '',
       items: row.items || '[]',
       raw_data: row.raw_data || '{}',
+      scheduled_delivery_time: row.scheduled_delivery_time ? new Date(row.scheduled_delivery_time).toISOString() : undefined,
       created_at: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
       updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString(),
       fetched_at: row.fetched_at ? new Date(row.fetched_at).toISOString() : new Date().toISOString(),
