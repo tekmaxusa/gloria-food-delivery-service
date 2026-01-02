@@ -1030,6 +1030,64 @@ body {
     }
 }
 
+/* Additional mobile optimizations for small screens */
+@media (max-width: 480px) {
+    .top-header {
+        padding: 10px 12px;
+    }
+    
+    .logo-img {
+        height: 36px;
+        width: 36px;
+    }
+    
+    .tekmax-company-name {
+        font-size: 14px;
+    }
+    
+    .nav-link {
+        font-size: 11px;
+        padding: 6px 8px;
+    }
+    
+    .main-container {
+        padding: 12px;
+    }
+    
+    .page-title {
+        font-size: 20px;
+    }
+    
+    .status-tab {
+        font-size: 12px;
+        padding: 8px 12px;
+    }
+    
+    .orders-table {
+        font-size: 11px;
+    }
+    
+    .orders-table th,
+    .orders-table td {
+        padding: 8px 6px;
+    }
+    
+    .modal-content {
+        width: 98%;
+        max-width: 98%;
+        margin: 10px auto;
+        padding: 16px;
+    }
+    
+    .auth-left-side {
+        padding: 24px 16px;
+    }
+    
+    .auth-title {
+        font-size: 20px;
+    }
+}
+
 /* Loading state */
 .loading {
     text-align: center;
