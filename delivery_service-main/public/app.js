@@ -4179,11 +4179,15 @@ async function editBusinessName() {
                 body: JSON.stringify(updateData)
             });
             
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
             const data = await response.json();
             
             if (data.success) {
                 valueElement.textContent = newValue.trim();
-                showNotification('Success', 'Business name updated', 'success');
+                showNotification('Success', 'Business name updated successfully', 'success');
             } else {
                 showNotification('Error', data.error || 'Failed to update business name', 'error');
             }
@@ -4322,6 +4326,10 @@ async function saveBusinessSettings() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(updateData)
         });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
         
         const data = await response.json();
         

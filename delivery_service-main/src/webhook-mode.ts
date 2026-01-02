@@ -587,6 +587,11 @@ class GloriaFoodWebhookServer {
   }
 
   private setupRoutes(): void {
+    // Handle favicon requests to prevent 404 errors
+    this.app.get('/favicon.ico', (req: Request, res: Response) => {
+      res.status(204).end(); // No content, but successful
+    });
+    
     // Root endpoint - serve dashboard HTML if available, otherwise return JSON
     // Note: This route takes precedence over static middleware, so we manually serve the file
     this.app.get('/', (req: Request, res: Response) => {
