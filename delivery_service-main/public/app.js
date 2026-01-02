@@ -2298,10 +2298,11 @@ function exportOrdersToExcel() {
                 return convertedValue.toFixed(2) + ' ' + unitLabel;
             };
             
-            let formattedDistance = 'N/A';
+            // Only display distance if DoorDash/Shipday has provided route data
+            let formattedDistance = '';
             if (distance) {
                 if (typeof distance === 'number') {
-                    // Assume distance is in km (default from API/calculation)
+                    // Assume distance is in km (default from API)
                     formattedDistance = formatDistance(distance, 'km', distanceUnit);
                 } else if (typeof distance === 'string') {
                     if (distance.includes('km')) {
@@ -2316,6 +2317,7 @@ function exportOrdersToExcel() {
                     formattedDistance = String(distance);
                 }
             }
+            // If no distance from DoorDash/Shipday, show empty string (not "N/A")
             
             // Get pickup time (same logic as createOrderRow)
             const pickupTime = order.pickup_time || 
@@ -5611,7 +5613,6 @@ function createOrderRow(order) {
     if (!order) return '';
     
     const orderId = order.gloriafood_order_id || order.id || 'N/A';
-    const status = (order.status || 'UNKNOWN').toUpperCase();
     const customerName = escapeHtml(order.customer_name || 'N/A');
     const customerAddress = escapeHtml(order.delivery_address || order.customer_address || 'N/A');
     
@@ -5706,47 +5707,61 @@ function createOrderRow(order) {
                             (shipdayData?.quote && shipdayData.quote.distance_km) ||
                             null;
     
-    // Priority: Shipday distance > DoorDash distance > stored distance > calculated
+    // Priority: Shipday distance > DoorDash distance (ONLY if DoorDash has provided route data)
+    // Only use DoorDash distance if DoorDash has actually provided route/distance data
+    const hasDoorDashRoute = doordashData && (
+        doordashDistance !== null && doordashDistance !== undefined ||
+        doordashData.route !== null && doordashData.route !== undefined ||
+        doordashData.distance !== null && doordashData.distance !== undefined ||
+        (doordashData.quote && doordashData.quote.distance) ||
+        (doordashData.delivery && doordashData.delivery.distance)
+    );
+    
     let distance = shipdayDistance ||   // Priority 1: Shipday API distance (most accurate)
-                    doordashDistance ||  // Priority 2: DoorDash API distance (accurate)
-                    order.distance ||   // Priority 3: Stored distance from order
-                    rawData.distance || 
-                    rawData.delivery_distance ||
-                    rawData.distance_km ||
-                    rawData.distance_miles ||
-                    rawData.distanceKm ||
-                    rawData.distanceMiles ||
-                    rawData.deliveryDistance ||
-                    deliveryObj.distance ||
-                    deliveryObj.delivery_distance ||
-                    deliveryObj.distance_km ||
-                    deliveryObj.distanceKm ||
-                    locationObj.distance ||
-                    restaurantObj.distance ||
-                    null;
+                    (hasDoorDashRoute ? doordashDistance : null) ||  // Priority 2: DoorDash API distance (only if route provided)
+                    null;  // Don't use stored or calculated distance - only show if DoorDash/Shipday provides it
     
-    // If no distance found, try to calculate from coordinates if available
-    // Check multiple possible locations for coordinates
-    const customerLat = rawData.latitude || rawData.lat || (rawData.delivery && rawData.delivery.latitude) || (rawData.delivery && rawData.delivery.lat) || (rawData.customer && rawData.customer.latitude) || (rawData.customer && rawData.customer.lat);
-    const customerLon = rawData.longitude || rawData.lng || rawData.lon || (rawData.delivery && rawData.delivery.longitude) || (rawData.delivery && rawData.delivery.lng) || (rawData.delivery && rawData.delivery.lon) || (rawData.customer && rawData.customer.longitude) || (rawData.customer && rawData.customer.lng);
-    const restaurantLat = restaurantObj.latitude || restaurantObj.lat || rawData.restaurant_latitude || rawData.restaurantLat;
-    const restaurantLon = restaurantObj.longitude || restaurantObj.lng || restaurantObj.lon || rawData.restaurant_longitude || rawData.restaurantLng;
+    // Note: We don't calculate distance from coordinates anymore - only show if DoorDash/Shipday provides it
     
-    if (!distance && customerLat && customerLon && restaurantLat && restaurantLon) {
-        try {
-            // Haversine formula to calculate distance
-            const R = 6371; // Earth's radius in km
-            const dLat = (parseFloat(customerLat) - parseFloat(restaurantLat)) * Math.PI / 180;
-            const dLon = (parseFloat(customerLon) - parseFloat(restaurantLon)) * Math.PI / 180;
-            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                      Math.cos(parseFloat(restaurantLat) * Math.PI / 180) * Math.cos(parseFloat(customerLat) * Math.PI / 180) *
-                      Math.sin(dLon/2) * Math.sin(dLon/2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-            distance = R * c;
-        } catch (e) {
-            // Ignore calculation errors
+    // Determine status based on DoorDash response
+    // Check DoorDash status from response data
+    let doordashStatus = null;
+    if (doordashData) {
+        doordashStatus = doordashData.status || 
+                        doordashData.delivery_status || 
+                        doordashData.state ||
+                        doordashData.delivery?.status ||
+                        doordashData.delivery?.delivery_status ||
+                        null;
+    }
+    
+    // If order was sent to DoorDash, use DoorDash status
+    // PENDING if no rider accepted yet, ACCEPTED when rider accepts
+    let status = (order.status || 'UNKNOWN').toUpperCase();
+    if (order.sent_to_doordash || order.doordash_order_id || doordashData) {
+        if (doordashStatus) {
+            // Map DoorDash status to our status
+            const ddStatusLower = String(doordashStatus).toLowerCase();
+            if (ddStatusLower === 'pending' || ddStatusLower === 'created' || ddStatusLower === 'queued') {
+                status = 'PENDING';
+            } else if (ddStatusLower === 'accepted' || ddStatusLower === 'assigned') {
+                status = 'ACCEPTED';
+            } else if (ddStatusLower === 'picked_up' || ddStatusLower === 'pickedup') {
+                status = 'PICKED UP';
+            } else if (ddStatusLower === 'delivered' || ddStatusLower === 'completed') {
+                status = 'DELIVERED';
+            } else if (ddStatusLower === 'cancelled' || ddStatusLower === 'canceled') {
+                status = 'CANCELLED';
+            } else {
+                // Use DoorDash status as-is (capitalized)
+                status = ddStatusLower.toUpperCase();
+            }
+        } else {
+            // If sent to DoorDash but no status yet, it's pending
+            status = 'PENDING';
         }
     }
+    
     // Get distance unit from localStorage
     const distanceUnit = localStorage.getItem('distanceUnit') || 'mile';
     
@@ -5785,10 +5800,11 @@ function createOrderRow(order) {
         return convertedValue.toFixed(2) + ' ' + unitLabel;
     };
     
-    let formattedDistance = 'N/A';
+    // Only display distance if DoorDash/Shipday has provided route data
+    let formattedDistance = '';
     if (distance) {
         if (typeof distance === 'number') {
-            // Assume distance is in km (default from API/calculation)
+            // Assume distance is in km (default from API)
             formattedDistance = formatDistance(distance, 'km', distanceUnit);
         } else if (typeof distance === 'string') {
             if (distance.includes('km')) {
@@ -5803,6 +5819,7 @@ function createOrderRow(order) {
             formattedDistance = String(distance);
         }
     }
+    // If no distance from DoorDash/Shipday, show empty string (not "N/A")
     
     // Get pickup time from various possible fields (comprehensive search)
     const scheduleObj = rawData.schedule || {};
@@ -6112,7 +6129,6 @@ function createOrderRow(order) {
     
     // If not set in localStorage, determine from order data
     if (localStorage.getItem(readyStatusKey) === null) {
-        const statusLower = (order.status || '').toLowerCase();
         if (readyForPickup) {
             try {
                 const readyDate = new Date(readyForPickup);
@@ -6124,7 +6140,9 @@ function createOrderRow(order) {
             }
         }
         // Also check status - orders with "ready", "prepared", "out_for_delivery" are ready
-        if (!isReadyForPickup && (statusLower.includes('ready') || statusLower.includes('prepared') || statusLower.includes('out_for_delivery'))) {
+        // Use the status variable we determined earlier (based on DoorDash status)
+        const currentStatusLower = status.toLowerCase();
+        if (!isReadyForPickup && (currentStatusLower.includes('ready') || currentStatusLower.includes('prepared') || currentStatusLower.includes('out_for_delivery'))) {
             isReadyForPickup = true;
         }
     }
