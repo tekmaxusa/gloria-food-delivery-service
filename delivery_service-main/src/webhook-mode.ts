@@ -266,7 +266,7 @@ class GloriaFoodWebhookServer {
           try {
             const existingOrder = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId));
             if (existingOrder && existingOrder.raw_data) {
-              let rawData = {};
+              let rawData: any = {};
               try {
                 rawData = typeof existingOrder.raw_data === 'string' 
                   ? JSON.parse(existingOrder.raw_data) 
@@ -301,8 +301,7 @@ class GloriaFoodWebhookServer {
         id: response.id, 
         external_delivery_id: response.external_delivery_id,
         status: response.status, 
-        tracking_url: response.tracking_url,
-        raw: response.raw // Include raw response for distance extraction
+        tracking_url: response.tracking_url
       };
     } catch (error: any) {
       // Handle duplicate delivery ID error (409)
