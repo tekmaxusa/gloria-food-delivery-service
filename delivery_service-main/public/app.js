@@ -4218,6 +4218,10 @@ async function editBusinessName() {
             if (data.success) {
                 valueElement.textContent = newValue.trim();
                 showNotification('Success', 'Business name updated successfully', 'success');
+                // Update merchant object in memory to reflect the change
+                if (merchant) {
+                    merchant.merchant_name = newValue.trim();
+                }
             } else {
                 showNotification('Error', data.error || 'Failed to update business name', 'error');
             }
@@ -4331,6 +4335,9 @@ async function saveBusinessSettings() {
         // Get values from form inputs
         const merchantPhone = document.getElementById('merchantPhone')?.value || '';
         const merchantAddress = document.getElementById('merchantAddress')?.value || '';
+        // Get business name from UI element (in case it was edited)
+        const businessNameElement = document.getElementById('businessNameValue');
+        const businessName = businessNameElement ? businessNameElement.textContent.trim() : merchant.merchant_name;
         const maxDeliveryTime = document.getElementById('maxDeliveryTimeValueDC')?.textContent.replace(' Minutes', '') || 
                                document.getElementById('maxDeliveryTimeValue')?.textContent.replace(' Minutes', '') || 
                                localStorage.getItem('maxDeliveryTime') || '60';
@@ -4344,9 +4351,10 @@ async function saveBusinessSettings() {
         localStorage.setItem('merchantPhone', merchantPhone);
         localStorage.setItem('merchantAddress', merchantAddress);
         
-        // Save merchant phone and address to backend
+        // Save merchant name, phone and address to backend
+        // Use business name from UI if available, otherwise use merchant.merchant_name
         const updateData = {
-            merchant_name: merchant.merchant_name,
+            merchant_name: businessName || merchant.merchant_name,
             phone: merchantPhone,
             address: merchantAddress
         };
@@ -4365,6 +4373,10 @@ async function saveBusinessSettings() {
         
         if (data.success) {
             showNotification('Success', 'Settings saved successfully', 'success');
+            // Update the business name in UI if it was changed
+            if (businessNameElement && businessName !== merchant.merchant_name) {
+                businessNameElement.textContent = businessName;
+            }
             // Reload settings to show updated values
             setTimeout(() => {
                 loadSettingsContent('business-settings');
