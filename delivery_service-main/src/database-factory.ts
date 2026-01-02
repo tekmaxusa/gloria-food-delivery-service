@@ -21,6 +21,8 @@ export interface Merchant {
   api_key?: string;
   api_url?: string;
   master_key?: string;
+  phone?: string;
+  address?: string;
   is_active: number | boolean;
   created_at: string;
   updated_at: string;
