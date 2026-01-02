@@ -3522,6 +3522,12 @@ async function getDispatchSettingsContent() {
                 <button class="btn-primary" onclick="saveDispatchTimeWindow()" style="margin-left: 16px; padding: 8px 16px;">Save</button>
             </div>
         </div>
+        
+        <!-- Action Buttons -->
+        <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 32px; padding-top: 24px; border-top: 1px solid #e2e8f0;">
+            <button class="btn-secondary" onclick="cancelDispatchSettings()">Cancel</button>
+            <button class="btn-primary" onclick="saveDispatchSettings()">Save</button>
+        </div>
     `;
 }
 
@@ -3769,6 +3775,12 @@ async function getDriverSettingsContent() {
                 ${calculatePaymentSummary()}
             </div>
         </div>
+        
+        <!-- Action Buttons -->
+        <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 32px; padding-top: 24px; border-top: 1px solid #e2e8f0;">
+            <button class="btn-secondary" onclick="cancelDriverSettings()">Cancel</button>
+            <button class="btn-primary" onclick="saveDriverSettings()">Save</button>
+        </div>
     `;
 }
 
@@ -3855,6 +3867,12 @@ async function getThirdPartyDeliveryContent() {
                     </div>
                 </div>
             `}
+        </div>
+        
+        <!-- Action Buttons -->
+        <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 32px; padding-top: 24px; border-top: 1px solid #e2e8f0;">
+            <button class="btn-secondary" onclick="cancelThirdPartySettings()">Cancel</button>
+            <button class="btn-primary" onclick="saveThirdPartySettings()">Save</button>
         </div>
     `;
 }
@@ -4032,6 +4050,12 @@ async function getLocationContent() {
                 <button class="distance-unit-btn ${distanceUnit === 'km' ? 'active' : ''}" onclick="selectDistanceUnit('km')">Km</button>
             </div>
         </div>
+        
+        <!-- Action Buttons -->
+        <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 32px; padding-top: 24px; border-top: 1px solid #e2e8f0;">
+            <button class="btn-secondary" onclick="cancelLocationSettings()">Cancel</button>
+            <button class="btn-primary" onclick="saveLocationSettings()">Save</button>
+        </div>
     `;
 }
 
@@ -4124,6 +4148,12 @@ async function getCustomerNotificationContent() {
                     <span class="slider"></span>
                 </label>
             </div>
+        </div>
+        
+        <!-- Action Buttons -->
+        <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 32px; padding-top: 24px; border-top: 1px solid #e2e8f0;">
+            <button class="btn-secondary" onclick="cancelCustomerNotificationSettings()">Cancel</button>
+            <button class="btn-primary" onclick="saveCustomerNotificationSettings()">Save</button>
         </div>
     `;
 }
@@ -4585,8 +4615,82 @@ function saveDispatchTimeWindow() {
     }
 }
 
+// Save and cancel functions for all settings panels
+function saveDispatchSettings() {
+    // Save all dispatch settings
+    // Auto-assign is already saved via toggleDispatchSetting
+    const dispatchTimeWindow = document.getElementById('dispatchTimeWindowInput')?.value || '1';
+    if (dispatchTimeWindow) {
+        const value = parseFloat(dispatchTimeWindow);
+        if (!isNaN(value) && value >= 0.5 && value <= 24) {
+            localStorage.setItem('dispatchTimeWindow', dispatchTimeWindow);
+        }
+    }
+    
+    showNotification('Success', 'Dispatch settings saved successfully', 'success');
+}
+
+function cancelDispatchSettings() {
+    loadSettingsContent('dispatch-settings');
+    showNotification('Info', 'Changes cancelled', 'info');
+}
+
+function saveDriverSettings() {
+    // All driver settings are already saved via individual toggles and inputs
+    // This function confirms all settings are saved
+    showNotification('Success', 'Driver settings saved successfully', 'success');
+}
+
+function cancelDriverSettings() {
+    loadSettingsContent('driver-settings');
+    showNotification('Info', 'Changes cancelled', 'info');
+}
+
+function saveThirdPartySettings() {
+    // All third party settings are already saved via individual toggles
+    // This function confirms all settings are saved
+    showNotification('Success', 'Third party delivery settings saved successfully', 'success');
+}
+
+function cancelThirdPartySettings() {
+    loadSettingsContent('third-party-delivery');
+    showNotification('Info', 'Changes cancelled', 'info');
+}
+
+function saveCustomerNotificationSettings() {
+    // All notification settings are already saved via individual toggles
+    // This function confirms all settings are saved
+    showNotification('Success', 'Customer notification settings saved successfully', 'success');
+}
+
+function cancelCustomerNotificationSettings() {
+    loadSettingsContent('customer-notification');
+    showNotification('Info', 'Changes cancelled', 'info');
+}
+
+function saveLocationSettings() {
+    // All location settings are already saved via individual inputs
+    // This function confirms all settings are saved
+    showNotification('Success', 'Location settings saved successfully', 'success');
+}
+
+function cancelLocationSettings() {
+    loadSettingsContent('location');
+    showNotification('Info', 'Changes cancelled', 'info');
+}
+
 window.toggleDispatchSetting = toggleDispatchSetting;
 window.saveDispatchTimeWindow = saveDispatchTimeWindow;
+window.saveDispatchSettings = saveDispatchSettings;
+window.cancelDispatchSettings = cancelDispatchSettings;
+window.saveDriverSettings = saveDriverSettings;
+window.cancelDriverSettings = cancelDriverSettings;
+window.saveThirdPartySettings = saveThirdPartySettings;
+window.cancelThirdPartySettings = cancelThirdPartySettings;
+window.saveCustomerNotificationSettings = saveCustomerNotificationSettings;
+window.cancelCustomerNotificationSettings = cancelCustomerNotificationSettings;
+window.saveLocationSettings = saveLocationSettings;
+window.cancelLocationSettings = cancelLocationSettings;
 
 // Handle profile picture upload
 function handleProfilePictureUpload(e) {

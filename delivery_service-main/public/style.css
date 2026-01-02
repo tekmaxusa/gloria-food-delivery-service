@@ -39,15 +39,15 @@ body {
 }
 
 .logo-img {
-    height: 40px;
-    width: 40px;
+    height: 48px;
+    width: 48px;
     border-radius: 6px;
     background: linear-gradient(to top, #60a5fa, #84cc16);
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    padding: 4px;
+    padding: 6px;
     box-sizing: border-box;
 }
 
