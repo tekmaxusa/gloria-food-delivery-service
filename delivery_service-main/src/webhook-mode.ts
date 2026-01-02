@@ -942,7 +942,7 @@ class GloriaFoodWebhookServer {
 
     this.app.put('/merchants/:storeId', async (req: Request, res: Response) => {
       try {
-        const { merchant_name, api_key, api_url, master_key, is_active } = req.body;
+        const { merchant_name, api_key, api_url, master_key, is_active, phone, address } = req.body;
         const storeId = req.params.storeId;
 
         const merchant = await this.handleAsync(this.database.insertOrUpdateMerchant({
@@ -951,8 +951,10 @@ class GloriaFoodWebhookServer {
           api_key,
           api_url,
           master_key,
-          is_active
-        }));
+          is_active,
+          phone,
+          address
+        } as any));
 
         if (merchant) {
           // Reload merchants in manager

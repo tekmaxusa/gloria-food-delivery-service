@@ -287,11 +287,27 @@ export class OrderDatabasePostgreSQL {
             api_key VARCHAR(500),
             api_url VARCHAR(500),
             master_key VARCHAR(500),
+            phone VARCHAR(100),
+            address TEXT,
             is_active BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
           )
         `);
+        
+        // Add phone and address columns if they don't exist (for existing databases)
+        try {
+          await client.query(`
+            ALTER TABLE merchants 
+            ADD COLUMN IF NOT EXISTS phone VARCHAR(100)
+          `);
+          await client.query(`
+            ALTER TABLE merchants 
+            ADD COLUMN IF NOT EXISTS address TEXT
+          `);
+        } catch (e) {
+          // Columns might already exist, ignore error
+        }
 
         // Create indexes for merchants
         await client.query(`
@@ -1105,6 +1121,8 @@ export class OrderDatabasePostgreSQL {
         api_key: m.api_key,
         api_url: m.api_url,
         master_key: m.master_key,
+        phone: m.phone || null,
+        address: m.address || null,
         is_active: m.is_active === true,
         created_at: m.created_at,
         updated_at: m.updated_at
@@ -1134,6 +1152,8 @@ export class OrderDatabasePostgreSQL {
         api_key: merchant.api_key,
         api_url: merchant.api_url,
         master_key: merchant.master_key,
+        phone: merchant.phone || null,
+        address: merchant.address || null,
         is_active: merchant.is_active === true,
         created_at: merchant.created_at,
         updated_at: merchant.updated_at
@@ -1161,28 +1181,34 @@ export class OrderDatabasePostgreSQL {
               api_key = COALESCE($2, api_key),
               api_url = COALESCE($3, api_url),
               master_key = COALESCE($4, master_key),
-              is_active = COALESCE($5, is_active),
+              phone = COALESCE($5, phone),
+              address = COALESCE($6, address),
+              is_active = COALESCE($7, is_active),
               updated_at = NOW()
-          WHERE store_id = $6
+          WHERE store_id = $8
         `, [
           merchant.merchant_name,
           merchant.api_key || null,
           merchant.api_url || null,
           merchant.master_key || null,
+          (merchant as any).phone || null,
+          (merchant as any).address || null,
           merchant.is_active !== undefined ? merchant.is_active : null,
           merchant.store_id
         ]);
       } else {
         // Insert new merchant
         await client.query(`
-          INSERT INTO merchants (store_id, merchant_name, api_key, api_url, master_key, is_active)
-          VALUES ($1, $2, $3, $4, $5, $6)
+          INSERT INTO merchants (store_id, merchant_name, api_key, api_url, master_key, phone, address, is_active)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         `, [
           merchant.store_id,
           merchant.merchant_name,
           merchant.api_key || null,
           merchant.api_url || null,
           merchant.master_key || null,
+          (merchant as any).phone || null,
+          (merchant as any).address || null,
           merchant.is_active !== undefined ? merchant.is_active : true
         ]);
       }

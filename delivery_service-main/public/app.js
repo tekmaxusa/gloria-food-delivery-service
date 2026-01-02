@@ -3214,50 +3214,56 @@ async function getBusinessSettingsContent() {
         if (data.success && data.merchants && data.merchants.length > 0) {
             merchant = data.merchants.find(m => m.is_active) || data.merchants[0];
             
-            // Try to get phone and address from recent orders for this merchant
-            try {
-                const ordersResponse = await authenticatedFetch(`${API_BASE}/orders?limit=100&store_id=${encodeURIComponent(merchant.store_id)}`);
-                const ordersData = await ordersResponse.json();
-                if (ordersData.success && ordersData.orders && ordersData.orders.length > 0) {
-                    // Find an order with store/restaurant address (not delivery address)
-                    for (const order of ordersData.orders) {
-                        let rawData = {};
-                        try {
-                            if (order.raw_data) {
-                                rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+            // Get phone and address from merchant object if available
+            merchantPhone = merchant.phone || localStorage.getItem('merchantPhone') || '';
+            merchantAddress = merchant.address || localStorage.getItem('merchantAddress') || '';
+            
+            // If not in merchant object, try to get from recent orders
+            if (!merchantPhone || !merchantAddress) {
+                try {
+                    const ordersResponse = await authenticatedFetch(`${API_BASE}/orders?limit=100&store_id=${encodeURIComponent(merchant.store_id)}`);
+                    const ordersData = await ordersResponse.json();
+                    if (ordersData.success && ordersData.orders && ordersData.orders.length > 0) {
+                        // Find an order with store/restaurant address (not delivery address)
+                        for (const order of ordersData.orders) {
+                            let rawData = {};
+                            try {
+                                if (order.raw_data) {
+                                    rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+                                }
+                            } catch (e) {}
+                            
+                            // Get merchant phone
+                            if (!merchantPhone) {
+                                merchantPhone = rawData.phone || 
+                                              rawData.merchant_phone || 
+                                              rawData.store_phone || 
+                                              rawData.restaurant?.phone ||
+                                              rawData.store?.phone ||
+                                              order.phone || '';
                             }
-                        } catch (e) {}
-                        
-                        // Get merchant phone
-                        if (!merchantPhone) {
-                            merchantPhone = rawData.phone || 
-                                          rawData.merchant_phone || 
-                                          rawData.store_phone || 
-                                          rawData.restaurant?.phone ||
-                                          rawData.store?.phone ||
-                                          order.phone || '';
+                            
+                            // Get merchant store address (NOT delivery address)
+                            if (!merchantAddress) {
+                                merchantAddress = rawData.store_address || 
+                                                rawData.restaurant_address || 
+                                                rawData.restaurant?.address ||
+                                                rawData.store?.address ||
+                                                rawData.pickup_address ||
+                                                rawData.merchant_address ||
+                                                (rawData.restaurant && rawData.restaurant.address) ||
+                                                (rawData.store && rawData.store.address) ||
+                                                order.store_address || 
+                                                '';
+                            }
+                            
+                            // If we found both, break
+                            if (merchantPhone && merchantAddress) break;
                         }
-                        
-                        // Get merchant store address (NOT delivery address)
-                        if (!merchantAddress) {
-                            merchantAddress = rawData.store_address || 
-                                            rawData.restaurant_address || 
-                                            rawData.restaurant?.address ||
-                                            rawData.store?.address ||
-                                            rawData.pickup_address ||
-                                            rawData.merchant_address ||
-                                            (rawData.restaurant && rawData.restaurant.address) ||
-                                            (rawData.store && rawData.store.address) ||
-                                            order.store_address || 
-                                            '';
-                        }
-                        
-                        // If we found both, break
-                        if (merchantPhone && merchantAddress) break;
                     }
+                } catch (e) {
+                    console.error('Error fetching order data:', e);
                 }
-            } catch (e) {
-                console.error('Error fetching order data:', e);
             }
         }
     } catch (error) {
@@ -3433,6 +3439,12 @@ async function getBusinessSettingsContent() {
                             </button>
                         </div>
                     </div>
+                </div>
+                
+                <!-- Action Buttons -->
+                <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 32px; padding-top: 24px; border-top: 1px solid #e2e8f0;">
+                    <button class="btn-secondary" onclick="cancelBusinessSettings()">Cancel</button>
+                    <button class="btn-primary" onclick="saveBusinessSettings()">Save</button>
                 </div>
             ` : `
                 <!-- Delivery Company - Service Times Section -->
@@ -4130,7 +4142,7 @@ async function getSettingsContent(itemId) {
 }
 
 // Business settings helper functions
-function editBusinessName() {
+async function editBusinessName() {
     const valueElement = document.getElementById('businessNameValue');
     if (!valueElement) return;
     
@@ -4138,9 +4150,47 @@ function editBusinessName() {
     const newValue = prompt('Enter business name:', currentValue);
     
     if (newValue !== null && newValue.trim() !== '') {
-        valueElement.textContent = newValue.trim();
-        // TODO: Save to backend
-        showNotification('Success', 'Business name updated', 'success');
+        try {
+            // Get merchant data
+            let merchant = null;
+            try {
+                const response = await authenticatedFetch(`${API_BASE}/merchants`);
+                const data = await response.json();
+                if (data.success && data.merchants && data.merchants.length > 0) {
+                    merchant = data.merchants.find(m => m.is_active) || data.merchants[0];
+                }
+            } catch (e) {
+                console.error('Error fetching merchant:', e);
+            }
+            
+            if (!merchant) {
+                showNotification('Error', 'No active merchant found', 'error');
+                return;
+            }
+            
+            // Update merchant name in backend
+            const updateData = {
+                merchant_name: newValue.trim()
+            };
+            
+            const response = await authenticatedFetch(`${API_BASE}/merchants/${merchant.store_id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updateData)
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                valueElement.textContent = newValue.trim();
+                showNotification('Success', 'Business name updated', 'success');
+            } else {
+                showNotification('Error', data.error || 'Failed to update business name', 'error');
+            }
+        } catch (error) {
+            console.error('Error updating business name:', error);
+            showNotification('Error', 'Error updating business name: ' + error.message, 'error');
+        }
     }
 }
 
@@ -4225,16 +4275,69 @@ function cancelBusinessSettings() {
     showNotification('Info', 'Changes cancelled', 'info');
 }
 
-function saveBusinessSettings() {
-    // Save all settings
-    const maxDeliveryTime = document.getElementById('maxDeliveryTimeValueDC')?.textContent.replace(' Minutes', '') || localStorage.getItem('maxDeliveryTime') || '60';
-    const orderPrepTime = document.getElementById('orderPrepTimeValueDC')?.textContent.replace(' Minutes', '') || localStorage.getItem('orderPrepTime') || '60';
-    
-    localStorage.setItem('maxDeliveryTime', maxDeliveryTime);
-    localStorage.setItem('orderPrepTime', orderPrepTime);
-    
-    // TODO: Save to backend API
-    showNotification('Success', 'Settings saved successfully', 'success');
+async function saveBusinessSettings() {
+    try {
+        // Get merchant data
+        let merchant = null;
+        try {
+            const response = await authenticatedFetch(`${API_BASE}/merchants`);
+            const data = await response.json();
+            if (data.success && data.merchants && data.merchants.length > 0) {
+                merchant = data.merchants.find(m => m.is_active) || data.merchants[0];
+            }
+        } catch (e) {
+            console.error('Error fetching merchant:', e);
+        }
+        
+        if (!merchant) {
+            showNotification('Error', 'No active merchant found. Please set up a merchant first.', 'error');
+            return;
+        }
+        
+        // Get values from form inputs
+        const merchantPhone = document.getElementById('merchantPhone')?.value || '';
+        const merchantAddress = document.getElementById('merchantAddress')?.value || '';
+        const maxDeliveryTime = document.getElementById('maxDeliveryTimeValueDC')?.textContent.replace(' Minutes', '') || 
+                               document.getElementById('maxDeliveryTimeValue')?.textContent.replace(' Minutes', '') || 
+                               localStorage.getItem('maxDeliveryTime') || '60';
+        const orderPrepTime = document.getElementById('orderPrepTimeValueDC')?.textContent.replace(' Minutes', '') || 
+                             document.getElementById('orderPrepTimeValue')?.textContent.replace(' Minutes', '') || 
+                             localStorage.getItem('orderPrepTime') || '60';
+        
+        // Save to localStorage
+        localStorage.setItem('maxDeliveryTime', maxDeliveryTime);
+        localStorage.setItem('orderPrepTime', orderPrepTime);
+        localStorage.setItem('merchantPhone', merchantPhone);
+        localStorage.setItem('merchantAddress', merchantAddress);
+        
+        // Save merchant phone and address to backend
+        const updateData = {
+            merchant_name: merchant.merchant_name,
+            phone: merchantPhone,
+            address: merchantAddress
+        };
+        
+        const response = await authenticatedFetch(`${API_BASE}/merchants/${merchant.store_id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updateData)
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showNotification('Success', 'Settings saved successfully', 'success');
+            // Reload settings to show updated values
+            setTimeout(() => {
+                loadSettingsContent('business-settings');
+            }, 500);
+        } else {
+            showNotification('Error', data.error || 'Failed to save settings', 'error');
+        }
+    } catch (error) {
+        console.error('Error saving settings:', error);
+        showNotification('Error', 'Error saving settings: ' + error.message, 'error');
+    }
 }
 
 function toggleDriverFleet(enabled) {
