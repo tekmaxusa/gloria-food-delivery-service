@@ -259,13 +259,50 @@ class GloriaFoodWebhookServer {
       
       if (response.raw) {
         console.log(chalk.gray(`   Raw response (first 500 chars): ${JSON.stringify(response.raw).substring(0, 500)}`));
+        
+        // Save DoorDash response data to order's raw_data for accurate distance retrieval
+        const orderId = this.getOrderIdentifier(orderData);
+        if (orderId) {
+          try {
+            const existingOrder = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId));
+            if (existingOrder && existingOrder.raw_data) {
+              let rawData = {};
+              try {
+                rawData = typeof existingOrder.raw_data === 'string' 
+                  ? JSON.parse(existingOrder.raw_data) 
+                  : existingOrder.raw_data;
+              } catch (e) {
+                // If parsing fails, use empty object
+              }
+              
+              // Add DoorDash response data to raw_data
+              rawData.doordash_data = response.raw;
+              rawData.doordash_response = {
+                id: response.id,
+                external_delivery_id: response.external_delivery_id,
+                status: response.status,
+                tracking_url: response.tracking_url
+              };
+              
+              // Update order with enriched raw_data
+              await this.handleAsync(this.database.insertOrUpdateOrder({
+                ...orderData,
+                raw_data: rawData
+              }));
+              console.log(chalk.green(`✅ Saved DoorDash response data to order ${orderId} for accurate distance`));
+            }
+          } catch (error: any) {
+            console.log(chalk.yellow(`⚠️  Could not save DoorDash response to order: ${error.message}`));
+          }
+        }
       }
 
       return { 
         id: response.id, 
         external_delivery_id: response.external_delivery_id,
         status: response.status, 
-        tracking_url: response.tracking_url 
+        tracking_url: response.tracking_url,
+        raw: response.raw // Include raw response for distance extraction
       };
     } catch (error: any) {
       // Handle duplicate delivery ID error (409)

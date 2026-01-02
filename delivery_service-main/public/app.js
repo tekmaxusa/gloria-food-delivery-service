@@ -2206,17 +2206,60 @@ function exportOrdersToExcel() {
             }
             
             // Get distance (same logic as createOrderRow)
-            const distance = order.distance || 
-                            rawData.distance || 
-                            rawData.delivery_distance ||
-                            rawData.distance_km ||
-                            rawData.distance_miles ||
-                            (rawData.delivery && rawData.delivery.distance) ||
-                            (rawData.delivery && rawData.delivery.delivery_distance) ||
-                            (rawData.delivery && rawData.delivery.distance_km) ||
-                            (rawData.location && rawData.location.distance) ||
-                            (rawData.restaurant && rawData.restaurant.distance) ||
-                            null;
+            // Priority: DoorDash/Shipday API response > stored distance > calculated
+            let doordashData = null;
+            let shipdayData = null;
+            if (rawData.doordash_data) {
+                try {
+                    doordashData = typeof rawData.doordash_data === 'string' 
+                        ? JSON.parse(rawData.doordash_data) 
+                        : rawData.doordash_data;
+                } catch (e) {
+                    // Ignore parsing errors
+                }
+            }
+            if (rawData.shipday_data) {
+                try {
+                    shipdayData = typeof rawData.shipday_data === 'string' 
+                        ? JSON.parse(rawData.shipday_data) 
+                        : rawData.shipday_data;
+                } catch (e) {
+                    // Ignore parsing errors
+                }
+            }
+            
+            const doordashDistance = doordashData?.distance || 
+                                    doordashData?.distance_miles ||
+                                    doordashData?.distance_km ||
+                                    doordashData?.estimated_distance ||
+                                    doordashData?.actual_distance ||
+                                    doordashData?.delivery_distance ||
+                                    (doordashData?.quote && doordashData.quote.distance) ||
+                                    (doordashData?.delivery && doordashData.delivery.distance) ||
+                                    null;
+            
+            const shipdayDistance = shipdayData?.distance ||
+                                    shipdayData?.distance_miles ||
+                                    shipdayData?.distance_km ||
+                                    shipdayData?.estimated_distance ||
+                                    shipdayData?.actual_distance ||
+                                    shipdayData?.delivery_distance ||
+                                    (shipdayData?.quote && shipdayData.quote.distance) ||
+                                    null;
+            
+            const distance = shipdayDistance ||   // Priority 1: Shipday API distance (most accurate)
+                             doordashDistance ||   // Priority 2: DoorDash API distance (accurate)
+                             order.distance ||     // Priority 3: Stored distance
+                             rawData.distance || 
+                             rawData.delivery_distance ||
+                             rawData.distance_km ||
+                             rawData.distance_miles ||
+                             (rawData.delivery && rawData.delivery.distance) ||
+                             (rawData.delivery && rawData.delivery.delivery_distance) ||
+                             (rawData.delivery && rawData.delivery.distance_km) ||
+                             (rawData.location && rawData.location.distance) ||
+                             (rawData.restaurant && rawData.restaurant.distance) ||
+                             null;
             // Get distance unit from localStorage
             const distanceUnit = localStorage.getItem('distanceUnit') || 'mile';
             
@@ -5608,11 +5651,65 @@ function createOrderRow(order) {
     const isScheduled = hasScheduledDeliveryTime(order);
     
     // Get distance from various possible fields (more comprehensive)
+    // Priority: DoorDash/Shipday API response > stored distance > calculated
     const deliveryObj = rawData.delivery || {};
     const locationObj = rawData.location || {};
     const restaurantObj = rawData.restaurant || rawData.store || {};
     
-    let distance = order.distance || 
+    // First, check DoorDash/Shipday API response for accurate distance (highest priority)
+    let doordashData = null;
+    let shipdayData = null;
+    if (rawData.doordash_data) {
+        try {
+            doordashData = typeof rawData.doordash_data === 'string' 
+                ? JSON.parse(rawData.doordash_data) 
+                : rawData.doordash_data;
+        } catch (e) {
+            // Ignore parsing errors
+        }
+    }
+    if (rawData.shipday_data) {
+        try {
+            shipdayData = typeof rawData.shipday_data === 'string' 
+                ? JSON.parse(rawData.shipday_data) 
+                : rawData.shipday_data;
+        } catch (e) {
+            // Ignore parsing errors
+        }
+    }
+    
+    // Extract distance from DoorDash/Shipday response (most accurate - actual driving distance)
+    const doordashDistance = doordashData?.distance || 
+                            doordashData?.distance_miles ||
+                            doordashData?.distance_km ||
+                            doordashData?.estimated_distance ||
+                            doordashData?.actual_distance ||
+                            doordashData?.delivery_distance ||
+                            doordashData?.distance_mi ||
+                            doordashData?.distanceMi ||
+                            (doordashData?.quote && doordashData.quote.distance) ||
+                            (doordashData?.quote && doordashData.quote.distance_miles) ||
+                            (doordashData?.quote && doordashData.quote.distance_km) ||
+                            (doordashData?.delivery && doordashData.delivery.distance) ||
+                            (doordashData?.delivery && doordashData.delivery.distance_miles) ||
+                            (doordashData?.delivery && doordashData.delivery.distance_km) ||
+                            null;
+    
+    const shipdayDistance = shipdayData?.distance ||
+                            shipdayData?.distance_miles ||
+                            shipdayData?.distance_km ||
+                            shipdayData?.estimated_distance ||
+                            shipdayData?.actual_distance ||
+                            shipdayData?.delivery_distance ||
+                            (shipdayData?.quote && shipdayData.quote.distance) ||
+                            (shipdayData?.quote && shipdayData.quote.distance_miles) ||
+                            (shipdayData?.quote && shipdayData.quote.distance_km) ||
+                            null;
+    
+    // Priority: Shipday distance > DoorDash distance > stored distance > calculated
+    let distance = shipdayDistance ||   // Priority 1: Shipday API distance (most accurate)
+                    doordashDistance ||  // Priority 2: DoorDash API distance (accurate)
+                    order.distance ||   // Priority 3: Stored distance from order
                     rawData.distance || 
                     rawData.delivery_distance ||
                     rawData.distance_km ||
