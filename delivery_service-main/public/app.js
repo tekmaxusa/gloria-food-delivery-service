@@ -5301,7 +5301,10 @@ function createOrderRow(order) {
     
     // Get delivery time from various possible fields (comprehensive search)
     // Also check for separate date and time fields (GloriaFood "Later" option)
-    let deliveryTime = order.delivery_time || 
+    // First check for DoorDash estimated_delivery_time (from deliveries table or order object)
+    let deliveryTime = order.estimated_delivery_time ||
+                        order.estimatedDeliveryTime ||
+                        order.delivery_time || 
                         order.deliveryTime || 
                         order.delivery_at ||
                         order.deliveryAt ||
@@ -5366,6 +5369,55 @@ function createOrderRow(order) {
                        (rawData.times && rawData.times.delivery) ||
                        (rawData.time && rawData.time.delivery) ||
                        null;
+    }
+    
+    // Check for DoorDash estimated_delivery_time from doordash_data or delivery response
+    if (!deliveryTime) {
+        // Check if order has doordash_order_id and look for estimated_delivery_time in doordash_data
+        const doordashOrderId = order.doordash_order_id || 
+                               rawData.doordash_order_id || 
+                               rawData.doordashOrderId ||
+                               (rawData.delivery && rawData.delivery.doordash_order_id);
+        
+        if (doordashOrderId) {
+            // Try to get from doordash_data
+            if (rawData.doordash_data) {
+                try {
+                    const doordashData = typeof rawData.doordash_data === 'string' 
+                        ? JSON.parse(rawData.doordash_data) 
+                        : rawData.doordash_data;
+                    deliveryTime = doordashData.estimated_delivery_time || 
+                                  doordashData.estimatedDeliveryTime ||
+                                  null;
+                } catch (e) {
+                    // Ignore parsing errors
+                }
+            }
+            
+            // Also check direct fields in raw_data
+            if (!deliveryTime) {
+                deliveryTime = rawData.doordash_estimated_delivery_time ||
+                              rawData.doordashEstimatedDeliveryTime ||
+                              null;
+            }
+            
+            // If still no delivery time but has doordash order, calculate it (45 minutes from order creation)
+            if (!deliveryTime) {
+                const orderCreatedAt = order.fetched_at || order.created_at || order.updated_at;
+                if (orderCreatedAt) {
+                    try {
+                        const createdDate = new Date(orderCreatedAt);
+                        if (!isNaN(createdDate.getTime())) {
+                            // Add 45 minutes for estimated delivery
+                            const estimatedTime = new Date(createdDate.getTime() + 45 * 60 * 1000);
+                            deliveryTime = estimatedTime.toISOString();
+                        }
+                    } catch (e) {
+                        // Ignore date errors
+                    }
+                }
+            }
+        }
     }
     
     // Get ready for pickup time (comprehensive search)
@@ -5778,51 +5830,17 @@ document.addEventListener('click', (e) => {
     }
 });
 
-// Assign driver to order
+// Assign driver to order (sends to DoorDash which automatically assigns driver)
 async function assignDriver(orderId) {
-    // Load drivers and show selection modal
-    try {
-        const response = await authenticatedFetch(`${API_BASE}/api/drivers`);
-        const data = await response.json();
-        
-        if (data.success && data.drivers && data.drivers.length > 0) {
-            // Show driver selection modal
-            const modal = document.createElement('div');
-            modal.className = 'modal';
-            modal.style.display = 'block';
-            modal.innerHTML = `
-                <div class="modal-content" style="max-width: 400px;">
-                    <div class="modal-header">
-                        <h2>Assign Driver</h2>
-                        <button class="modal-close" onclick="this.closest('.modal').remove()">&times;</button>
-                    </div>
-                    <div class="modal-body">
-                        <select id="driverSelect" style="width: 100%; padding: 8px; margin-bottom: 12px; border: 1px solid #d1d5db; border-radius: 4px;">
-                            <option value="">Select a driver...</option>
-                            ${data.drivers.map(driver => `
-                                <option value="${driver.id}">${escapeHtml(driver.name || 'Unknown')} ${driver.phone ? `(${escapeHtml(driver.phone)})` : ''}</option>
-                            `).join('')}
-                        </select>
-                        <div class="modal-actions">
-                            <button type="button" class="btn-secondary" onclick="this.closest('.modal').remove()">Cancel</button>
-                            <button type="button" class="btn-primary" onclick="confirmAssignDriver('${orderId}')">Assign</button>
-                        </div>
-                    </div>
-                </div>
-            `;
-            document.body.appendChild(modal);
-        } else {
-            showNotification('Info', 'No drivers available. Please add drivers first.', 'info');
-        }
-    } catch (error) {
-        console.error('Error loading drivers:', error);
-        showError('Error loading drivers: ' + error.message);
+    // Show confirmation dialog
+    const confirmed = confirm(`Send order #${orderId} to DoorDash for driver assignment?`);
+    if (!confirmed) {
+        return;
     }
-}
-
-// Confirm driver assignment (sends order to DoorDash which automatically assigns driver)
-async function confirmAssignDriver(orderId) {
+    
     try {
+        showNotification('Info', 'Sending order to DoorDash...', 'info');
+        
         const response = await authenticatedFetch(`${API_BASE}/api/orders/${orderId}/assign-driver`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
@@ -5832,8 +5850,7 @@ async function confirmAssignDriver(orderId) {
         
         if (data.success) {
             showNotification('Success', data.message || 'Order sent to DoorDash. Driver will be automatically assigned.', 'success');
-            const modal = document.querySelector('.modal');
-            if (modal) modal.remove();
+            // Reload orders to show updated status
             loadOrders();
         } else {
             showError(data.error || 'Failed to assign driver');
@@ -5842,6 +5859,12 @@ async function confirmAssignDriver(orderId) {
         console.error('Error assigning driver:', error);
         showError('Error assigning driver: ' + error.message);
     }
+}
+
+// Legacy function - kept for compatibility but no longer used
+async function confirmAssignDriver(orderId) {
+    // This function is no longer needed as assignDriver now directly sends to DoorDash
+    await assignDriver(orderId);
 }
 
 // View order details
