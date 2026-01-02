@@ -2220,7 +2220,7 @@ function exportOrdersToExcel() {
             // Get distance unit from localStorage
             const distanceUnit = localStorage.getItem('distanceUnit') || 'mile';
             
-            // Helper function to convert and format distance
+            // Helper function to format distance based on selected unit
             const formatDistance = (value, fromUnit, toUnit) => {
                 let numValue = value;
                 
@@ -4605,13 +4605,15 @@ function toggleTimezoneAuto(enabled) {
 
 function selectDistanceUnit(unit) {
     localStorage.setItem('distanceUnit', unit);
-    // Update UI
+    
+    // Update button active states
     document.querySelectorAll('.distance-unit-btn').forEach(btn => {
         btn.classList.remove('active');
         if (btn.textContent.trim() === (unit === 'mile' ? 'Mile' : 'Km')) {
             btn.classList.add('active');
         }
     });
+    
     showNotification('Success', `Distance unit set to ${unit}`, 'success');
     
     // Refresh orders display to update distance units
@@ -5651,52 +5653,51 @@ function createOrderRow(order) {
     // Get distance unit from localStorage
     const distanceUnit = localStorage.getItem('distanceUnit') || 'mile';
     
+    // Helper function to format distance based on selected unit
+    const formatDistance = (value, fromUnit, toUnit) => {
+        let numValue = value;
+        
+        // Extract numeric value if string contains unit
+        if (typeof value === 'string') {
+            if (value.includes('km')) {
+                numValue = parseFloat(value);
+                fromUnit = 'km';
+            } else if (value.includes('miles') || value.includes('mi')) {
+                numValue = parseFloat(value);
+                fromUnit = 'mile';
+            } else {
+                numValue = parseFloat(value);
+                // If no unit specified, assume it's in km (default from API/calculation)
+                if (isNaN(numValue)) return value;
+                fromUnit = 'km';
+            }
+        }
+        
+        if (isNaN(numValue)) return String(value);
+        
+        // Convert to target unit
+        let convertedValue = numValue;
+        if (fromUnit === 'km' && toUnit === 'mile') {
+            convertedValue = numValue * 0.621371;
+        } else if (fromUnit === 'mile' && toUnit === 'km') {
+            convertedValue = numValue * 1.60934;
+        }
+        
+        // Format with appropriate unit
+        const unitLabel = toUnit === 'km' ? 'km' : 'miles';
+        return convertedValue.toFixed(2) + ' ' + unitLabel;
+    };
+    
     let formattedDistance = 'N/A';
     if (distance) {
-        // Helper function to convert and format distance
-        const formatDistance = (value, fromUnit, toUnit) => {
-            let numValue = value;
-            
-            // Extract numeric value if string contains unit
-            if (typeof value === 'string') {
-                if (value.includes('km')) {
-                    numValue = parseFloat(value);
-                    fromUnit = 'km';
-                } else if (value.includes('miles') || value.includes('mi')) {
-                    numValue = parseFloat(value);
-                    fromUnit = 'mile';
-                } else {
-                    numValue = parseFloat(value);
-                    // If no unit specified, assume it's in km (default from API)
-                    if (isNaN(numValue)) return value;
-                    fromUnit = 'km';
-                }
-            }
-            
-            if (isNaN(numValue)) return String(value);
-            
-            // Convert to target unit
-            let convertedValue = numValue;
-            if (fromUnit === 'km' && toUnit === 'mile') {
-                convertedValue = numValue * 0.621371;
-            } else if (fromUnit === 'mile' && toUnit === 'km') {
-                convertedValue = numValue * 1.60934;
-            }
-            
-            // Format with appropriate unit
-            const unitLabel = toUnit === 'km' ? 'km' : 'miles';
-            return convertedValue.toFixed(2) + ' ' + unitLabel;
-        };
-        
         if (typeof distance === 'number') {
             // Assume distance is in km (default from API/calculation)
             formattedDistance = formatDistance(distance, 'km', distanceUnit);
         } else if (typeof distance === 'string') {
-            // Check if already has unit
-            if (distance.includes('miles') || distance.includes('mi')) {
-                formattedDistance = formatDistance(distance, 'mile', distanceUnit);
-            } else if (distance.includes('km')) {
+            if (distance.includes('km')) {
                 formattedDistance = formatDistance(distance, 'km', distanceUnit);
+            } else if (distance.includes('miles') || distance.includes('mi')) {
+                formattedDistance = formatDistance(distance, 'mile', distanceUnit);
             } else {
                 // Try to parse as number (assume km, default from API)
                 formattedDistance = formatDistance(distance, 'km', distanceUnit);
