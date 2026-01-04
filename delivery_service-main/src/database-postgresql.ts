@@ -1320,36 +1320,65 @@ export class OrderDatabasePostgreSQL {
 
   async insertOrUpdateMerchant(merchant: Partial<Merchant>): Promise<Merchant | null> {
     try {
-      if (!merchant.store_id || !merchant.merchant_name) {
-        throw new Error('store_id and merchant_name are required');
+      if (!merchant.store_id) {
+        throw new Error('store_id is required');
+      }
+
+      // For updates, merchant_name is optional (can update other fields without changing name)
+      // For inserts, merchant_name is required
+      const existing = await this.getMerchantByStoreId(merchant.store_id);
+      if (!existing && !merchant.merchant_name) {
+        throw new Error('merchant_name is required for new merchants');
       }
 
       const client = await this.pool.connect();
-      const existing = await this.getMerchantByStoreId(merchant.store_id);
       
       if (existing) {
-        // Update existing merchant
-        await client.query(`
-          UPDATE merchants 
-          SET merchant_name = $1,
-              api_key = COALESCE($2, api_key),
-              api_url = COALESCE($3, api_url),
-              master_key = COALESCE($4, master_key),
-              phone = COALESCE($5, phone),
-              address = COALESCE($6, address),
-              is_active = COALESCE($7, is_active),
-              updated_at = NOW()
-          WHERE store_id = $8
-        `, [
-          merchant.merchant_name,
-          merchant.api_key || null,
-          merchant.api_url || null,
-          merchant.master_key || null,
-          (merchant as any).phone || null,
-          (merchant as any).address || null,
-          merchant.is_active !== undefined ? merchant.is_active : null,
-          merchant.store_id
-        ]);
+        // Update existing merchant - only update fields that are provided
+        const updates: string[] = [];
+        const values: any[] = [];
+        let paramIndex = 1;
+
+        if (merchant.merchant_name !== undefined) {
+          updates.push(`merchant_name = $${paramIndex++}`);
+          values.push(merchant.merchant_name.trim());
+        }
+        if (merchant.api_key !== undefined) {
+          updates.push(`api_key = $${paramIndex++}`);
+          values.push(merchant.api_key || null);
+        }
+        if (merchant.api_url !== undefined) {
+          updates.push(`api_url = $${paramIndex++}`);
+          values.push(merchant.api_url || null);
+        }
+        if (merchant.master_key !== undefined) {
+          updates.push(`master_key = $${paramIndex++}`);
+          values.push(merchant.master_key || null);
+        }
+        if ((merchant as any).phone !== undefined) {
+          updates.push(`phone = $${paramIndex++}`);
+          values.push((merchant as any).phone || null);
+        }
+        if ((merchant as any).address !== undefined) {
+          updates.push(`address = $${paramIndex++}`);
+          values.push((merchant as any).address || null);
+        }
+        if (merchant.is_active !== undefined) {
+          updates.push(`is_active = $${paramIndex++}`);
+          values.push(merchant.is_active);
+        }
+
+        // Always update updated_at
+        updates.push(`updated_at = NOW()`);
+
+        if (updates.length > 1) { // More than just updated_at
+          values.push(merchant.store_id);
+          await client.query(`
+            UPDATE merchants 
+            SET ${updates.join(', ')}
+            WHERE store_id = $${paramIndex}
+          `, values);
+        }
       } else {
         // Insert new merchant
         await client.query(`
@@ -1357,7 +1386,7 @@ export class OrderDatabasePostgreSQL {
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         `, [
           merchant.store_id,
-          merchant.merchant_name,
+          merchant.merchant_name!.trim(),
           merchant.api_key || null,
           merchant.api_url || null,
           merchant.master_key || null,
@@ -1368,7 +1397,11 @@ export class OrderDatabasePostgreSQL {
       }
       
       client.release();
-      return await this.getMerchantByStoreId(merchant.store_id);
+      const updated = await this.getMerchantByStoreId(merchant.store_id);
+      if (updated) {
+        console.log(`Merchant ${merchant.store_id} saved: merchant_name="${updated.merchant_name}", store_id="${updated.store_id}"`);
+      }
+      return updated;
     } catch (error) {
       console.error('Error inserting/updating merchant:', error);
       return null;

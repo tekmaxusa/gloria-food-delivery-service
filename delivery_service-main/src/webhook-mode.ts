@@ -986,9 +986,14 @@ class GloriaFoodWebhookServer {
         const { merchant_name, api_key, api_url, master_key, is_active, phone, address } = req.body;
         const storeId = req.params.storeId;
 
+        // Ensure merchant_name is provided and not empty
+        if (merchant_name !== undefined && (!merchant_name || merchant_name.trim() === '')) {
+          return res.status(400).json({ success: false, error: 'merchant_name cannot be empty' });
+        }
+
         const merchant = await this.handleAsync(this.database.insertOrUpdateMerchant({
           store_id: storeId,
-          merchant_name,
+          merchant_name: merchant_name ? merchant_name.trim() : undefined,
           api_key,
           api_url,
           master_key,
@@ -998,13 +1003,15 @@ class GloriaFoodWebhookServer {
         } as any));
 
         if (merchant) {
-          // Reload merchants in manager
+          // Reload merchants in manager to reflect changes
           await this.merchantManager.reload();
+          console.log(`Merchant ${storeId} updated: merchant_name = ${merchant.merchant_name}`);
           res.json({ success: true, merchant });
         } else {
           res.status(500).json({ success: false, error: 'Failed to update merchant' });
         }
       } catch (error: any) {
+        console.error('Error updating merchant:', error);
         res.status(500).json({ success: false, error: error.message });
       }
     });

@@ -4310,10 +4310,26 @@ async function editBusinessName() {
             
             if (data.success) {
                 valueElement.textContent = newValue.trim();
-                showNotification('Success', 'Business name updated successfully', 'success');
-                // Update merchant object in memory to reflect the change
-                if (merchant) {
-                    merchant.merchant_name = newValue.trim();
+                showNotification('Success', 'Business name updated successfully and saved to database', 'success');
+                
+                // Refresh dashboard header if we're on dashboard
+                const dashboardTitle = document.querySelector('.page-title');
+                if (dashboardTitle && dashboardTitle.textContent !== 'Dashboard') {
+                    // Reload dashboard to show updated merchant name
+                    setTimeout(() => {
+                        const currentPage = document.querySelector('.page.active');
+                        if (currentPage && currentPage.id === 'dashboardPage') {
+                            showDashboardPage();
+                        }
+                    }, 500);
+                }
+                
+                // Reload business settings to show updated name
+                const settingsContent = document.querySelector('.settings-content');
+                if (settingsContent) {
+                    setTimeout(() => {
+                        loadSettingsContent('business-settings');
+                    }, 500);
                 }
             } else {
                 showNotification('Error', data.error || 'Failed to update business name', 'error');
