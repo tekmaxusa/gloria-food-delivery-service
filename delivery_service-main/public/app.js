@@ -6785,12 +6785,24 @@ async function viewOrderDetails(orderId) {
         }
         
         // Extract customer information
-        const customerName = order.customer_name || 
+        let customerName = order.customer_name || 
                            rawData.customer_name ||
-                           rawData.client?.first_name && rawData.client?.last_name ? `${rawData.client.first_name} ${rawData.client.last_name}`.trim() :
-                           rawData.customer?.name ||
                            rawData.client_name ||
                            'N/A';
+        
+        // Try to build from client first_name and last_name if name not found
+        if (customerName === 'N/A' && rawData.client) {
+            const firstName = rawData.client.first_name || '';
+            const lastName = rawData.client.last_name || '';
+            if (firstName || lastName) {
+                customerName = `${firstName} ${lastName}`.trim();
+            }
+        }
+        
+        // Try customer object if still N/A
+        if (customerName === 'N/A' && rawData.customer) {
+            customerName = rawData.customer.name || rawData.customer.full_name || 'N/A';
+        }
         
         const customerPhone = order.customer_phone || 
                             rawData.customer_phone ||
@@ -6799,12 +6811,20 @@ async function viewOrderDetails(orderId) {
                             rawData.phone ||
                             'N/A';
         
-        const customerEmail = order.customer_email || 
+        let customerEmail = order.customer_email || 
                             rawData.customer_email ||
-                            rawData.client?.email ||
-                            rawData.customer?.email ||
                             rawData.email ||
                             'N/A';
+        
+        // Try client object if still N/A
+        if (customerEmail === 'N/A' && rawData.client && rawData.client.email) {
+            customerEmail = rawData.client.email;
+        }
+        
+        // Try customer object if still N/A
+        if (customerEmail === 'N/A' && rawData.customer && rawData.customer.email) {
+            customerEmail = rawData.customer.email;
+        }
         
         // Extract customer address - comprehensive extraction
         let customerAddress = order.delivery_address || 
@@ -6919,11 +6939,20 @@ async function viewOrderDetails(orderId) {
                 if (Array.isArray(items)) {
                     orderItems = items;
                 }
-            } else if (rawData.items || rawData.order_items) {
-                orderItems = rawData.items || rawData.order_items || [];
+            } else if (rawData.items) {
+                const items = Array.isArray(rawData.items) ? rawData.items : (typeof rawData.items === 'string' ? JSON.parse(rawData.items) : []);
+                if (Array.isArray(items)) {
+                    orderItems = items;
+                }
+            } else if (rawData.order_items) {
+                const items = Array.isArray(rawData.order_items) ? rawData.order_items : (typeof rawData.order_items === 'string' ? JSON.parse(rawData.order_items) : []);
+                if (Array.isArray(items)) {
+                    orderItems = items;
+                }
             }
         } catch (e) {
             console.error('Error parsing items:', e);
+            orderItems = [];
         }
         
         // Calculate totals - get item subtotal first
@@ -6944,21 +6973,29 @@ async function viewOrderDetails(orderId) {
         const currency = order.currency || rawData.currency || 'USD';
         
         // Extract payment information
-        const paymentMethod = rawData.payment_method ||
+        let paymentMethod = rawData.payment_method ||
                             rawData.paymentMethod ||
-                            rawData.payment?.method ||
                             rawData.payment_type ||
                             'N/A';
         
+        // Try payment object if still N/A
+        if (paymentMethod === 'N/A' && rawData.payment) {
+            paymentMethod = rawData.payment.method || rawData.payment.type || 'N/A';
+        }
+        
         // Extract delivery instructions
-        const deliveryInstructions = rawData.instructions ||
+        let deliveryInstructions = rawData.instructions ||
                                    rawData.delivery_instructions ||
-                                   rawData.delivery?.instructions ||
                                    rawData.special_instructions ||
                                    rawData.note ||
                                    rawData.notes ||
                                    rawData.customer_note ||
                                    'N/A';
+        
+        // Try delivery object if still N/A
+        if (deliveryInstructions === 'N/A' && rawData.delivery && rawData.delivery.instructions) {
+            deliveryInstructions = rawData.delivery.instructions;
+        }
         
         // Extract delivery note
         const deliveryNote = rawData.delivery_note ||
@@ -7055,26 +7092,39 @@ async function viewOrderDetails(orderId) {
         
         // Get driver information - check DoorDash data too
         const doordashData = rawData.doordash_data || rawData.doordash_response || {};
-        const driverName = rawData.driver_name ||
-                         rawData.driver?.name ||
+        let driverName = rawData.driver_name ||
                          order.driver_name ||
-                         doordashData.driver?.name ||
-                         doordashData.dasher?.name ||
-                         (order.doordash_order_id ? 'Assigned via DoorDash' : 'Not assigned');
+                         'Not assigned';
+        
+        // Try driver object if still not assigned
+        if (driverName === 'Not assigned' && rawData.driver) {
+            driverName = rawData.driver.name || 'Not assigned';
+        }
+        
+        // Try DoorDash data if still not assigned
+        if (driverName === 'Not assigned' && doordashData) {
+            if (doordashData.driver && doordashData.driver.name) {
+                driverName = doordashData.driver.name;
+            } else if (doordashData.dasher && doordashData.dasher.name) {
+                driverName = doordashData.dasher.name;
+            } else if (order.doordash_order_id) {
+                driverName = 'Assigned via DoorDash';
+            }
+        }
         
         // Get status
         const status = (order.status || 'UNKNOWN').toUpperCase();
         
         // Check for proof of delivery - check multiple sources
-        const hasPOD = rawData.proof_of_delivery || 
-                      rawData.proofOfDelivery ||
-                      rawData.pod ||
-                      rawData.proof_of_delivery_image ||
-                      rawData.delivery_proof ||
-                      doordashData.proof_of_delivery ||
-                      doordashData.pod ||
-                      (order.status && ['DELIVERED', 'COMPLETED'].includes(order.status.toUpperCase())) ||
-                      false;
+        let hasPOD = false;
+        if (rawData.proof_of_delivery || rawData.proofOfDelivery || rawData.pod || 
+            rawData.proof_of_delivery_image || rawData.delivery_proof) {
+            hasPOD = true;
+        } else if (doordashData && (doordashData.proof_of_delivery || doordashData.pod)) {
+            hasPOD = true;
+        } else if (order.status && ['DELIVERED', 'COMPLETED'].includes(String(order.status).toUpperCase())) {
+            hasPOD = true;
+        }
         
         // Create modal HTML
         const modalHTML = `
