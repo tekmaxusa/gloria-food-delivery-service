@@ -4410,8 +4410,7 @@ async function editBusinessName() {
             }
             
             if (!merchant) {
-                showNotification('Error', 'No active merchant found', 'error');
-                return;
+                throw new Error('No active merchant found');
             }
             
             // Update merchant name in backend
@@ -4455,13 +4454,14 @@ async function editBusinessName() {
                     }, 500);
                 }
             } else {
-                showNotification('Error', data.error || 'Failed to update business name', 'error');
+                throw new Error(data.error || 'Failed to update business name');
             }
         } catch (error) {
             console.error('Error updating business name:', error);
-            showNotification('Error', 'Error updating business name: ' + error.message, 'error');
+            throw new Error('Error updating business name: ' + error.message);
         }
-    }
+        }
+    });
 }
 
 function editBusinessLogo() {
