@@ -6501,7 +6501,6 @@ function createOrderRow(order) {
             </button>
             <div id="menu-${escapeHtml(String(orderId))}" class="dropdown-menu" style="display: none; position: absolute; right: 0; top: 100%; background: white; border: 1px solid #e5e7eb; border-radius: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 10000; min-width: 150px; margin-top: 4px;">
                 <button class="dropdown-item" onclick="viewOrderDetails('${escapeHtml(String(orderId))}')" style="width: 100%; text-align: left; padding: 8px 12px; border: none; background: none; cursor: pointer; font-size: 14px; transition: background 0.2s;">View Details</button>
-                <button class="dropdown-item" onclick="editOrder('${escapeHtml(String(orderId))}')" style="width: 100%; text-align: left; padding: 8px 12px; border: none; background: none; cursor: pointer; font-size: 14px; transition: background 0.2s;">Edit</button>
                 <button class="dropdown-item" onclick="deleteOrder('${escapeHtml(String(orderId))}')" style="width: 100%; text-align: left; padding: 8px 12px; border: none; background: none; cursor: pointer; font-size: 14px; color: #ef4444; transition: background 0.2s;">Delete</button>
             </div>
         </div>
@@ -6762,15 +6761,399 @@ async function confirmAssignDriver(orderId) {
 }
 
 // View order details
-function viewOrderDetails(orderId) {
-    // TODO: Implement order details view
-    showNotification('Info', 'Order details view coming soon', 'info');
-}
-
-// Edit order
-function editOrder(orderId) {
-    // TODO: Implement order edit functionality
-    showNotification('Info', 'Order edit functionality coming soon', 'info');
+async function viewOrderDetails(orderId) {
+    try {
+        // Fetch order details from API
+        const response = await authenticatedFetch(`${API_BASE}/orders/${orderId}`);
+        const data = await response.json();
+        
+        if (!data.success || !data.order) {
+            showNotification('Error', 'Order not found', 'error');
+            return;
+        }
+        
+        const order = data.order;
+        
+        // Parse raw_data for additional details
+        let rawData = {};
+        try {
+            if (order.raw_data) {
+                rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+            }
+        } catch (e) {
+            console.error('Error parsing raw_data:', e);
+        }
+        
+        // Extract customer information
+        const customerName = order.customer_name || 
+                           rawData.customer_name ||
+                           rawData.client?.first_name && rawData.client?.last_name ? `${rawData.client.first_name} ${rawData.client.last_name}`.trim() :
+                           rawData.customer?.name ||
+                           rawData.client_name ||
+                           'N/A';
+        
+        const customerPhone = order.customer_phone || 
+                            rawData.customer_phone ||
+                            rawData.client?.phone ||
+                            rawData.customer?.phone ||
+                            rawData.phone ||
+                            'N/A';
+        
+        const customerEmail = order.customer_email || 
+                            rawData.customer_email ||
+                            rawData.client?.email ||
+                            rawData.customer?.email ||
+                            rawData.email ||
+                            'N/A';
+        
+        const customerAddress = order.delivery_address || 
+                               order.customer_address ||
+                               rawData.delivery_address ||
+                               rawData.customer_address ||
+                               rawData.client_address ||
+                               (rawData.delivery && rawData.delivery.address ? 
+                                   `${rawData.delivery.address.street || rawData.delivery.address.address_line_1 || ''}, ${rawData.delivery.address.city || ''}, ${rawData.delivery.address.state || ''}, ${rawData.delivery.address.zip || rawData.delivery.address.postal_code || ''}`.replace(/^,\s*|,\s*$/g, '').replace(/,\s*,/g, ',') :
+                               'N/A');
+        
+        // Extract restaurant/pickup information
+        const restaurantName = order.merchant_name ||
+                              rawData.merchant_name ||
+                              rawData.restaurant_name ||
+                              rawData.restaurant?.name ||
+                              rawData.store?.name ||
+                              rawData.store_name ||
+                              'N/A';
+        
+        const restaurantAddress = rawData.restaurant_address ||
+                                 rawData.store_address ||
+                                 rawData.pickup_address ||
+                                 rawData.merchant_address ||
+                                 (rawData.restaurant && rawData.restaurant.address ? 
+                                     `${rawData.restaurant.address.street || rawData.restaurant.address.address_line_1 || ''}, ${rawData.restaurant.address.city || ''}, ${rawData.restaurant.address.state || ''}, ${rawData.restaurant.address.zip || rawData.restaurant.address.postal_code || ''}`.replace(/^,\s*|,\s*$/g, '').replace(/,\s*,/g, ',') :
+                                 (rawData.store && rawData.store.address ? 
+                                     `${rawData.store.address.street || rawData.store.address.address_line_1 || ''}, ${rawData.store.address.city || ''}, ${rawData.store.address.state || ''}, ${rawData.store.address.zip || rawData.store.address.postal_code || ''}`.replace(/^,\s*|,\s*$/g, '').replace(/,\s*,/g, ',') :
+                                     'N/A'));
+        
+        const restaurantPhone = rawData.restaurant_phone ||
+                               rawData.store_phone ||
+                               rawData.merchant_phone ||
+                               rawData.phone ||
+                               rawData.restaurant?.phone ||
+                               rawData.store?.phone ||
+                               'N/A';
+        
+        // Extract order items
+        let orderItems = [];
+        try {
+            if (order.items) {
+                const items = typeof order.items === 'string' ? JSON.parse(order.items) : order.items;
+                if (Array.isArray(items)) {
+                    orderItems = items;
+                }
+            } else if (rawData.items || rawData.order_items) {
+                orderItems = rawData.items || rawData.order_items || [];
+            }
+        } catch (e) {
+            console.error('Error parsing items:', e);
+        }
+        
+        // Calculate totals - get item subtotal first
+        let itemsSubtotal = 0;
+        orderItems.forEach(item => {
+            const quantity = item.quantity || 1;
+            const price = parseFloat(item.price || item.unit_price || item.total_price || 0);
+            itemsSubtotal += quantity * price;
+        });
+        
+        const tax = parseFloat(rawData.tax || rawData.tax_value || rawData.tax_amount || 0);
+        const deliveryFee = parseFloat(rawData.delivery_fee || rawData.deliveryFee || rawData.delivery?.fee || 0);
+        const tip = parseFloat(rawData.tip || rawData.tips || rawData.delivery_tip || 0);
+        const discount = parseFloat(rawData.discount || rawData.discount_amount || rawData.discount_value || 0);
+        const total = parseFloat(order.total_price || rawData.total_price || rawData.total || 0) || (itemsSubtotal + tax + deliveryFee + tip - discount);
+        const currency = order.currency || rawData.currency || 'USD';
+        
+        // Extract payment information
+        const paymentMethod = rawData.payment_method ||
+                            rawData.paymentMethod ||
+                            rawData.payment?.method ||
+                            rawData.payment_type ||
+                            'N/A';
+        
+        // Extract delivery instructions
+        const deliveryInstructions = rawData.instructions ||
+                                   rawData.delivery_instructions ||
+                                   rawData.delivery?.instructions ||
+                                   rawData.special_instructions ||
+                                   rawData.note ||
+                                   rawData.notes ||
+                                   rawData.customer_note ||
+                                   'N/A';
+        
+        // Extract delivery note
+        const deliveryNote = rawData.delivery_note ||
+                           rawData.deliveryNote ||
+                           rawData.note ||
+                           'N/A';
+        
+        // Extract delivery time (similar to createOrderRow logic)
+        const deliveryObj = rawData.delivery || {};
+        const scheduleObj = rawData.schedule || {};
+        const timeObj = rawData.time || rawData.times || {};
+        
+        let deliveryTime = order.estimated_delivery_time ||
+                          order.estimatedDeliveryTime ||
+                          order.delivery_time || 
+                          order.deliveryTime || 
+                          order.delivery_at ||
+                          order.deliveryAt ||
+                          order.delivery_datetime ||
+                          order.deliveryDateTime ||
+                          order.scheduled_delivery_time ||
+                          order.scheduledDeliveryTime ||
+                          rawData.delivery_time || 
+                          rawData.deliveryTime || 
+                          rawData.requested_delivery_time ||
+                          rawData.requestedDeliveryTime ||
+                          rawData.scheduled_delivery_time ||
+                          rawData.scheduledDeliveryTime ||
+                          rawData.delivery_at ||
+                          rawData.deliveryAt ||
+                          rawData.delivery_datetime ||
+                          rawData.deliveryDateTime ||
+                          rawData.requested_delivery_datetime ||
+                          rawData.estimated_delivery_time ||
+                          rawData.estimatedDeliveryTime ||
+                          rawData.preferred_delivery_time ||
+                          rawData.preferredDeliveryTime ||
+                          deliveryObj.delivery_time ||
+                          deliveryObj.deliveryTime ||
+                          deliveryObj.requested_delivery_time ||
+                          deliveryObj.requestedDeliveryTime ||
+                          deliveryObj.scheduled_delivery_time ||
+                          deliveryObj.scheduledDeliveryTime ||
+                          deliveryObj.delivery_at ||
+                          deliveryObj.deliveryAt ||
+                          scheduleObj.delivery_time ||
+                          scheduleObj.deliveryTime ||
+                          scheduleObj.requested_delivery_time ||
+                          scheduleObj.requestedDeliveryTime ||
+                          scheduleObj.scheduled_delivery_time ||
+                          timeObj.delivery ||
+                          timeObj.delivery_time ||
+                          null;
+        
+        // If date and time are separate, combine them
+        if (!deliveryTime) {
+            const deliveryDate = rawData.delivery_date || rawData.deliveryDate || deliveryObj.delivery_date || scheduleObj.delivery_date || rawData.scheduled_date || scheduleObj.scheduled_date || rawData.requested_delivery_date;
+            const deliveryTimeOnly = rawData.delivery_time_only || rawData.deliveryTimeOnly || deliveryObj.delivery_time_only || scheduleObj.delivery_time_only || rawData.scheduled_time || scheduleObj.scheduled_time || rawData.requested_delivery_time_only;
+            
+            if (deliveryDate && deliveryTimeOnly) {
+                deliveryTime = `${deliveryDate} ${deliveryTimeOnly}`;
+            } else if (deliveryDate) {
+                deliveryTime = deliveryDate;
+            } else if (deliveryTimeOnly) {
+                const today = new Date().toISOString().split('T')[0];
+                deliveryTime = `${today} ${deliveryTimeOnly}`;
+            }
+        }
+        
+        // Also check if delivery time is in raw_data at root level
+        if (!deliveryTime) {
+            deliveryTime = rawData.delivery || rawData.delivery_datetime || rawData.deliveryDateTime ||
+                          rawData.requested_time || rawData.requestedTime ||
+                          rawData.preferred_time || rawData.preferredTime ||
+                          (rawData.times && rawData.times.delivery) ||
+                          (rawData.time && rawData.time.delivery) ||
+                          null;
+        }
+        
+        // Extract timeline information
+        const orderPlacedTime = formatDateShipday(order.fetched_at || order.created_at || order.updated_at);
+        const requestedDeliveryTime = deliveryTime ? formatDateShipday(deliveryTime) : 'N/A';
+        
+        // Format timeline dates
+        const formatTimelineDate = (dateStr) => {
+            if (!dateStr || dateStr === 'N/A') return 'N/A';
+            return formatDateShipday(dateStr);
+        };
+        
+        const orderAcceptTime = formatTimelineDate(rawData.accepted_at || rawData.accept_time || rawData.order_accept_time);
+        const orderPickupTime = formatTimelineDate(rawData.picked_up_at || rawData.pickup_time || rawData.order_pickup_time);
+        const orderDeliveryTime = formatTimelineDate(rawData.delivered_at || rawData.delivery_time || rawData.order_delivery_time);
+        const orderCompletionTime = formatTimelineDate(rawData.completed_at || rawData.completion_time || rawData.order_completion_time);
+        
+        // Get driver information
+        const driverName = rawData.driver_name ||
+                         rawData.driver?.name ||
+                         order.driver_name ||
+                         'Not assigned';
+        
+        // Get status
+        const status = (order.status || 'UNKNOWN').toUpperCase();
+        
+        // Check for proof of delivery
+        const hasPOD = rawData.proof_of_delivery || 
+                      rawData.proofOfDelivery ||
+                      rawData.pod ||
+                      false;
+        
+        // Create modal HTML
+        const modalHTML = `
+            <div id="orderDetailsModal" class="modal">
+                <div class="modal-content" style="max-width: 900px; width: 95%; max-height: 90vh; overflow-y: auto;">
+                    <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; padding: 20px; border-bottom: 1px solid #e5e7eb;">
+                        <div>
+                            <h2 style="margin: 0; font-size: 20px; font-weight: 600; color: #0f172a;">Order #: ${escapeHtml(String(orderId))}</h2>
+                            <p style="margin: 4px 0 0 0; font-size: 14px; color: #64748b;">Status: <span class="status-badge status-${status.toLowerCase()}" style="display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 500;">${escapeHtml(status)}</span></p>
+                        </div>
+                        <button class="modal-close" id="closeOrderDetailsModal" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #64748b; padding: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">&times;</button>
+                    </div>
+                    
+                    <div class="modal-body" style="padding: 24px;">
+                        <!-- Delivery and Pickup Information -->
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px;">
+                            <div>
+                                <h3 style="font-size: 16px; font-weight: 600; color: #0f172a; margin-bottom: 16px;">Deliver to</h3>
+                                <div style="color: #475569; font-size: 14px; line-height: 1.8;">
+                                    <div><strong>Name:</strong> ${escapeHtml(customerName)}</div>
+                                    <div><strong>Address:</strong> ${escapeHtml(customerAddress)}</div>
+                                    <div><strong>Phone Number:</strong> ${escapeHtml(customerPhone)}</div>
+                                    <div><strong>Email Address:</strong> ${escapeHtml(customerEmail)}</div>
+                                </div>
+                            </div>
+                            <div>
+                                <h3 style="font-size: 16px; font-weight: 600; color: #0f172a; margin-bottom: 16px;">Pick-up From</h3>
+                                <div style="color: #475569; font-size: 14px; line-height: 1.8;">
+                                    <div><strong>Source/Restaurant Name:</strong> ${escapeHtml(restaurantName)}</div>
+                                    <div><strong>Address:</strong> ${escapeHtml(restaurantAddress)}</div>
+                                    <div><strong>Phone Number:</strong> ${escapeHtml(restaurantPhone)}</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Order Summary -->
+                        <div style="margin-bottom: 32px; padding: 20px; background: #f8fafc; border-radius: 8px;">
+                            <h3 style="font-size: 16px; font-weight: 600; color: #0f172a; margin-bottom: 16px;">Order</h3>
+                            <div style="margin-bottom: 16px;">
+                                ${orderItems.length > 0 ? orderItems.map((item, idx) => {
+                                    const itemName = item.name || item.product_name || item.title || item.item_name || 'Unknown Item';
+                                    const quantity = item.quantity || 1;
+                                    const price = parseFloat(item.price || item.unit_price || item.total_price || 0);
+                                    const modifiers = item.variations || item.options || [];
+                                    const modifierText = modifiers.length > 0 ? modifiers.map(m => `+${m.name || m.title || ''}`).join(', ') : '';
+                                    return `
+                                        <div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: ${idx < orderItems.length - 1 ? '1px solid #e2e8f0' : 'none'};">
+                                            <div style="font-weight: 500; color: #0f172a;">${quantity} x ${escapeHtml(itemName)}</div>
+                                            ${modifierText ? `<div style="font-size: 13px; color: #64748b; margin-top: 4px;">${escapeHtml(modifierText)}</div>` : ''}
+                                            <div style="font-weight: 600; color: #0f172a; margin-top: 4px;">${formatCurrency(price, currency)}</div>
+                                        </div>
+                                    `;
+                                }).join('') : '<div style="color: #64748b;">No items found</div>'}
+                            </div>
+                            <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; margin-top: 16px;">
+                                ${itemsSubtotal > 0 ? `
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 8px; color: #475569;">
+                                    <span>Subtotal:</span>
+                                    <span>${formatCurrency(itemsSubtotal, currency)}</span>
+                                </div>
+                                ` : ''}
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 8px; color: #475569;">
+                                    <span>Tax:</span>
+                                    <span>${tax > 0 ? formatCurrency(tax, currency) : 'N/A'}</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 8px; color: #475569;">
+                                    <span>Delivery Fees:</span>
+                                    <span>${deliveryFee > 0 ? formatCurrency(deliveryFee, currency) : 'N/A'}</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 8px; color: #475569;">
+                                    <span>Delivery Tips:</span>
+                                    <span>${tip > 0 ? formatCurrency(tip, currency) : 'N/A'}</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 8px; color: #475569;">
+                                    <span>Discount:</span>
+                                    <span>${discount > 0 ? formatCurrency(discount, currency) : 'N/A'}</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; margin-top: 16px; padding-top: 16px; border-top: 2px solid #e2e8f0; font-weight: 600; font-size: 16px; color: #0f172a;">
+                                    <span>Total:</span>
+                                    <span>${formatCurrency(total, currency)}</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Delivery Details -->
+                        <div style="margin-bottom: 32px;">
+                            <h3 style="font-size: 16px; font-weight: 600; color: #0f172a; margin-bottom: 16px;">Delivery Details</h3>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; color: #475569; font-size: 14px;">
+                                <div><strong>Order Placement Time:</strong> ${orderPlacedTime}</div>
+                                <div><strong>Driver:</strong> ${escapeHtml(driverName)}</div>
+                                <div><strong>Requested Delivery Time:</strong> ${requestedDeliveryTime}</div>
+                                <div><strong>Order Accept Time:</strong> ${orderAcceptTime}</div>
+                                <div><strong>Order Pickup Time:</strong> ${orderPickupTime}</div>
+                                <div><strong>Order Delivery Time:</strong> ${orderDeliveryTime}</div>
+                                <div><strong>Order Completion Time:</strong> ${orderCompletionTime}</div>
+                            </div>
+                            <div style="margin-top: 16px; padding: 12px; background: #f8fafc; border-radius: 6px;">
+                                <strong style="color: #0f172a;">Delivery Instruction:</strong>
+                                <div style="color: #475569; margin-top: 4px;">${escapeHtml(deliveryInstructions)}</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Payment and Proof of Delivery -->
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+                            <div>
+                                <h3 style="font-size: 16px; font-weight: 600; color: #0f172a; margin-bottom: 16px;">Payment Details</h3>
+                                <div style="color: #475569; font-size: 14px; line-height: 1.8;">
+                                    <div><strong>Payment Method:</strong> ${escapeHtml(paymentMethod)}</div>
+                                    <div><strong>Delivery Note:</strong> ${deliveryNote !== 'N/A' ? escapeHtml(deliveryNote) : 'N/A'}</div>
+                                </div>
+                            </div>
+                            <div>
+                                <h3 style="font-size: 16px; font-weight: 600; color: #0f172a; margin-bottom: 16px;">Proof of Delivery</h3>
+                                <div style="color: ${hasPOD ? '#22c55e' : '#ef4444'}; font-size: 14px; font-weight: 500;">
+                                    ${hasPOD ? 'Proof of Delivery Available' : 'No Proof Of Delivery (POD) Taken'}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Remove existing modal if any
+        const existingModal = document.getElementById('orderDetailsModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+        
+        // Insert modal into body
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+        
+        const modal = document.getElementById('orderDetailsModal');
+        const closeBtn = document.getElementById('closeOrderDetailsModal');
+        
+        // Close modal function
+        const closeModal = () => {
+            modal.remove();
+        };
+        
+        // Close handlers
+        closeBtn.addEventListener('click', closeModal);
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeModal();
+        });
+        
+        // Close on Escape key
+        document.addEventListener('keydown', function escapeHandler(e) {
+            if (e.key === 'Escape' && modal && document.body.contains(modal)) {
+                closeModal();
+                document.removeEventListener('keydown', escapeHandler);
+            }
+        });
+        
+    } catch (error) {
+        console.error('Error loading order details:', error);
+        showNotification('Error', 'Failed to load order details: ' + error.message, 'error');
+    }
 }
 
 // Make functions globally available
@@ -6778,7 +7161,6 @@ window.toggleOrderMenu = toggleOrderMenu;
 window.assignDriver = assignDriver;
 window.confirmAssignDriver = confirmAssignDriver;
 window.viewOrderDetails = viewOrderDetails;
-window.editOrder = editOrder;
 
 // Delete order
 async function deleteOrder(orderId) {
