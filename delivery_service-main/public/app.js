@@ -7089,16 +7089,59 @@ async function viewOrderDetails(orderId) {
                 key.toLowerCase().includes('card')
             );
             
+            // Debug: Log available payment-related keys
+            if (paymentKeys.length > 0) {
+                console.log('[Payment Debug] Found payment-related keys:', paymentKeys);
+            }
+            
             for (const key of paymentKeys) {
                 const value = rawData[key];
                 if (value && typeof value === 'string' && value.trim() !== '') {
                     paymentMethod = value;
+                    console.log(`[Payment Debug] Found payment method from key "${key}":`, paymentMethod);
                     break;
                 } else if (value && typeof value === 'object' && (value.method || value.type)) {
                     paymentMethod = value.method || value.type;
+                    console.log(`[Payment Debug] Found payment method from object key "${key}":`, paymentMethod);
                     break;
                 }
             }
+        }
+        
+        // Final fallback: Check if there's any field that looks like a payment method
+        if (!paymentMethod || paymentMethod === 'N/A') {
+            // Check common GloriaFood payment field patterns
+            const commonPatterns = [
+                'payment', 'pay', 'method', 'type', 'payment_type', 
+                'payment_method', 'pay_method', 'payment_info'
+            ];
+            
+            for (const pattern of commonPatterns) {
+                // Check exact match
+                if (rawData[pattern] && typeof rawData[pattern] === 'string' && rawData[pattern].trim() !== '') {
+                    paymentMethod = rawData[pattern];
+                    console.log(`[Payment Debug] Found payment method from pattern "${pattern}":`, paymentMethod);
+                    break;
+                }
+                // Check case variations
+                const lowerPattern = pattern.toLowerCase();
+                for (const key in rawData) {
+                    if (key.toLowerCase() === lowerPattern && rawData[key] && typeof rawData[key] === 'string' && rawData[key].trim() !== '') {
+                        paymentMethod = rawData[key];
+                        console.log(`[Payment Debug] Found payment method from case variation "${key}":`, paymentMethod);
+                        break;
+                    }
+                }
+                if (paymentMethod && paymentMethod !== 'N/A') break;
+            }
+        }
+        
+        // Debug: Log final result and available rawData keys if still N/A
+        if (!paymentMethod || paymentMethod === 'N/A') {
+            console.log('[Payment Debug] Payment method not found. Available rawData keys:', Object.keys(rawData).slice(0, 50));
+            console.log('[Payment Debug] Sample rawData (first 500 chars):', JSON.stringify(rawData).substring(0, 500));
+        } else {
+            console.log('[Payment Debug] Final payment method:', paymentMethod);
         }
         
         // Default to 'N/A' if still not found
