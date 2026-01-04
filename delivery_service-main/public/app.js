@@ -6999,15 +6999,56 @@ async function viewOrderDetails(orderId) {
         // Use order.currency first (actual DB data)
         const currency = order.currency || rawData.currency || 'USD';
         
-        // Extract payment information
+        // Extract payment information - comprehensive extraction from multiple sources
         let paymentMethod = rawData.payment_method ||
                             rawData.paymentMethod ||
                             rawData.payment_type ||
+                            rawData.paymentType ||
+                            rawData.payment_method_type ||
+                            rawData.pay_method ||
+                            rawData.payMethod ||
                             'N/A';
         
         // Try payment object if still N/A
         if (paymentMethod === 'N/A' && rawData.payment) {
-            paymentMethod = rawData.payment.method || rawData.payment.type || 'N/A';
+            paymentMethod = rawData.payment.method || 
+                           rawData.payment.type || 
+                           rawData.payment.payment_method ||
+                           rawData.payment.paymentMethod ||
+                           rawData.payment.payment_type ||
+                           'N/A';
+        }
+        
+        // Try order.payment if available
+        if (paymentMethod === 'N/A' && order.payment) {
+            const orderPayment = typeof order.payment === 'string' ? JSON.parse(order.payment) : order.payment;
+            paymentMethod = orderPayment.method || 
+                           orderPayment.type || 
+                           orderPayment.payment_method ||
+                           'N/A';
+        }
+        
+        // Format payment method for display (capitalize first letter, handle common values)
+        if (paymentMethod !== 'N/A' && paymentMethod) {
+            const pmLower = String(paymentMethod).toLowerCase();
+            if (pmLower === 'cash') {
+                paymentMethod = 'CASH';
+            } else if (pmLower === 'card' || pmLower === 'credit_card' || pmLower === 'creditcard' || pmLower === 'debit_card' || pmLower === 'debitcard') {
+                paymentMethod = 'CARD';
+            } else if (pmLower === 'online' || pmLower === 'online_payment' || pmLower === 'onlinepayment') {
+                paymentMethod = 'ONLINE';
+            } else if (pmLower === 'paypal') {
+                paymentMethod = 'PAYPAL';
+            } else if (pmLower === 'stripe') {
+                paymentMethod = 'STRIPE';
+            } else if (pmLower === 'square') {
+                paymentMethod = 'SQUARE';
+            } else {
+                // Capitalize first letter of each word
+                paymentMethod = String(paymentMethod).split('_').map(word => 
+                    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+                ).join(' ');
+            }
         }
         
         // Extract delivery instructions
