@@ -184,7 +184,18 @@ function setupDashboardUI() {
 }
 
 // Initialize
-document.addEventListener('DOMContentLoaded', () => {
+// Load settings from backend on page load
+async function initializeSettings() {
+    try {
+        await loadSettings();
+    } catch (error) {
+        console.error('Error loading settings:', error);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+    // Load settings from backend
+    await initializeSettings();
     // Ensure login form is active on page load
     const loginForm = document.getElementById('loginForm');
     const signupForm = document.getElementById('signupForm');
@@ -4472,17 +4483,17 @@ async function saveBusinessSettings() {
     }
 }
 
-function toggleDriverFleet(enabled) {
-    localStorage.setItem('useDriverFleet', enabled);
+async function toggleDriverFleet(enabled) {
+    await saveSetting('useDriverFleet', enabled);
     showNotification('Success', `Driver fleet ${enabled ? 'enabled' : 'disabled'}`, 'success');
 }
 
-function toggleTakeoutOrders(enabled) {
-    localStorage.setItem('acceptTakeoutOrders', enabled);
+async function toggleTakeoutOrders(enabled) {
+    await saveSetting('acceptTakeoutOrders', enabled);
     showNotification('Success', `Takeout orders ${enabled ? 'enabled' : 'disabled'}`, 'success');
 }
 
-function editMaxDeliveryTime() {
+async function editMaxDeliveryTime() {
     const valueElement = document.getElementById('maxDeliveryTimeValue');
     if (!valueElement) return;
     
@@ -4492,9 +4503,8 @@ function editMaxDeliveryTime() {
     if (newValue !== null && newValue.trim() !== '') {
         const minutes = parseInt(newValue.trim());
         if (!isNaN(minutes) && minutes > 0) {
+            await saveSetting('maxDeliveryTime', minutes.toString());
             valueElement.textContent = `${minutes} Minutes`;
-            localStorage.setItem('maxDeliveryTime', minutes.toString());
-            // TODO: Save to backend
             showNotification('Success', 'Maximum delivery time updated', 'success');
         } else {
             showNotification('Error', 'Please enter a valid number', 'error');
@@ -4502,7 +4512,7 @@ function editMaxDeliveryTime() {
     }
 }
 
-function editOrderPrepTime() {
+async function editOrderPrepTime() {
     const valueElement = document.getElementById('orderPrepTimeValue');
     if (!valueElement) return;
     
@@ -4512,9 +4522,8 @@ function editOrderPrepTime() {
     if (newValue !== null && newValue.trim() !== '') {
         const minutes = parseInt(newValue.trim());
         if (!isNaN(minutes) && minutes > 0) {
+            await saveSetting('orderPrepTime', minutes.toString());
             valueElement.textContent = `${minutes} Minutes`;
-            localStorage.setItem('orderPrepTime', minutes.toString());
-            // TODO: Save to backend
             showNotification('Success', 'Order preparation time updated', 'success');
         } else {
             showNotification('Error', 'Please enter a valid number', 'error');
@@ -4522,18 +4531,57 @@ function editOrderPrepTime() {
     }
 }
 
+// Settings API helper function
+async function saveSetting(key, value) {
+    try {
+        const response = await authenticatedFetch(`${API_BASE}/api/settings`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ settings: { [key]: value } })
+        });
+        const data = await response.json();
+        if (data.success) {
+            localStorage.setItem(key, value);
+            return true;
+        }
+        return false;
+    } catch (error) {
+        console.error(`Error saving setting ${key}:`, error);
+        // Fallback to localStorage
+        localStorage.setItem(key, value);
+        return false;
+    }
+}
+
+async function loadSettings() {
+    try {
+        const response = await authenticatedFetch(`${API_BASE}/api/settings`);
+        const data = await response.json();
+        if (data.success && data.settings) {
+            // Update localStorage with settings from backend
+            Object.entries(data.settings).forEach(([key, value]) => {
+                localStorage.setItem(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
+            });
+            return data.settings;
+        }
+    } catch (error) {
+        console.error('Error loading settings:', error);
+    }
+    return {};
+}
+
 // Driver settings helper functions
-function toggleDriverSetting(setting, enabled) {
-    localStorage.setItem(setting, enabled);
+async function toggleDriverSetting(setting, enabled) {
+    await saveSetting(setting, enabled);
     showNotification('Success', 'Setting updated', 'success');
 }
 
-function saveDriverResponseTime() {
+async function saveDriverResponseTime() {
     const input = document.getElementById('driverResponseTimeInput');
     if (input) {
         const value = parseInt(input.value);
         if (!isNaN(value) && value > 0 && value <= 60) {
-            localStorage.setItem('driverResponseTime', value.toString());
+            await saveSetting('driverResponseTime', value.toString());
             showNotification('Success', 'Driver response time updated', 'success');
         } else {
             showNotification('Error', 'Please enter a valid number (1-60)', 'error');
@@ -4541,15 +4589,15 @@ function saveDriverResponseTime() {
     }
 }
 
-function toggleDriverPayment(setting, enabled) {
-    localStorage.setItem(setting, enabled);
+async function toggleDriverPayment(setting, enabled) {
+    await saveSetting(setting, enabled);
     // Reload content to show/hide input fields
     loadSettingsContent('driver-settings');
     showNotification('Success', 'Payment setting updated', 'success');
 }
 
-function updateDriverPayment(setting, value) {
-    localStorage.setItem(setting, value);
+async function updateDriverPayment(setting, value) {
+    await saveSetting(setting, value);
     // Update payment summary
     const summary = document.getElementById('paymentSummary');
     if (summary) {
@@ -4585,8 +4633,8 @@ function switchThirdPartyTab(tab) {
     loadSettingsContent('third-party-delivery');
 }
 
-function toggleThirdPartyService(service, enabled) {
-    localStorage.setItem(`${service}Enabled`, enabled);
+async function toggleThirdPartyService(service, enabled) {
+    await saveSetting(`${service}Enabled`, enabled);
     showNotification('Success', `${service} ${enabled ? 'enabled' : 'disabled'}`, 'success');
 }
 
@@ -4594,19 +4642,19 @@ function inviteLocalDelivery() {
     showNotification('Info', 'Invite local delivery company functionality coming soon', 'info');
 }
 
-function toggleThirdPartySetting(setting, enabled) {
-    localStorage.setItem(setting, enabled);
+async function toggleThirdPartySetting(setting, enabled) {
+    await saveSetting(setting, enabled);
     showNotification('Success', 'Third-party setting updated', 'success');
 }
 
 // Customer notification helper functions
-function toggleNotificationSetting(setting, enabled) {
-    localStorage.setItem(setting, enabled);
+async function toggleNotificationSetting(setting, enabled) {
+    await saveSetting(setting, enabled);
     showNotification('Success', 'Notification setting updated', 'success');
 }
 
-function updateTrackingNotification(value) {
-    localStorage.setItem('trackingNotification', value);
+async function updateTrackingNotification(value) {
+    await saveSetting('trackingNotification', value);
     showNotification('Success', 'Tracking notification setting updated', 'success');
 }
 
@@ -4639,8 +4687,8 @@ function updateLocation(setting, value) {
     showNotification('Success', 'Location setting updated', 'success');
 }
 
-function toggleTimezoneAuto(enabled) {
-    localStorage.setItem('timezoneAuto', enabled);
+async function toggleTimezoneAuto(enabled) {
+    await saveSetting('timezoneAuto', enabled);
     const timezoneSelect = document.getElementById('timezoneSelect');
     if (timezoneSelect) {
         timezoneSelect.disabled = enabled;
@@ -4648,8 +4696,8 @@ function toggleTimezoneAuto(enabled) {
     showNotification('Success', `Timezone ${enabled ? 'auto' : 'manual'} setup`, 'success');
 }
 
-function selectDistanceUnit(unit) {
-    localStorage.setItem('distanceUnit', unit);
+async function selectDistanceUnit(unit) {
+    await saveSetting('distanceUnit', unit);
     
     // Update button active states
     document.querySelectorAll('.distance-unit-btn').forEach(btn => {
@@ -4700,17 +4748,18 @@ window.toggleTimezoneAuto = toggleTimezoneAuto;
 window.selectDistanceUnit = selectDistanceUnit;
 
 // Dispatch settings helper functions
-function toggleDispatchSetting(setting, enabled) {
-    localStorage.setItem(`dispatch${setting.charAt(0).toUpperCase() + setting.slice(1)}`, enabled);
+async function toggleDispatchSetting(setting, enabled) {
+    const key = `dispatch${setting.charAt(0).toUpperCase() + setting.slice(1)}`;
+    await saveSetting(key, enabled);
     showNotification('Success', 'Dispatch setting updated', 'success');
 }
 
-function saveDispatchTimeWindow() {
+async function saveDispatchTimeWindow() {
     const input = document.getElementById('dispatchTimeWindowInput');
     if (input) {
         const value = parseFloat(input.value);
         if (!isNaN(value) && value >= 0.5 && value <= 24) {
-            localStorage.setItem('dispatchTimeWindow', value.toString());
+            await saveSetting('dispatchTimeWindow', value.toString());
             showNotification('Success', 'Dispatch time window updated', 'success');
         } else {
             showNotification('Error', 'Please enter a valid number (0.5-24)', 'error');
@@ -5471,9 +5520,83 @@ function getOrderCategory(order) {
     if (isCompleted) return 'completed';
     if (isIncomplete) return 'incomplete';
     
+    // Check if pending - move to incomplete
+    if (status === 'PENDING') {
+        // Check if pending order is older than 1 day
+        const orderDate = order.created_at || order.fetched_at || order.updated_at;
+        if (orderDate) {
+            try {
+                const orderDateTime = new Date(orderDate);
+                const now = new Date();
+                const daysDiff = (now.getTime() - orderDateTime.getTime()) / (1000 * 60 * 60 * 24);
+                if (daysDiff >= 1) {
+                    return 'incomplete';
+                }
+            } catch (e) {
+                // If can't parse date, treat as incomplete
+                return 'incomplete';
+            }
+        } else {
+            // No date found, treat as incomplete
+            return 'incomplete';
+        }
+    }
+    
     // Check if scheduled (only if not completed/incomplete)
     const isScheduled = hasScheduledDeliveryTime(order);
     if (isScheduled) {
+        // Check if scheduled order is older than 1 day
+        const orderDate = order.created_at || order.fetched_at || order.updated_at;
+        let scheduledTime = null;
+        
+        // Try to get scheduled delivery time
+        try {
+            let rawData = {};
+            if (order.raw_data) {
+                rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+            }
+            
+            scheduledTime = order.scheduled_delivery_time || 
+                          rawData.scheduled_delivery_time ||
+                          rawData.delivery_time ||
+                          rawData.requested_delivery_time;
+            
+            if (scheduledTime) {
+                const scheduledDate = new Date(scheduledTime);
+                const now = new Date();
+                const daysDiff = (now.getTime() - scheduledDate.getTime()) / (1000 * 60 * 60 * 24);
+                
+                // If scheduled time has passed more than 1 day ago, move to incomplete
+                if (daysDiff >= 1 && scheduledDate < now) {
+                    return 'incomplete';
+                }
+                
+                // If scheduled time has passed but less than 1 day, check status
+                if (scheduledDate < now) {
+                    // If order is delivered/completed, it should be in completed
+                    if (isCompleted) {
+                        return 'completed';
+                    }
+                    // Otherwise, it's incomplete
+                    return 'incomplete';
+                }
+            }
+        } catch (e) {
+            // If can't parse, check order age
+            if (orderDate) {
+                try {
+                    const orderDateTime = new Date(orderDate);
+                    const now = new Date();
+                    const daysDiff = (now.getTime() - orderDateTime.getTime()) / (1000 * 60 * 60 * 24);
+                    if (daysDiff >= 1) {
+                        return 'incomplete';
+                    }
+                } catch (e2) {
+                    // Ignore
+                }
+            }
+        }
+        
         const orderId = order.gloriafood_order_id || order.id;
         console.log(`[DEBUG] Order ${orderId} categorized as SCHEDULED`);
         return 'scheduled';

@@ -956,8 +956,30 @@ body {
     
     /* Dashboard cards */
     .dashboard-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, 1fr);
         gap: 16px;
+    }
+    
+    .dashboard-card {
+        padding: 20px;
+    }
+    
+    .dashboard-card-value {
+        font-size: 28px;
+    }
+    
+    .dashboard-card-header h3 {
+        font-size: 13px;
+    }
+    
+    .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .dashboard-card-header svg {
+        width: 20px;
+        height: 20px;
     }
     
     /* Settings panels */
@@ -1085,6 +1107,24 @@ body {
     
     .auth-title {
         font-size: 20px;
+    }
+    
+    /* Dashboard mobile */
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+    
+    .dashboard-card {
+        padding: 16px;
+    }
+    
+    .dashboard-card-value {
+        font-size: 24px;
+    }
+    
+    .dashboard-card-header h3 {
+        font-size: 12px;
     }
 }
 

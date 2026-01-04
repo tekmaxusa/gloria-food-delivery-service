@@ -102,6 +102,17 @@ CREATE TABLE IF NOT EXISTS merchants (
 CREATE INDEX IF NOT EXISTS idx_store_id ON merchants(store_id);
 CREATE INDEX IF NOT EXISTS idx_is_active ON merchants(is_active);
 
+-- Create settings table for application settings
+CREATE TABLE IF NOT EXISTS settings (
+  id SERIAL PRIMARY KEY,
+  key VARCHAR(255) UNIQUE NOT NULL,
+  value TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_settings_key ON settings(key);
+
 -- Create function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -133,6 +144,12 @@ CREATE TRIGGER update_drivers_updated_at
 DROP TRIGGER IF EXISTS update_merchants_updated_at ON merchants;
 CREATE TRIGGER update_merchants_updated_at
   BEFORE UPDATE ON merchants
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_settings_updated_at ON settings;
+CREATE TRIGGER update_settings_updated_at
+  BEFORE UPDATE ON settings
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
 

@@ -1622,6 +1622,108 @@ class GloriaFoodWebhookServer {
         res.status(500).json({ success: false, error: error.message });
       }
     });
+
+    // Settings API endpoints
+    // Get settings
+    this.app.get('/api/settings', async (req: Request, res: Response) => {
+      try {
+        const db = this.database as any;
+        if (db.pool) {
+          const client = await db.pool.connect();
+          try {
+            const result = await client.query('SELECT * FROM settings ORDER BY key');
+            const settings: any = {};
+            result.rows.forEach((row: any) => {
+              try {
+                settings[row.key] = JSON.parse(row.value);
+              } catch {
+                settings[row.key] = row.value;
+              }
+            });
+            client.release();
+            res.json({ success: true, settings });
+          } catch (error: any) {
+            client.release();
+            throw error;
+          }
+        } else {
+          res.json({ success: true, settings: {} });
+        }
+      } catch (error: any) {
+        console.error('Error fetching settings:', error);
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    // Save settings
+    this.app.post('/api/settings', async (req: Request, res: Response) => {
+      try {
+        const { settings } = req.body;
+        if (!settings || typeof settings !== 'object') {
+          return res.status(400).json({ success: false, error: 'Invalid settings data' });
+        }
+
+        const db = this.database as any;
+        if (db.pool) {
+          const client = await db.pool.connect();
+          try {
+            for (const [key, value] of Object.entries(settings)) {
+              const valueStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
+              await client.query(
+                `INSERT INTO settings (key, value, updated_at) 
+                 VALUES ($1, $2, NOW()) 
+                 ON CONFLICT (key) 
+                 DO UPDATE SET value = $2, updated_at = NOW()`,
+                [key, valueStr]
+              );
+            }
+            client.release();
+            res.json({ success: true, message: 'Settings saved successfully' });
+          } catch (error: any) {
+            client.release();
+            throw error;
+          }
+        } else {
+          res.json({ success: true, message: 'Settings saved (localStorage only)' });
+        }
+      } catch (error: any) {
+        console.error('Error saving settings:', error);
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    // Get specific setting
+    this.app.get('/api/settings/:key', async (req: Request, res: Response) => {
+      try {
+        const { key } = req.params;
+        const db = this.database as any;
+        if (db.pool) {
+          const client = await db.pool.connect();
+          try {
+            const result = await client.query('SELECT value FROM settings WHERE key = $1', [key]);
+            client.release();
+            if (result.rows.length > 0) {
+              try {
+                const value = JSON.parse(result.rows[0].value);
+                res.json({ success: true, value });
+              } catch {
+                res.json({ success: true, value: result.rows[0].value });
+              }
+            } else {
+              res.json({ success: true, value: null });
+            }
+          } catch (error: any) {
+            client.release();
+            throw error;
+          }
+        } else {
+          res.json({ success: true, value: null });
+        }
+      } catch (error: any) {
+        console.error('Error fetching setting:', error);
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
   }
 
   private hashPassword(password: string): string {
