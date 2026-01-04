@@ -5520,13 +5520,10 @@ function getOrderCategory(order) {
     if (isCompleted) return 'completed';
     if (isIncomplete) return 'incomplete';
     
-    // Pending orders stay in current - they don't automatically become incomplete
-    // They only become incomplete if status is explicitly CANCELLED, FAILED, or REJECTED
-    
     // Check if scheduled (only if not completed/incomplete)
     const isScheduled = hasScheduledDeliveryTime(order);
     if (isScheduled) {
-        // Check if scheduled delivery time has passed
+        // For scheduled orders, check if scheduled delivery time has passed
         let scheduledTime = null;
         
         // Try to get scheduled delivery time
@@ -5557,13 +5554,33 @@ function getOrderCategory(order) {
                 }
             }
         } catch (e) {
-            // If can't parse scheduled time, keep it as scheduled
+            // If can't parse scheduled time, check order age instead
             console.error('Error parsing scheduled time:', e);
         }
         
+        // Scheduled order with future time - stay in scheduled
         const orderId = order.gloriafood_order_id || order.id;
         console.log(`[DEBUG] Order ${orderId} categorized as SCHEDULED`);
         return 'scheduled';
+    }
+    
+    // For non-scheduled orders, check if order is older than 1 day from creation
+    // If older than 1 day, move to incomplete
+    const orderDate = order.created_at || order.fetched_at || order.updated_at;
+    if (orderDate) {
+        try {
+            const orderDateTime = new Date(orderDate);
+            const now = new Date();
+            const daysDiff = (now.getTime() - orderDateTime.getTime()) / (1000 * 60 * 60 * 24);
+            
+            // If order is older than 1 day, move to incomplete
+            if (daysDiff >= 1) {
+                return 'incomplete';
+            }
+        } catch (e) {
+            // If can't parse date, keep in current
+            console.error('Error parsing order date:', e);
+        }
     }
     
     return 'current';
