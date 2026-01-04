@@ -4490,42 +4490,50 @@ function switchBusinessTab(tab) {
     loadSettingsContent('business-settings');
 }
 
-function editMaxDeliveryTimeDC() {
+async function editMaxDeliveryTimeDC() {
     const valueElement = document.getElementById('maxDeliveryTimeValueDC');
     if (!valueElement) return;
     
     const currentValue = valueElement.textContent.replace(' Minutes', '');
-    const newValue = prompt('Enter maximum delivery time (minutes):', currentValue);
     
-    if (newValue !== null && newValue.trim() !== '') {
-        const minutes = parseInt(newValue.trim());
-        if (!isNaN(minutes) && minutes > 0) {
+    showEditModal({
+        title: 'Edit Maximum Delivery Time',
+        label: 'Maximum Delivery Time (minutes)',
+        currentValue: currentValue,
+        placeholder: 'Enter maximum delivery time in minutes',
+        type: 'number',
+        min: 1,
+        max: 999,
+        onSubmit: async (newValue) => {
+            const minutes = parseInt(newValue);
+            await saveSetting('maxDeliveryTime', minutes.toString());
             valueElement.textContent = `${minutes} Minutes`;
-            localStorage.setItem('maxDeliveryTime', minutes.toString());
             showNotification('Success', 'Maximum delivery time updated', 'success');
-        } else {
-            showNotification('Error', 'Please enter a valid number', 'error');
         }
-    }
+    });
 }
 
-function editOrderPrepTimeDC() {
+async function editOrderPrepTimeDC() {
     const valueElement = document.getElementById('orderPrepTimeValueDC');
     if (!valueElement) return;
     
     const currentValue = valueElement.textContent.replace(' Minutes', '');
-    const newValue = prompt('Enter order preparation time (minutes):', currentValue);
     
-    if (newValue !== null && newValue.trim() !== '') {
-        const minutes = parseInt(newValue.trim());
-        if (!isNaN(minutes) && minutes > 0) {
+    showEditModal({
+        title: 'Edit Order Preparation Time',
+        label: 'Order Preparation Time (minutes)',
+        currentValue: currentValue,
+        placeholder: 'Enter order preparation time in minutes',
+        type: 'number',
+        min: 1,
+        max: 999,
+        onSubmit: async (newValue) => {
+            const minutes = parseInt(newValue);
+            await saveSetting('orderPrepTime', minutes.toString());
             valueElement.textContent = `${minutes} Minutes`;
-            localStorage.setItem('orderPrepTime', minutes.toString());
             showNotification('Success', 'Order preparation time updated', 'success');
-        } else {
-            showNotification('Error', 'Please enter a valid number', 'error');
         }
-    }
+    });
 }
 
 function cancelBusinessSettings() {
