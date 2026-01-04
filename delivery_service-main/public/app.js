@@ -5520,33 +5520,13 @@ function getOrderCategory(order) {
     if (isCompleted) return 'completed';
     if (isIncomplete) return 'incomplete';
     
-    // Check if pending - move to incomplete
-    if (status === 'PENDING') {
-        // Check if pending order is older than 1 day
-        const orderDate = order.created_at || order.fetched_at || order.updated_at;
-        if (orderDate) {
-            try {
-                const orderDateTime = new Date(orderDate);
-                const now = new Date();
-                const daysDiff = (now.getTime() - orderDateTime.getTime()) / (1000 * 60 * 60 * 24);
-                if (daysDiff >= 1) {
-                    return 'incomplete';
-                }
-            } catch (e) {
-                // If can't parse date, treat as incomplete
-                return 'incomplete';
-            }
-        } else {
-            // No date found, treat as incomplete
-            return 'incomplete';
-        }
-    }
+    // Pending orders stay in current - they don't automatically become incomplete
+    // They only become incomplete if status is explicitly CANCELLED, FAILED, or REJECTED
     
     // Check if scheduled (only if not completed/incomplete)
     const isScheduled = hasScheduledDeliveryTime(order);
     if (isScheduled) {
-        // Check if scheduled order is older than 1 day
-        const orderDate = order.created_at || order.fetched_at || order.updated_at;
+        // Check if scheduled delivery time has passed
         let scheduledTime = null;
         
         // Try to get scheduled delivery time
@@ -5564,37 +5544,21 @@ function getOrderCategory(order) {
             if (scheduledTime) {
                 const scheduledDate = new Date(scheduledTime);
                 const now = new Date();
-                const daysDiff = (now.getTime() - scheduledDate.getTime()) / (1000 * 60 * 60 * 24);
                 
-                // If scheduled time has passed more than 1 day ago, move to incomplete
-                if (daysDiff >= 1 && scheduledDate < now) {
-                    return 'incomplete';
-                }
-                
-                // If scheduled time has passed but less than 1 day, check status
+                // If scheduled time has already passed, move to incomplete
+                // (unless it's already completed/delivered)
                 if (scheduledDate < now) {
                     // If order is delivered/completed, it should be in completed
                     if (isCompleted) {
                         return 'completed';
                     }
-                    // Otherwise, it's incomplete
+                    // Otherwise, scheduled time has passed - move to incomplete
                     return 'incomplete';
                 }
             }
         } catch (e) {
-            // If can't parse, check order age
-            if (orderDate) {
-                try {
-                    const orderDateTime = new Date(orderDate);
-                    const now = new Date();
-                    const daysDiff = (now.getTime() - orderDateTime.getTime()) / (1000 * 60 * 60 * 24);
-                    if (daysDiff >= 1) {
-                        return 'incomplete';
-                    }
-                } catch (e2) {
-                    // Ignore
-                }
-            }
+            // If can't parse scheduled time, keep it as scheduled
+            console.error('Error parsing scheduled time:', e);
         }
         
         const orderId = order.gloriafood_order_id || order.id;
