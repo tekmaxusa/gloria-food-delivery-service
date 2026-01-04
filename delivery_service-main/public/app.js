@@ -124,12 +124,12 @@ function showDashboard() {
     const dashboardContainer = document.getElementById('dashboardContainer');
     if (dashboardContainer) {
         dashboardContainer.classList.remove('hidden');
-        
-        // Show dashboard page by default
-        showDashboardPage();
-        
-        // Start auto-refresh only when authenticated
-        startAutoRefresh();
+    
+    // Show dashboard page by default
+    showDashboardPage();
+    
+    // Start auto-refresh only when authenticated
+    startAutoRefresh();
     }
 }
 
@@ -827,13 +827,13 @@ function showDriversPage() {
                         </tr>
                     </thead>
                     <tbody id="driversTableBody">
-                        <tr>
-                            <td colspan="7" class="empty-state-cell">
-                                <div class="empty-state">
+                    <tr>
+                        <td colspan="7" class="empty-state-cell">
+                            <div class="empty-state">
                                     <div class="empty-state-text">Loading drivers...</div>
-                                </div>
-                            </td>
-                        </tr>
+                </div>
+            </td>
+        </tr>
                     </tbody>
                 </table>
         </div>
@@ -1282,12 +1282,12 @@ function openMerchantModal(merchant) {
     form.reset();
     
     // Populate form for editing
-    document.getElementById('merchantStoreId').value = merchant.store_id;
-    document.getElementById('merchantStoreId').disabled = true; // Can't change store_id
-    document.getElementById('merchantName').value = merchant.merchant_name || '';
-    document.getElementById('merchantApiUrl').value = merchant.api_url || '';
-    document.getElementById('merchantIsActive').checked = merchant.is_active !== false;
-    // Don't populate API key and master key for security
+        document.getElementById('merchantStoreId').value = merchant.store_id;
+        document.getElementById('merchantStoreId').disabled = true; // Can't change store_id
+        document.getElementById('merchantName').value = merchant.merchant_name || '';
+        document.getElementById('merchantApiUrl').value = merchant.api_url || '';
+        document.getElementById('merchantIsActive').checked = merchant.is_active !== false;
+        // Don't populate API key and master key for security
     
     // Store current merchant for form submission
     form.dataset.editingStoreId = merchant.store_id;
@@ -1344,7 +1344,7 @@ async function handleMerchantSubmit(e) {
         } else {
             // Adding new merchants is disabled
             showError('Adding new merchants is not allowed through the UI');
-            return;
+                return;
         }
         
         const data = await response.json();
@@ -2261,16 +2261,16 @@ function exportOrdersToExcel() {
             const distance = shipdayDistance ||   // Priority 1: Shipday API distance (most accurate)
                              doordashDistance ||   // Priority 2: DoorDash API distance (accurate)
                              order.distance ||     // Priority 3: Stored distance
-                             rawData.distance || 
-                             rawData.delivery_distance ||
-                             rawData.distance_km ||
-                             rawData.distance_miles ||
-                             (rawData.delivery && rawData.delivery.distance) ||
-                             (rawData.delivery && rawData.delivery.delivery_distance) ||
-                             (rawData.delivery && rawData.delivery.distance_km) ||
-                             (rawData.location && rawData.location.distance) ||
-                             (rawData.restaurant && rawData.restaurant.distance) ||
-                             null;
+                            rawData.distance || 
+                            rawData.delivery_distance ||
+                            rawData.distance_km ||
+                            rawData.distance_miles ||
+                            (rawData.delivery && rawData.delivery.distance) ||
+                            (rawData.delivery && rawData.delivery.delivery_distance) ||
+                            (rawData.delivery && rawData.delivery.distance_km) ||
+                            (rawData.location && rawData.location.distance) ||
+                            (rawData.restaurant && rawData.restaurant.distance) ||
+                            null;
             // Get distance unit from localStorage
             const distanceUnit = localStorage.getItem('distanceUnit') || 'mile';
             
@@ -3003,7 +3003,7 @@ async function showMyAccountPage() {
         <div class="profile-page-container">
             <div class="profile-page-header">
                 <h1 class="page-title">Profile</h1>
-            </div>
+        </div>
             
             <!-- Profile Section -->
             <div class="profile-section">
@@ -3488,19 +3488,19 @@ async function getBusinessSettingsContent() {
                         <label class="switch">
                             <input type="checkbox" id="driverFleetToggle" ${useDriverFleet ? 'checked' : ''} onchange="toggleDriverFleet(this.checked)">
                             <span class="slider"></span>
-                        </label>
-                    </div>
+                    </label>
+                </div>
                     
                     <div class="business-toggle-field">
                         <div class="business-toggle-content">
                             <label class="business-toggle-label">Accept takeout orders from integrations</label>
                             <p class="business-toggle-description">Seamlessly accept and manage takeout orders from integrated delivery platforms in one centralized hub.</p>
-                        </div>
+            </div>
                         <label class="switch">
                             <input type="checkbox" id="takeoutOrdersToggle" ${acceptTakeoutOrders ? 'checked' : ''} onchange="toggleTakeoutOrders(this.checked)">
                             <span class="slider"></span>
                         </label>
-                    </div>
+                </div>
                 </div>
                 
                 <!-- Service Times Section -->
@@ -3517,8 +3517,8 @@ async function getBusinessSettingsContent() {
                                     <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                                 </svg>
                             </button>
-                        </div>
-                    </div>
+                </div>
+            </div>
                     
                     <div class="business-detail-field">
                         <div class="business-detail-label">Order preparation time</div>
@@ -4264,15 +4264,127 @@ async function getSettingsContent(itemId) {
     return '<p>Settings content not found</p>';
 }
 
+// Generic modal for editing settings
+function showEditModal(config) {
+    const { title, label, currentValue, placeholder, type = 'text', min, max, onSubmit } = config;
+    
+    // Remove existing modal if any
+    const existingModal = document.getElementById('editSettingsModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Create modal HTML
+    const modalHTML = `
+        <div id="editSettingsModal" class="modal">
+            <div class="modal-content merchant-modal-content">
+                <div class="modal-header">
+                    <h2>${escapeHtml(title)}</h2>
+                    <button class="modal-close" id="closeEditModal">&times;</button>
+                </div>
+                <form id="editSettingsForm" class="modal-body">
+                    <div class="form-group">
+                        <label>${escapeHtml(label)} <span style="color: red;">*</span></label>
+                        <input type="${type}" id="editSettingsInput" required 
+                               value="${escapeHtml(currentValue || '')}" 
+                               placeholder="${escapeHtml(placeholder || '')}"
+                               ${min !== undefined ? `min="${min}"` : ''}
+                               ${max !== undefined ? `max="${max}"` : ''}
+                               ${type === 'number' ? 'step="1"' : ''}>
+                    </div>
+                    <div id="editSettingsError" class="error-message" style="display: none; color: #ef4444; margin-top: 12px; padding: 8px; background: #fee2e2; border-radius: 4px; font-size: 14px;"></div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn-secondary" id="cancelEditBtn">Cancel</button>
+                        <button type="submit" class="btn-primary">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    `;
+    
+    // Insert modal into body
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    
+    const modal = document.getElementById('editSettingsModal');
+    const form = document.getElementById('editSettingsForm');
+    const input = document.getElementById('editSettingsInput');
+    const errorDiv = document.getElementById('editSettingsError');
+    const closeBtn = document.getElementById('closeEditModal');
+    const cancelBtn = document.getElementById('cancelEditBtn');
+    
+    // Focus input
+    setTimeout(() => input.focus(), 100);
+    
+    // Close modal function
+    const closeModal = () => {
+        modal.remove();
+    };
+    
+    // Close handlers
+    closeBtn.addEventListener('click', closeModal);
+    cancelBtn.addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) closeModal();
+    });
+    
+    // Form submission
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const value = input.value.trim();
+        
+        if (!value) {
+            errorDiv.textContent = `${label} is required`;
+            errorDiv.style.display = 'block';
+            return;
+        }
+        
+        // Validate number inputs
+        if (type === 'number') {
+            const numValue = parseInt(value);
+            if (isNaN(numValue) || numValue <= 0) {
+                errorDiv.textContent = 'Please enter a valid positive number';
+                errorDiv.style.display = 'block';
+                return;
+            }
+            if (min !== undefined && numValue < min) {
+                errorDiv.textContent = `Value must be at least ${min}`;
+                errorDiv.style.display = 'block';
+                return;
+            }
+            if (max !== undefined && numValue > max) {
+                errorDiv.textContent = `Value must be at most ${max}`;
+                errorDiv.style.display = 'block';
+                return;
+            }
+        }
+        
+        errorDiv.style.display = 'none';
+        
+        try {
+            await onSubmit(value);
+            closeModal();
+        } catch (error) {
+            errorDiv.textContent = error.message || 'An error occurred';
+            errorDiv.style.display = 'block';
+        }
+    });
+}
+
 // Business settings helper functions
 async function editBusinessName() {
     const valueElement = document.getElementById('businessNameValue');
     if (!valueElement) return;
     
     const currentValue = valueElement.textContent;
-    const newValue = prompt('Enter business name:', currentValue);
     
-    if (newValue !== null && newValue.trim() !== '') {
+    showEditModal({
+        title: 'Edit Business Name',
+        label: 'Business Name',
+        currentValue: currentValue,
+        placeholder: 'Enter business name',
+        type: 'text',
+        onSubmit: async (newValue) => {
         try {
             // Get merchant data
             let merchant = null;
@@ -4514,18 +4626,22 @@ async function editMaxDeliveryTime() {
     if (!valueElement) return;
     
     const currentValue = valueElement.textContent.replace(' Minutes', '');
-    const newValue = prompt('Enter maximum delivery time (minutes):', currentValue);
     
-    if (newValue !== null && newValue.trim() !== '') {
-        const minutes = parseInt(newValue.trim());
-        if (!isNaN(minutes) && minutes > 0) {
+    showEditModal({
+        title: 'Edit Maximum Delivery Time',
+        label: 'Maximum Delivery Time (minutes)',
+        currentValue: currentValue,
+        placeholder: 'Enter maximum delivery time in minutes',
+        type: 'number',
+        min: 1,
+        max: 999,
+        onSubmit: async (newValue) => {
+            const minutes = parseInt(newValue);
             await saveSetting('maxDeliveryTime', minutes.toString());
             valueElement.textContent = `${minutes} Minutes`;
             showNotification('Success', 'Maximum delivery time updated', 'success');
-        } else {
-            showNotification('Error', 'Please enter a valid number', 'error');
         }
-    }
+    });
 }
 
 async function editOrderPrepTime() {
@@ -4533,18 +4649,22 @@ async function editOrderPrepTime() {
     if (!valueElement) return;
     
     const currentValue = valueElement.textContent.replace(' Minutes', '');
-    const newValue = prompt('Enter order preparation time (minutes):', currentValue);
     
-    if (newValue !== null && newValue.trim() !== '') {
-        const minutes = parseInt(newValue.trim());
-        if (!isNaN(minutes) && minutes > 0) {
+    showEditModal({
+        title: 'Edit Order Preparation Time',
+        label: 'Order Preparation Time (minutes)',
+        currentValue: currentValue,
+        placeholder: 'Enter order preparation time in minutes',
+        type: 'number',
+        min: 1,
+        max: 999,
+        onSubmit: async (newValue) => {
+            const minutes = parseInt(newValue);
             await saveSetting('orderPrepTime', minutes.toString());
             valueElement.textContent = `${minutes} Minutes`;
             showNotification('Success', 'Order preparation time updated', 'success');
-        } else {
-            showNotification('Error', 'Please enter a valid number', 'error');
         }
-    }
+    });
 }
 
 // Settings API helper function
@@ -5405,10 +5525,10 @@ function hasScheduledDeliveryTime(order) {
     
     // Check if scheduled time is in the future (any future time means it's scheduled)
     if (scheduledTime) {
-        try {
-            const scheduledDate = new Date(scheduledTime);
-            const now = new Date();
-            
+    try {
+        const scheduledDate = new Date(scheduledTime);
+        const now = new Date();
+        
             // If scheduled time is in the future (even 1 minute), it's scheduled
             // This will catch orders scheduled for tomorrow, specific times, etc.
             if (scheduledDate > now) {
@@ -5489,8 +5609,8 @@ function hasScheduledDeliveryTime(order) {
                 // If delivery time is in the future (even 1 minute), it's scheduled
                 // This catches orders with specific date/time (Later option)
                 const timeDiff = deliveryDate.getTime() - now.getTime();
-                const minutesDiff = timeDiff / (1000 * 60);
-                
+        const minutesDiff = timeDiff / (1000 * 60);
+        
                 // If more than 1 minute in the future, it's scheduled
                 if (minutesDiff > 1) {
                     console.log(`[DEBUG] Order ${orderId || 'unknown'} is SCHEDULED (${minutesDiff} min in future)`);
@@ -5507,7 +5627,7 @@ function hasScheduledDeliveryTime(order) {
             } else {
                 console.log(`[DEBUG] Order ${orderId || 'unknown'} delivery time is NOT in future: ${deliveryTime} -> ${deliveryDate}, now: ${now}`);
             }
-        } catch (e) {
+    } catch (e) {
             // Ignore parsing errors
         }
     }
@@ -5814,7 +5934,7 @@ function createOrderRow(order) {
                             (doordashData?.delivery && doordashData.delivery.distance) ||
                             (doordashData?.delivery && doordashData.delivery.distance_miles) ||
                             (doordashData?.delivery && doordashData.delivery.distance_km) ||
-                            null;
+                    null;
     
     const shipdayDistance = shipdayData?.distance ||
                             shipdayData?.distance_miles ||
@@ -6004,9 +6124,9 @@ function createOrderRow(order) {
     if (!pickupTime) {
         pickupTime = rawData.pickup || rawData.pickup_datetime || rawData.pickupDateTime || 
                      rawData.collection_time || rawData.collectionTime ||
-                     (rawData.times && rawData.times.pickup) ||
+                      (rawData.times && rawData.times.pickup) ||
                      (rawData.time && rawData.time.pickup) ||
-                     null;
+                      null;
     }
     
     // Get delivery time from various possible fields (comprehensive search)
@@ -6076,9 +6196,9 @@ function createOrderRow(order) {
         deliveryTime = rawData.delivery || rawData.delivery_datetime || rawData.deliveryDateTime ||
                        rawData.requested_time || rawData.requestedTime ||
                        rawData.preferred_time || rawData.preferredTime ||
-                       (rawData.times && rawData.times.delivery) ||
+                        (rawData.times && rawData.times.delivery) ||
                        (rawData.time && rawData.time.delivery) ||
-                       null;
+                        null;
     }
     
     // Check for DoorDash estimated_delivery_time from doordash_data or delivery response
@@ -6199,7 +6319,7 @@ function createOrderRow(order) {
         try {
             const date = new Date(pickupTime);
             if (!isNaN(date.getTime())) {
-                formattedPickupTime = formatDate(pickupTime);
+            formattedPickupTime = formatDate(pickupTime);
             } else {
                 // If can't parse as date, show as string (might be time-only format)
                 formattedPickupTime = String(pickupTime);
@@ -6249,12 +6369,12 @@ function createOrderRow(order) {
     
     // If not set in localStorage, determine from order data
     if (localStorage.getItem(readyStatusKey) === null) {
-        if (readyForPickup) {
-            try {
+    if (readyForPickup) {
+        try {
                 const readyDate = new Date(readyForPickup);
                 const now = new Date();
                 isReadyForPickup = readyDate <= now; // Ready if time has passed
-            } catch (e) {
+        } catch (e) {
                 // If can't parse date, check if it's a boolean or status
                 isReadyForPickup = readyForPickup === true || readyForPickup === 'true' || readyForPickup === 'ready';
             }
