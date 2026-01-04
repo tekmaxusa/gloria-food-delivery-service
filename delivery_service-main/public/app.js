@@ -3892,7 +3892,6 @@ async function getDriverSettingsContent() {
 async function getThirdPartyDeliveryContent() {
     const activeTab = localStorage.getItem('thirdPartyTab') || 'services';
     const doordashEnabled = localStorage.getItem('doordashEnabled') === 'true';
-    const uberEnabled = localStorage.getItem('uberEnabled') === 'true';
     const autoAssignOrders = localStorage.getItem('autoAssignOrders') === 'true';
     const thirdPartyPickupInstructions = localStorage.getItem('thirdPartyPickupInstructions') === 'true';
     
@@ -3906,9 +3905,9 @@ async function getThirdPartyDeliveryContent() {
         
         <div id="thirdPartyContent">
             ${activeTab === 'services' ? `
-                <!-- National & Regional Services -->
+                <!-- DoorDash Service -->
                 <div class="third-party-section">
-                    <h3 class="settings-section-subtitle">National & Regional Services</h3>
+                    <h3 class="settings-section-subtitle">Delivery Service</h3>
                     <h4 style="font-size: 16px; font-weight: 600; color: #0f172a; margin: 16px 0 8px 0;">On Demand Delivery</h4>
                     
                     <div class="third-party-service-card">
@@ -3923,27 +3922,6 @@ async function getThirdPartyDeliveryContent() {
                             </label>
                         </div>
                     </div>
-                    
-                    <div class="third-party-service-card">
-                        <div class="service-card-content">
-                            <div class="service-name">Uber</div>
-                            <p class="service-description">On-demand short distance food delivery.</p>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 12px;">
-                            <label class="switch">
-                                <input type="checkbox" ${uberEnabled ? 'checked' : ''} onchange="toggleThirdPartyService('uber', this.checked)">
-                                <span class="slider"></span>
-                            </label>
-                        </div>
-                    </div>
-                    
-                </div>
-                
-                <!-- Local Services -->
-                <div class="third-party-section">
-                    <h3 class="settings-section-subtitle">Local Services</h3>
-                    <p class="settings-instruction-text">Invite a local delivery company to deliver for you. TekMaxLLC allows you to easily send orders to local 3rd party delivery services on TekMaxLLC platform.</p>
-                    <button class="btn-primary" onclick="inviteLocalDelivery()" style="margin-top: 16px;">Invite a local delivery company</button>
                 </div>
             ` : `
                 <!-- Third-party Settings -->
@@ -4061,16 +4039,64 @@ async function getUsersContent() {
 
 // Get Location content
 async function getLocationContent() {
-    const country = localStorage.getItem('country') || 'United States';
-    const city = localStorage.getItem('city') || '';
-    const currency = localStorage.getItem('currency') || 'USD';
+    // Get location data from settings API
+    let country = localStorage.getItem('country') || 'United States';
+    let city = localStorage.getItem('city') || '';
+    let currency = localStorage.getItem('currency') || 'USD';
     const timezoneAuto = localStorage.getItem('timezoneAuto') === 'true';
-    const timezone = localStorage.getItem('timezone') || 'UTC-06:00';
+    let timezone = localStorage.getItem('timezone') || '';
     const distanceUnit = localStorage.getItem('distanceUnit') || 'mile';
     
-    // Get current local time
+    // Try to get actual data from merchant/orders
+    try {
+        const response = await authenticatedFetch(`${API_BASE}/merchants`);
+        const data = await response.json();
+        if (data.success && data.merchants && data.merchants.length > 0) {
+            const merchant = data.merchants.find(m => m.is_active) || data.merchants[0];
+            
+            // Extract city from merchant address if available
+            if (merchant.address && !city) {
+                const addressParts = merchant.address.split(',');
+                if (addressParts.length > 0) {
+                    city = addressParts[addressParts.length - 2]?.trim() || city;
+                }
+            }
+            
+            // Try to get currency from recent orders
+            if (!currency || currency === 'USD') {
+                try {
+                    const ordersResponse = await authenticatedFetch(`${API_BASE}/orders?limit=10`);
+                    const ordersData = await ordersResponse.json();
+                    if (ordersData.success && ordersData.orders && ordersData.orders.length > 0) {
+                        const orderWithCurrency = ordersData.orders.find(o => o.currency && o.currency !== 'USD');
+                        if (orderWithCurrency) {
+                            currency = orderWithCurrency.currency;
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error fetching orders for currency:', e);
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error fetching merchant for location:', error);
+    }
+    
+    // Auto-detect timezone if enabled
+    if (timezoneAuto || !timezone) {
+        const offset = -new Date().getTimezoneOffset() / 60;
+        const sign = offset >= 0 ? '+' : '';
+        timezone = `UTC${sign}${offset.toString().padStart(2, '0')}:00`;
+    }
+    
+    // Get current local time based on selected timezone
     const now = new Date();
-    const localTime = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    let localTime = now.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        hour12: true,
+        timeZone: timezoneAuto ? Intl.DateTimeFormat().resolvedOptions().timeZone : undefined
+    });
     
     return `
         <h1 class="settings-content-title">Location</h1>
@@ -4079,7 +4105,7 @@ async function getLocationContent() {
         <div class="driver-settings-section">
             <div class="location-field">
                 <label class="business-input-label">Country</label>
-                <div class="location-value">${escapeHtml(country)}</div>
+                <input type="text" class="business-input" id="countryInput" value="${escapeHtml(country)}" placeholder="Enter country" onchange="updateLocation('country', this.value)">
             </div>
             
             <div class="location-field">
@@ -4094,6 +4120,12 @@ async function getLocationContent() {
                     <option value="EUR" ${currency === 'EUR' ? 'selected' : ''}>Euro (€)</option>
                     <option value="GBP" ${currency === 'GBP' ? 'selected' : ''}>British pound (£)</option>
                     <option value="PHP" ${currency === 'PHP' ? 'selected' : ''}>Philippine peso (₱)</option>
+                    <option value="CAD" ${currency === 'CAD' ? 'selected' : ''}>Canadian dollar (C$)</option>
+                    <option value="AUD" ${currency === 'AUD' ? 'selected' : ''}>Australian dollar (A$)</option>
+                    <option value="JPY" ${currency === 'JPY' ? 'selected' : ''}>Japanese yen (¥)</option>
+                    <option value="CNY" ${currency === 'CNY' ? 'selected' : ''}>Chinese yuan (¥)</option>
+                    <option value="INR" ${currency === 'INR' ? 'selected' : ''}>Indian rupee (₹)</option>
+                    <option value="MXN" ${currency === 'MXN' ? 'selected' : ''}>Mexican peso ($)</option>
                 </select>
             </div>
         </div>
@@ -4111,31 +4143,31 @@ async function getLocationContent() {
             
             <div class="location-field">
                 <select class="business-input" id="timezoneSelect" ${timezoneAuto ? 'disabled' : ''} onchange="updateLocation('timezone', this.value)">
-                    <option value="UTC-12:00" ${timezone === 'UTC-12:00' ? 'selected' : ''}>UTC-12:00</option>
-                    <option value="UTC-11:00" ${timezone === 'UTC-11:00' ? 'selected' : ''}>UTC-11:00</option>
-                    <option value="UTC-10:00" ${timezone === 'UTC-10:00' ? 'selected' : ''}>UTC-10:00</option>
-                    <option value="UTC-09:00" ${timezone === 'UTC-09:00' ? 'selected' : ''}>UTC-09:00</option>
-                    <option value="UTC-08:00" ${timezone === 'UTC-08:00' ? 'selected' : ''}>UTC-08:00</option>
-                    <option value="UTC-07:00" ${timezone === 'UTC-07:00' ? 'selected' : ''}>UTC-07:00</option>
-                    <option value="UTC-06:00" ${timezone === 'UTC-06:00' ? 'selected' : ''}>UTC-06:00</option>
-                    <option value="UTC-05:00" ${timezone === 'UTC-05:00' ? 'selected' : ''}>UTC-05:00</option>
-                    <option value="UTC-04:00" ${timezone === 'UTC-04:00' ? 'selected' : ''}>UTC-04:00</option>
-                    <option value="UTC-03:00" ${timezone === 'UTC-03:00' ? 'selected' : ''}>UTC-03:00</option>
-                    <option value="UTC-02:00" ${timezone === 'UTC-02:00' ? 'selected' : ''}>UTC-02:00</option>
-                    <option value="UTC-01:00" ${timezone === 'UTC-01:00' ? 'selected' : ''}>UTC-01:00</option>
-                    <option value="UTC+00:00" ${timezone === 'UTC+00:00' ? 'selected' : ''}>UTC+00:00</option>
-                    <option value="UTC+01:00" ${timezone === 'UTC+01:00' ? 'selected' : ''}>UTC+01:00</option>
-                    <option value="UTC+02:00" ${timezone === 'UTC+02:00' ? 'selected' : ''}>UTC+02:00</option>
-                    <option value="UTC+03:00" ${timezone === 'UTC+03:00' ? 'selected' : ''}>UTC+03:00</option>
-                    <option value="UTC+04:00" ${timezone === 'UTC+04:00' ? 'selected' : ''}>UTC+04:00</option>
-                    <option value="UTC+05:00" ${timezone === 'UTC+05:00' ? 'selected' : ''}>UTC+05:00</option>
-                    <option value="UTC+06:00" ${timezone === 'UTC+06:00' ? 'selected' : ''}>UTC+06:00</option>
-                    <option value="UTC+07:00" ${timezone === 'UTC+07:00' ? 'selected' : ''}>UTC+07:00</option>
-                    <option value="UTC+08:00" ${timezone === 'UTC+08:00' ? 'selected' : ''}>UTC+08:00</option>
-                    <option value="UTC+09:00" ${timezone === 'UTC+09:00' ? 'selected' : ''}>UTC+09:00</option>
-                    <option value="UTC+10:00" ${timezone === 'UTC+10:00' ? 'selected' : ''}>UTC+10:00</option>
-                    <option value="UTC+11:00" ${timezone === 'UTC+11:00' ? 'selected' : ''}>UTC+11:00</option>
-                    <option value="UTC+12:00" ${timezone === 'UTC+12:00' ? 'selected' : ''}>UTC+12:00</option>
+                    <option value="UTC-12:00" ${timezone === 'UTC-12:00' ? 'selected' : ''}>UTC-12:00 (Baker Island Time)</option>
+                    <option value="UTC-11:00" ${timezone === 'UTC-11:00' ? 'selected' : ''}>UTC-11:00 (Hawaii-Aleutian Time)</option>
+                    <option value="UTC-10:00" ${timezone === 'UTC-10:00' ? 'selected' : ''}>UTC-10:00 (Hawaii Standard Time)</option>
+                    <option value="UTC-09:00" ${timezone === 'UTC-09:00' ? 'selected' : ''}>UTC-09:00 (Alaska Time)</option>
+                    <option value="UTC-08:00" ${timezone === 'UTC-08:00' ? 'selected' : ''}>UTC-08:00 (Pacific Time)</option>
+                    <option value="UTC-07:00" ${timezone === 'UTC-07:00' ? 'selected' : ''}>UTC-07:00 (Mountain Time)</option>
+                    <option value="UTC-06:00" ${timezone === 'UTC-06:00' ? 'selected' : ''}>UTC-06:00 (Central Time)</option>
+                    <option value="UTC-05:00" ${timezone === 'UTC-05:00' ? 'selected' : ''}>UTC-05:00 (Eastern Time)</option>
+                    <option value="UTC-04:00" ${timezone === 'UTC-04:00' ? 'selected' : ''}>UTC-04:00 (Atlantic Time)</option>
+                    <option value="UTC-03:00" ${timezone === 'UTC-03:00' ? 'selected' : ''}>UTC-03:00 (Argentina Time)</option>
+                    <option value="UTC-02:00" ${timezone === 'UTC-02:00' ? 'selected' : ''}>UTC-02:00 (Mid-Atlantic Time)</option>
+                    <option value="UTC-01:00" ${timezone === 'UTC-01:00' ? 'selected' : ''}>UTC-01:00 (Azores Time)</option>
+                    <option value="UTC+00:00" ${timezone === 'UTC+00:00' ? 'selected' : ''}>UTC+00:00 (Greenwich Mean Time)</option>
+                    <option value="UTC+01:00" ${timezone === 'UTC+01:00' ? 'selected' : ''}>UTC+01:00 (Central European Time)</option>
+                    <option value="UTC+02:00" ${timezone === 'UTC+02:00' ? 'selected' : ''}>UTC+02:00 (Eastern European Time)</option>
+                    <option value="UTC+03:00" ${timezone === 'UTC+03:00' ? 'selected' : ''}>UTC+03:00 (Moscow Time)</option>
+                    <option value="UTC+04:00" ${timezone === 'UTC+04:00' ? 'selected' : ''}>UTC+04:00 (Gulf Standard Time)</option>
+                    <option value="UTC+05:00" ${timezone === 'UTC+05:00' ? 'selected' : ''}>UTC+05:00 (Pakistan Standard Time)</option>
+                    <option value="UTC+06:00" ${timezone === 'UTC+06:00' ? 'selected' : ''}>UTC+06:00 (Bangladesh Time)</option>
+                    <option value="UTC+07:00" ${timezone === 'UTC+07:00' ? 'selected' : ''}>UTC+07:00 (Indochina Time)</option>
+                    <option value="UTC+08:00" ${timezone === 'UTC+08:00' ? 'selected' : ''}>UTC+08:00 (China Standard Time)</option>
+                    <option value="UTC+09:00" ${timezone === 'UTC+09:00' ? 'selected' : ''}>UTC+09:00 (Japan Standard Time)</option>
+                    <option value="UTC+10:00" ${timezone === 'UTC+10:00' ? 'selected' : ''}>UTC+10:00 (Australian Eastern Time)</option>
+                    <option value="UTC+11:00" ${timezone === 'UTC+11:00' ? 'selected' : ''}>UTC+11:00 (Solomon Islands Time)</option>
+                    <option value="UTC+12:00" ${timezone === 'UTC+12:00' ? 'selected' : ''}>UTC+12:00 (New Zealand Time)</option>
                 </select>
             </div>
             
@@ -4847,8 +4879,20 @@ async function toggleTimezoneAuto(enabled) {
     const timezoneSelect = document.getElementById('timezoneSelect');
     if (timezoneSelect) {
         timezoneSelect.disabled = enabled;
+        if (enabled) {
+            // Auto-detect timezone
+            const offset = -new Date().getTimezoneOffset() / 60;
+            const sign = offset >= 0 ? '+' : '';
+            const autoTimezone = `UTC${sign}${offset.toString().padStart(2, '0')}:00`;
+            timezoneSelect.value = autoTimezone;
+            await saveSetting('timezone', autoTimezone);
+        }
     }
     showNotification('Success', `Timezone ${enabled ? 'auto' : 'manual'} setup`, 'success');
+    // Reload location content to show updated time
+    setTimeout(() => {
+        loadSettingsContent('location');
+    }, 500);
 }
 
 async function selectDistanceUnit(unit) {
