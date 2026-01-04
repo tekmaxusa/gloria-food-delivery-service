@@ -6784,6 +6784,28 @@ async function viewOrderDetails(orderId) {
             console.error('Error parsing raw_data:', e);
         }
         
+        // Parse items if it's a string
+        let parsedItems = null;
+        try {
+            if (order.items) {
+                parsedItems = typeof order.items === 'string' ? JSON.parse(order.items) : order.items;
+            }
+        } catch (e) {
+            console.error('Error parsing items:', e);
+        }
+        
+        // Parse doordash_data if it exists in raw_data
+        let doordashData = null;
+        try {
+            if (rawData.doordash_data) {
+                doordashData = typeof rawData.doordash_data === 'string' ? JSON.parse(rawData.doordash_data) : rawData.doordash_data;
+            } else if (rawData.doordash_response) {
+                doordashData = typeof rawData.doordash_response === 'string' ? JSON.parse(rawData.doordash_response) : rawData.doordash_response;
+            }
+        } catch (e) {
+            console.error('Error parsing doordash_data:', e);
+        }
+        
         // Extract customer information
         let customerName = order.customer_name || 
                            rawData.customer_name ||
@@ -6804,10 +6826,9 @@ async function viewOrderDetails(orderId) {
             customerName = rawData.customer.name || rawData.customer.full_name || 'N/A';
         }
         
-        const customerPhone = order.customer_phone || 
+        // Extract customer phone - prioritize order fields (actual DB data)
+        let customerPhone = order.customer_phone || 
                             rawData.customer_phone ||
-                            rawData.client?.phone ||
-                            rawData.customer?.phone ||
                             rawData.phone ||
                             'N/A';
         
@@ -6864,12 +6885,12 @@ async function viewOrderDetails(orderId) {
             customerAddress = 'N/A';
         }
         
-        // Extract restaurant/pickup information
-        const restaurantName = order.merchant_name ||
+        // Extract restaurant/pickup information - check order object first
+        const restaurantName = order.merchant_name ||  // From DB if available
                               rawData.merchant_name ||
                               rawData.restaurant_name ||
-                              rawData.restaurant?.name ||
-                              rawData.store?.name ||
+                              (rawData.restaurant && rawData.restaurant.name) ||
+                              (rawData.store && rawData.store.name) ||
                               rawData.store_name ||
                               'N/A';
         
@@ -6931,14 +6952,12 @@ async function viewOrderDetails(orderId) {
                                order.store_phone ||
                                'N/A';
         
-        // Extract order items
+        // Extract order items - prioritize parsed items from order object (actual DB data)
         let orderItems = [];
         try {
-            if (order.items) {
-                const items = typeof order.items === 'string' ? JSON.parse(order.items) : order.items;
-                if (Array.isArray(items)) {
-                    orderItems = items;
-                }
+            // First try parsed items from order object
+            if (parsedItems && Array.isArray(parsedItems)) {
+                orderItems = parsedItems;
             } else if (rawData.items) {
                 const items = Array.isArray(rawData.items) ? rawData.items : (typeof rawData.items === 'string' ? JSON.parse(rawData.items) : []);
                 if (Array.isArray(items)) {
@@ -6946,6 +6965,12 @@ async function viewOrderDetails(orderId) {
                 }
             } else if (rawData.order_items) {
                 const items = Array.isArray(rawData.order_items) ? rawData.order_items : (typeof rawData.order_items === 'string' ? JSON.parse(rawData.order_items) : []);
+                if (Array.isArray(items)) {
+                    orderItems = items;
+                }
+            } else if (rawData.products) {
+                // Some GloriaFood orders use 'products' instead of 'items'
+                const items = Array.isArray(rawData.products) ? rawData.products : (typeof rawData.products === 'string' ? JSON.parse(rawData.products) : []);
                 if (Array.isArray(items)) {
                     orderItems = items;
                 }
@@ -6963,13 +6988,15 @@ async function viewOrderDetails(orderId) {
             itemsSubtotal += quantity * unitPrice;
         });
         
-        // Extract financial data comprehensively
+        // Extract financial data - prioritize order.total_price (actual DB data)
         const tax = parseFloat(rawData.tax || rawData.tax_value || rawData.tax_amount || rawData.taxes || rawData.vat || 0);
         const deliveryFee = parseFloat(rawData.delivery_fee || rawData.deliveryFee || rawData.delivery?.fee || rawData.delivery_fees || rawData.shipping_fee || 0);
         const tip = parseFloat(rawData.tip || rawData.tips || rawData.delivery_tip || rawData.gratuity || rawData.tip_amount || 0);
         const discount = parseFloat(rawData.discount || rawData.discount_amount || rawData.discount_value || rawData.discount_total || rawData.coupon_discount || 0);
         const subtotal = parseFloat(rawData.subtotal || rawData.sub_total || rawData.sub_total_price || itemsSubtotal || 0);
-        const total = parseFloat(order.total_price || rawData.total_price || rawData.total || rawData.order_total || 0) || (subtotal + tax + deliveryFee + tip - discount);
+        // Use order.total_price first (actual DB data), then fallback to calculated or raw_data
+        const total = parseFloat(order.total_price || 0) || parseFloat(rawData.total_price || rawData.total || rawData.order_total || 0) || (subtotal + tax + deliveryFee + tip - discount);
+        // Use order.currency first (actual DB data)
         const currency = order.currency || rawData.currency || 'USD';
         
         // Extract payment information
@@ -7075,8 +7102,8 @@ async function viewOrderDetails(orderId) {
                           null;
         }
         
-        // Extract timeline information
-        const orderPlacedTime = formatDateShipday(order.fetched_at || order.created_at || order.updated_at);
+        // Extract timeline information - use actual order timestamps from DB
+        const orderPlacedTime = formatDateShipday(order.fetched_at || order.created_at || order.updated_at || rawData.created_at || rawData.order_date);
         const requestedDeliveryTime = deliveryTime ? formatDateShipday(deliveryTime) : 'N/A';
         
         // Format timeline dates
@@ -7091,9 +7118,13 @@ async function viewOrderDetails(orderId) {
         const orderCompletionTime = formatTimelineDate(rawData.completed_at || rawData.completion_time || rawData.order_completion_time);
         
         // Get driver information - check DoorDash data too
-        const doordashData = rawData.doordash_data || rawData.doordash_response || {};
-        let driverName = rawData.driver_name ||
-                         order.driver_name ||
+        // Use parsed doordashData if available, otherwise try to parse
+        if (!doordashData) {
+            doordashData = rawData.doordash_data || rawData.doordash_response || {};
+        }
+        
+        let driverName = order.driver_name ||  // Check order object first
+                         rawData.driver_name ||
                          'Not assigned';
         
         // Try driver object if still not assigned
@@ -7112,8 +7143,43 @@ async function viewOrderDetails(orderId) {
             }
         }
         
-        // Get status
-        const status = (order.status || 'UNKNOWN').toUpperCase();
+        // Get status - use same logic as createOrderRow to match table display
+        // Check DoorDash status from response data
+        let doordashStatus = null;
+        if (doordashData) {
+            doordashStatus = doordashData.status || 
+                            doordashData.delivery_status || 
+                            doordashData.state ||
+                            doordashData.delivery?.status ||
+                            doordashData.delivery?.delivery_status ||
+                            null;
+        }
+        
+        // If order was sent to DoorDash, use DoorDash status
+        let status = (order.status || 'UNKNOWN').toUpperCase();
+        if (order.sent_to_doordash || order.doordash_order_id || doordashData) {
+            if (doordashStatus) {
+                // Map DoorDash status to our status
+                const ddStatusLower = String(doordashStatus).toLowerCase();
+                if (ddStatusLower === 'pending' || ddStatusLower === 'created' || ddStatusLower === 'queued') {
+                    status = 'PENDING';
+                } else if (ddStatusLower === 'accepted' || ddStatusLower === 'assigned') {
+                    status = 'ACCEPTED';
+                } else if (ddStatusLower === 'picked_up' || ddStatusLower === 'pickedup') {
+                    status = 'PICKED UP';
+                } else if (ddStatusLower === 'delivered' || ddStatusLower === 'completed') {
+                    status = 'DELIVERED';
+                } else if (ddStatusLower === 'cancelled' || ddStatusLower === 'canceled') {
+                    status = 'CANCELLED';
+                } else {
+                    // Use DoorDash status as-is (capitalized)
+                    status = ddStatusLower.toUpperCase();
+                }
+            } else {
+                // If sent to DoorDash but no status yet, it's pending
+                status = 'PENDING';
+            }
+        }
         
         // Check for proof of delivery - check multiple sources
         let hasPOD = false;
