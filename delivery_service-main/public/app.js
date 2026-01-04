@@ -521,6 +521,9 @@ function setupNavigation() {
 
 // Navigate to different pages
 function navigateToPage(page) {
+    // Remove body classes for settings/profile pages
+    document.body.classList.remove('on-settings-page', 'on-profile-page');
+    
     const mainContainer = document.querySelector('.main-container');
     
     switch(page.toLowerCase()) {
@@ -3173,6 +3176,14 @@ window.editPassword = editPassword;
 function showSettingsPage() {
     const mainContainer = document.querySelector('.main-container');
     if (!mainContainer) return;
+    
+    // Remove active class from all nav links when on settings page
+    document.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.remove('active');
+    });
+    
+    // Add class to body to indicate we're on settings page
+    document.body.classList.add('on-settings-page');
     
     // Default selected item
     let selectedItem = localStorage.getItem('settingsSelectedItem') || 'business-settings';
