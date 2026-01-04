@@ -6806,14 +6806,43 @@ async function viewOrderDetails(orderId) {
                             rawData.email ||
                             'N/A';
         
-        const customerAddress = order.delivery_address || 
+        // Extract customer address - comprehensive extraction
+        let customerAddress = order.delivery_address || 
                                order.customer_address ||
                                rawData.delivery_address ||
                                rawData.customer_address ||
                                rawData.client_address ||
-                               (rawData.delivery && rawData.delivery.address ? 
-                                   `${rawData.delivery.address.street || rawData.delivery.address.address_line_1 || ''}, ${rawData.delivery.address.city || ''}, ${rawData.delivery.address.state || ''}, ${rawData.delivery.address.zip || rawData.delivery.address.postal_code || ''}`.replace(/^,\s*|,\s*$/g, '').replace(/,\s*,/g, ',') :
-                               'N/A');
+                               rawData.address ||
+                               '';
+        
+        // If address is not a string, try to build from parts
+        if (!customerAddress || customerAddress === '') {
+            if (rawData.delivery && rawData.delivery.address) {
+                const addr = rawData.delivery.address;
+                const parts = [
+                    addr.street || addr.address_line_1 || addr.address || '',
+                    addr.city || '',
+                    addr.state || addr.province || '',
+                    addr.zip || addr.postal_code || '',
+                    addr.country || ''
+                ].filter(Boolean);
+                customerAddress = parts.join(', ');
+            } else if (rawData.client_address_parts) {
+                const parts = rawData.client_address_parts;
+                const addressParts = [
+                    parts.street || parts.address_line_1 || parts.address || '',
+                    parts.city || '',
+                    parts.state || parts.province || '',
+                    parts.zip || parts.postal_code || '',
+                    parts.country || ''
+                ].filter(Boolean);
+                customerAddress = addressParts.join(', ');
+            }
+        }
+        
+        if (!customerAddress || customerAddress.trim() === '') {
+            customerAddress = 'N/A';
+        }
         
         // Extract restaurant/pickup information
         const restaurantName = order.merchant_name ||
@@ -6824,22 +6853,62 @@ async function viewOrderDetails(orderId) {
                               rawData.store_name ||
                               'N/A';
         
-        const restaurantAddress = rawData.restaurant_address ||
+        // Extract restaurant address - comprehensive extraction
+        let restaurantAddress = rawData.restaurant_address ||
                                  rawData.store_address ||
                                  rawData.pickup_address ||
                                  rawData.merchant_address ||
-                                 (rawData.restaurant && rawData.restaurant.address ? 
-                                     `${rawData.restaurant.address.street || rawData.restaurant.address.address_line_1 || ''}, ${rawData.restaurant.address.city || ''}, ${rawData.restaurant.address.state || ''}, ${rawData.restaurant.address.zip || rawData.restaurant.address.postal_code || ''}`.replace(/^,\s*|,\s*$/g, '').replace(/,\s*,/g, ',') :
-                                 (rawData.store && rawData.store.address ? 
-                                     `${rawData.store.address.street || rawData.store.address.address_line_1 || ''}, ${rawData.store.address.city || ''}, ${rawData.store.address.state || ''}, ${rawData.store.address.zip || rawData.store.address.postal_code || ''}`.replace(/^,\s*|,\s*$/g, '').replace(/,\s*,/g, ',') :
-                                     'N/A'));
+                                 rawData.restaurant_street ||
+                                 '';
+        
+        // If address is not a string, try to build from parts
+        if (!restaurantAddress || restaurantAddress === '') {
+            if (rawData.restaurant && rawData.restaurant.address) {
+                const addr = rawData.restaurant.address;
+                const parts = [
+                    addr.street || addr.address_line_1 || addr.address || rawData.restaurant_street || '',
+                    addr.city || rawData.restaurant_city || '',
+                    addr.state || addr.province || rawData.restaurant_state || '',
+                    addr.zip || addr.postal_code || rawData.restaurant_zipcode || '',
+                    addr.country || rawData.restaurant_country || ''
+                ].filter(Boolean);
+                restaurantAddress = parts.join(', ');
+            } else if (rawData.store && rawData.store.address) {
+                const addr = rawData.store.address;
+                const parts = [
+                    addr.street || addr.address_line_1 || addr.address || '',
+                    addr.city || '',
+                    addr.state || addr.province || '',
+                    addr.zip || addr.postal_code || '',
+                    addr.country || ''
+                ].filter(Boolean);
+                restaurantAddress = parts.join(', ');
+            } else if (rawData.restaurant_street || rawData.restaurant_city) {
+                // Build from individual fields
+                const parts = [
+                    rawData.restaurant_street || '',
+                    rawData.restaurant_city || '',
+                    rawData.restaurant_state || '',
+                    rawData.restaurant_zipcode || '',
+                    rawData.restaurant_country || ''
+                ].filter(Boolean);
+                restaurantAddress = parts.join(', ');
+            }
+        }
+        
+        if (!restaurantAddress || restaurantAddress.trim() === '') {
+            restaurantAddress = 'N/A';
+        }
         
         const restaurantPhone = rawData.restaurant_phone ||
                                rawData.store_phone ||
                                rawData.merchant_phone ||
-                               rawData.phone ||
+                               rawData.pickup_phone ||
                                rawData.restaurant?.phone ||
                                rawData.store?.phone ||
+                               (rawData.restaurant && rawData.restaurant.phone) ||
+                               (rawData.store && rawData.store.phone) ||
+                               order.store_phone ||
                                'N/A';
         
         // Extract order items
@@ -6861,15 +6930,17 @@ async function viewOrderDetails(orderId) {
         let itemsSubtotal = 0;
         orderItems.forEach(item => {
             const quantity = item.quantity || 1;
-            const price = parseFloat(item.price || item.unit_price || item.total_price || 0);
-            itemsSubtotal += quantity * price;
+            const unitPrice = parseFloat(item.price || item.unit_price || item.total_price || 0);
+            itemsSubtotal += quantity * unitPrice;
         });
         
-        const tax = parseFloat(rawData.tax || rawData.tax_value || rawData.tax_amount || 0);
-        const deliveryFee = parseFloat(rawData.delivery_fee || rawData.deliveryFee || rawData.delivery?.fee || 0);
-        const tip = parseFloat(rawData.tip || rawData.tips || rawData.delivery_tip || 0);
-        const discount = parseFloat(rawData.discount || rawData.discount_amount || rawData.discount_value || 0);
-        const total = parseFloat(order.total_price || rawData.total_price || rawData.total || 0) || (itemsSubtotal + tax + deliveryFee + tip - discount);
+        // Extract financial data comprehensively
+        const tax = parseFloat(rawData.tax || rawData.tax_value || rawData.tax_amount || rawData.taxes || rawData.vat || 0);
+        const deliveryFee = parseFloat(rawData.delivery_fee || rawData.deliveryFee || rawData.delivery?.fee || rawData.delivery_fees || rawData.shipping_fee || 0);
+        const tip = parseFloat(rawData.tip || rawData.tips || rawData.delivery_tip || rawData.gratuity || rawData.tip_amount || 0);
+        const discount = parseFloat(rawData.discount || rawData.discount_amount || rawData.discount_value || rawData.discount_total || rawData.coupon_discount || 0);
+        const subtotal = parseFloat(rawData.subtotal || rawData.sub_total || rawData.sub_total_price || itemsSubtotal || 0);
+        const total = parseFloat(order.total_price || rawData.total_price || rawData.total || rawData.order_total || 0) || (subtotal + tax + deliveryFee + tip - discount);
         const currency = order.currency || rawData.currency || 'USD';
         
         // Extract payment information
@@ -6982,19 +7053,27 @@ async function viewOrderDetails(orderId) {
         const orderDeliveryTime = formatTimelineDate(rawData.delivered_at || rawData.delivery_time || rawData.order_delivery_time);
         const orderCompletionTime = formatTimelineDate(rawData.completed_at || rawData.completion_time || rawData.order_completion_time);
         
-        // Get driver information
+        // Get driver information - check DoorDash data too
+        const doordashData = rawData.doordash_data || rawData.doordash_response || {};
         const driverName = rawData.driver_name ||
                          rawData.driver?.name ||
                          order.driver_name ||
-                         'Not assigned';
+                         doordashData.driver?.name ||
+                         doordashData.dasher?.name ||
+                         (order.doordash_order_id ? 'Assigned via DoorDash' : 'Not assigned');
         
         // Get status
         const status = (order.status || 'UNKNOWN').toUpperCase();
         
-        // Check for proof of delivery
+        // Check for proof of delivery - check multiple sources
         const hasPOD = rawData.proof_of_delivery || 
                       rawData.proofOfDelivery ||
                       rawData.pod ||
+                      rawData.proof_of_delivery_image ||
+                      rawData.delivery_proof ||
+                      doordashData.proof_of_delivery ||
+                      doordashData.pod ||
+                      (order.status && ['DELIVERED', 'COMPLETED'].includes(order.status.toUpperCase())) ||
                       false;
         
         // Create modal HTML
@@ -7038,25 +7117,24 @@ async function viewOrderDetails(orderId) {
                                 ${orderItems.length > 0 ? orderItems.map((item, idx) => {
                                     const itemName = item.name || item.product_name || item.title || item.item_name || 'Unknown Item';
                                     const quantity = item.quantity || 1;
-                                    const price = parseFloat(item.price || item.unit_price || item.total_price || 0);
-                                    const modifiers = item.variations || item.options || [];
-                                    const modifierText = modifiers.length > 0 ? modifiers.map(m => `+${m.name || m.title || ''}`).join(', ') : '';
+                                    const unitPrice = parseFloat(item.price || item.unit_price || item.total_price || 0);
+                                    const totalPrice = quantity * unitPrice;
+                                    const modifiers = item.variations || item.options || item.modifiers || [];
+                                    const modifierText = modifiers.length > 0 ? modifiers.map(m => {
+                                        const modName = m.name || m.title || m.option_name || '';
+                                        const modValue = m.value || m.option_value || '';
+                                        return modValue ? `${modName}: ${modValue}` : modName;
+                                    }).join(', ') : '';
                                     return `
                                         <div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: ${idx < orderItems.length - 1 ? '1px solid #e2e8f0' : 'none'};">
-                                            <div style="font-weight: 500; color: #0f172a;">${quantity} x ${escapeHtml(itemName)}</div>
-                                            ${modifierText ? `<div style="font-size: 13px; color: #64748b; margin-top: 4px;">${escapeHtml(modifierText)}</div>` : ''}
-                                            <div style="font-weight: 600; color: #0f172a; margin-top: 4px;">${formatCurrency(price, currency)}</div>
+                                            <div style="font-weight: 500; color: #0f172a; margin-bottom: 4px;">${quantity} x ${escapeHtml(itemName)}</div>
+                                            ${modifierText ? `<div style="font-size: 13px; color: #64748b; margin-top: 4px; margin-bottom: 4px;">${escapeHtml(modifierText)}</div>` : ''}
+                                            <div style="font-weight: 600; color: #0f172a;">${formatCurrency(totalPrice, currency)}</div>
                                         </div>
                                     `;
                                 }).join('') : '<div style="color: #64748b;">No items found</div>'}
                             </div>
                             <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; margin-top: 16px;">
-                                ${itemsSubtotal > 0 ? `
-                                <div style="display: flex; justify-content: space-between; margin-bottom: 8px; color: #475569;">
-                                    <span>Subtotal:</span>
-                                    <span>${formatCurrency(itemsSubtotal, currency)}</span>
-                                </div>
-                                ` : ''}
                                 <div style="display: flex; justify-content: space-between; margin-bottom: 8px; color: #475569;">
                                     <span>Tax:</span>
                                     <span>${tax > 0 ? formatCurrency(tax, currency) : 'N/A'}</span>
@@ -7092,10 +7170,12 @@ async function viewOrderDetails(orderId) {
                                 <div><strong>Order Delivery Time:</strong> ${orderDeliveryTime}</div>
                                 <div><strong>Order Completion Time:</strong> ${orderCompletionTime}</div>
                             </div>
+                            ${deliveryInstructions && deliveryInstructions !== 'N/A' ? `
                             <div style="margin-top: 16px; padding: 12px; background: #f8fafc; border-radius: 6px;">
                                 <strong style="color: #0f172a;">Delivery Instruction:</strong>
                                 <div style="color: #475569; margin-top: 4px;">${escapeHtml(deliveryInstructions)}</div>
                             </div>
+                            ` : ''}
                         </div>
                         
                         <!-- Payment and Proof of Delivery -->
