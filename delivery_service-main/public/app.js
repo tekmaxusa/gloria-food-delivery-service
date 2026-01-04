@@ -7000,6 +7000,7 @@ async function viewOrderDetails(orderId) {
         const currency = order.currency || rawData.currency || 'USD';
         
         // Extract payment information - comprehensive extraction from multiple sources
+        // First, try all possible field names in raw_data
         let paymentMethod = rawData.payment_method ||
                             rawData.paymentMethod ||
                             rawData.payment_type ||
@@ -7007,35 +7008,115 @@ async function viewOrderDetails(orderId) {
                             rawData.payment_method_type ||
                             rawData.pay_method ||
                             rawData.payMethod ||
-                            'N/A';
+                            rawData.payment_info ||
+                            rawData.paymentInfo ||
+                            rawData.pay_type ||
+                            rawData.payType ||
+                            rawData.payment ||
+                            rawData.pay ||
+                            rawData.method ||
+                            rawData.payment_method_name ||
+                            rawData.paymentMethodName ||
+                            null;
         
-        // Try payment object if still N/A
-        if (paymentMethod === 'N/A' && rawData.payment) {
-            paymentMethod = rawData.payment.method || 
-                           rawData.payment.type || 
-                           rawData.payment.payment_method ||
-                           rawData.payment.paymentMethod ||
-                           rawData.payment.payment_type ||
-                           'N/A';
+        // Try payment object if still not found
+        if (!paymentMethod && rawData.payment) {
+            const payment = typeof rawData.payment === 'string' ? (() => {
+                try { return JSON.parse(rawData.payment); } catch(e) { return null; }
+            })() : rawData.payment;
+            
+            if (payment && typeof payment === 'object') {
+                paymentMethod = payment.method || 
+                               payment.type || 
+                               payment.payment_method ||
+                               payment.paymentMethod ||
+                               payment.payment_type ||
+                               payment.name ||
+                               payment.payment_name ||
+                               payment.paymentName ||
+                               null;
+            } else if (typeof payment === 'string') {
+                paymentMethod = payment;
+            }
         }
         
-        // Try order.payment if available
-        if (paymentMethod === 'N/A' && order.payment) {
-            const orderPayment = typeof order.payment === 'string' ? JSON.parse(order.payment) : order.payment;
-            paymentMethod = orderPayment.method || 
-                           orderPayment.type || 
-                           orderPayment.payment_method ||
-                           'N/A';
+        // Try nested payment objects
+        if (!paymentMethod && rawData.order && rawData.order.payment) {
+            const orderPayment = typeof rawData.order.payment === 'string' ? (() => {
+                try { return JSON.parse(rawData.order.payment); } catch(e) { return null; }
+            })() : rawData.order.payment;
+            
+            if (orderPayment && typeof orderPayment === 'object') {
+                paymentMethod = orderPayment.method || 
+                               orderPayment.type || 
+                               orderPayment.payment_method ||
+                               null;
+            }
+        }
+        
+        // Try order.payment if available (from order object, not raw_data)
+        if (!paymentMethod && order.payment) {
+            const orderPayment = typeof order.payment === 'string' ? (() => {
+                try { return JSON.parse(order.payment); } catch(e) { return null; }
+            })() : order.payment;
+            
+            if (orderPayment && typeof orderPayment === 'object') {
+                paymentMethod = orderPayment.method || 
+                               orderPayment.type || 
+                               orderPayment.payment_method ||
+                               null;
+            } else if (typeof orderPayment === 'string') {
+                paymentMethod = orderPayment;
+            }
+        }
+        
+        // Try checking common GloriaFood field names
+        if (!paymentMethod) {
+            // Check if there's a 'type' field that might indicate payment
+            if (rawData.type && (rawData.type.toLowerCase().includes('cash') || 
+                                 rawData.type.toLowerCase().includes('card') || 
+                                 rawData.type.toLowerCase().includes('pay'))) {
+                paymentMethod = rawData.type;
+            }
+        }
+        
+        // If still not found, check all keys in rawData for payment-related fields
+        if (!paymentMethod && rawData) {
+            const paymentKeys = Object.keys(rawData).filter(key => 
+                key.toLowerCase().includes('pay') || 
+                key.toLowerCase().includes('method') ||
+                key.toLowerCase().includes('cash') ||
+                key.toLowerCase().includes('card')
+            );
+            
+            for (const key of paymentKeys) {
+                const value = rawData[key];
+                if (value && typeof value === 'string' && value.trim() !== '') {
+                    paymentMethod = value;
+                    break;
+                } else if (value && typeof value === 'object' && (value.method || value.type)) {
+                    paymentMethod = value.method || value.type;
+                    break;
+                }
+            }
+        }
+        
+        // Default to 'N/A' if still not found
+        if (!paymentMethod || paymentMethod === 'null' || paymentMethod === 'undefined') {
+            paymentMethod = 'N/A';
         }
         
         // Format payment method for display (capitalize first letter, handle common values)
         if (paymentMethod !== 'N/A' && paymentMethod) {
-            const pmLower = String(paymentMethod).toLowerCase();
-            if (pmLower === 'cash') {
+            const pmLower = String(paymentMethod).toLowerCase().trim();
+            if (pmLower === 'cash' || pmLower === 'cash_on_delivery' || pmLower === 'cod') {
                 paymentMethod = 'CASH';
-            } else if (pmLower === 'card' || pmLower === 'credit_card' || pmLower === 'creditcard' || pmLower === 'debit_card' || pmLower === 'debitcard') {
+            } else if (pmLower === 'card' || pmLower === 'credit_card' || pmLower === 'creditcard' || 
+                      pmLower === 'debit_card' || pmLower === 'debitcard' || pmLower === 'credit' || 
+                      pmLower === 'debit') {
                 paymentMethod = 'CARD';
-            } else if (pmLower === 'online' || pmLower === 'online_payment' || pmLower === 'onlinepayment') {
+            } else if (pmLower === 'online' || pmLower === 'online_payment' || pmLower === 'onlinepayment' ||
+                      pmLower === 'online_pay' || pmLower === 'web_payment') {
                 paymentMethod = 'ONLINE';
             } else if (pmLower === 'paypal') {
                 paymentMethod = 'PAYPAL';
@@ -7043,9 +7124,13 @@ async function viewOrderDetails(orderId) {
                 paymentMethod = 'STRIPE';
             } else if (pmLower === 'square') {
                 paymentMethod = 'SQUARE';
+            } else if (pmLower === 'apple_pay' || pmLower === 'applepay') {
+                paymentMethod = 'APPLE PAY';
+            } else if (pmLower === 'google_pay' || pmLower === 'googlepay') {
+                paymentMethod = 'GOOGLE PAY';
             } else {
                 // Capitalize first letter of each word
-                paymentMethod = String(paymentMethod).split('_').map(word => 
+                paymentMethod = String(paymentMethod).split(/[_\s-]/).map(word => 
                     word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
                 ).join(' ');
             }
