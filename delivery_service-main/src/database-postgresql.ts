@@ -710,21 +710,29 @@ export class OrderDatabasePostgreSQL {
                    String(orderData.asap || '').toLowerCase() === '1' ||
                    String(orderData.asap || '').toLowerCase() === 'yes';
     
-    const deliveryType = String(orderData.delivery_type || orderData.delivery_option || orderData.deliveryOption || '').toLowerCase();
+    const deliveryType = String(orderData.delivery_type || orderData.delivery_option || orderData.deliveryOption || orderData.deliveryType || orderData.delivery_time_type || orderData.time_type || orderData.delivery_method || '').toLowerCase();
+    const deliveryOption = String(orderData.delivery_option || orderData.deliveryOption || orderData.available_time || orderData.availableTime || orderData.time_option || orderData.timeOption || orderData.selected_time_option || '').toLowerCase();
+    
     const isLaterSelected = deliveryType === 'later' || 
                            deliveryType === 'scheduled' ||
+                           deliveryOption === 'later' ||
+                           deliveryOption === 'scheduled' ||
+                           deliveryOption === 'schedule' ||
                            orderData.is_scheduled === true ||
                            orderData.isScheduled === true ||
                            orderData.scheduled === true ||
                            orderData.is_later === true ||
                            orderData.isLater === true;
     
-    // If explicitly "Later" or not ASAP and has date/time, extract it
-    if (!isLaterSelected && isAsap) {
+    // If explicitly ASAP (and not "Later"), it's not scheduled
+    if (isAsap && !isLaterSelected) {
       return null; // It's ASAP, not scheduled
     }
     
-    // Try to get scheduled time from various fields
+    // If "Later" is explicitly selected, we should extract the scheduled time even if no date/time found yet
+    // (Gloria Food might send it in a different format)
+    
+    // Try to get scheduled time from various fields (check more comprehensively)
     let scheduledTime = orderData.scheduled_delivery_time ||
                        orderData.scheduledDeliveryTime ||
                        orderData.delivery_time ||
@@ -739,14 +747,23 @@ export class OrderDatabasePostgreSQL {
                        orderData.selectedDeliveryTime ||
                        orderData.chosen_delivery_time ||
                        orderData.chosenDeliveryTime ||
+                       orderData.scheduled_at ||
+                       orderData.scheduledAt ||
+                       orderData.schedule_time ||
+                       orderData.scheduleTime ||
                        deliveryObj.scheduled_delivery_time ||
                        deliveryObj.scheduledDeliveryTime ||
                        deliveryObj.delivery_time ||
                        deliveryObj.deliveryTime ||
+                       deliveryObj.requested_delivery_time ||
+                       deliveryObj.requestedDeliveryTime ||
                        scheduleObj.delivery_time ||
                        scheduleObj.scheduled_delivery_time ||
+                       scheduleObj.requested_delivery_time ||
+                       scheduleObj.scheduled_time ||
                        timeObj.delivery_time ||
                        timeObj.scheduled_delivery_time ||
+                       timeObj.delivery ||
                        null;
     
     // If date and time are separate, combine them
@@ -817,13 +834,51 @@ export class OrderDatabasePostgreSQL {
         if (!isNaN(date.getTime())) {
           // Check if it's in the future (scheduled order)
           const now = new Date();
-          if (date > now) {
+          // If "Later" is explicitly selected, accept the time even if it's very soon (within 1 minute)
+          // This handles cases where the time is set but might be just a few seconds in the future
+          if (date > now || (isLaterSelected && date >= new Date(now.getTime() - 60000))) {
             return date.toISOString();
           }
         }
       } catch (e) {
-        // Invalid date format, return null
+        // Invalid date format, but if "Later" is selected, still try to return the raw value
+        // The frontend will handle parsing
+        if (isLaterSelected && scheduledTime) {
+          return scheduledTime;
+        }
         return null;
+      }
+    }
+    
+    // If "Later" is explicitly selected but no time found, check if we have date/time separately
+    // This is important for Gloria Food "in later" orders
+    if (isLaterSelected && !scheduledTime) {
+      // Try one more time with date/time combination
+      const deliveryDate = orderData.delivery_date || 
+                          orderData.deliveryDate || 
+                          orderData.scheduled_date ||
+                          orderData.scheduledDate ||
+                          deliveryObj.delivery_date ||
+                          scheduleObj.delivery_date ||
+                          scheduleObj.scheduled_date;
+                          
+      const deliveryTimeOnly = orderData.delivery_time_only || 
+                              orderData.deliveryTimeOnly || 
+                              orderData.scheduled_time ||
+                              deliveryObj.delivery_time_only ||
+                              scheduleObj.scheduled_time;
+      
+      if (deliveryDate || deliveryTimeOnly) {
+        // If we have at least date or time, and "Later" is selected, consider it scheduled
+        // Return a combined value or just the date
+        if (deliveryDate && deliveryTimeOnly) {
+          return `${deliveryDate} ${deliveryTimeOnly}`;
+        } else if (deliveryDate) {
+          return deliveryDate;
+        } else if (deliveryTimeOnly) {
+          const today = new Date().toISOString().split('T')[0];
+          return `${today} ${deliveryTimeOnly}`;
+        }
       }
     }
     

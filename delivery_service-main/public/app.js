@@ -8,6 +8,7 @@ let currentStatusFilter = '';
 let searchQuery = '';
 let currentReportData = null;
 let currentReportType = null;
+let audioCtx = null;
 
 // Request notification permission on load
 if ('Notification' in window && Notification.permission === 'default') {
@@ -5289,17 +5290,26 @@ async function loadOrders() {
 // Helper function to check if order has scheduled delivery time
 function hasScheduledDeliveryTime(order) {
     // First check if scheduled_delivery_time is already extracted and stored in the order object
+    // This is the most reliable source since it's extracted by the backend
     if (order.scheduled_delivery_time) {
         try {
             const scheduledDate = new Date(order.scheduled_delivery_time);
             const now = new Date();
-            if (scheduledDate > now) {
+            // If scheduled time is in the future (or very recent - within 1 minute), it's scheduled
+            // This handles cases where the time might be just set
+            const timeDiff = scheduledDate.getTime() - now.getTime();
+            const minutesDiff = timeDiff / (1000 * 60);
+            
+            if (scheduledDate > now || (minutesDiff > -1 && minutesDiff < 60)) {
                 const orderId = order.gloriafood_order_id || order.id;
-                console.log(`[DEBUG] Order ${orderId || 'unknown'} is scheduled - using order.scheduled_delivery_time: ${order.scheduled_delivery_time}`);
+                console.log(`[DEBUG] Order ${orderId || 'unknown'} is scheduled - using order.scheduled_delivery_time: ${order.scheduled_delivery_time} (${minutesDiff.toFixed(1)} min)`);
                 return true;
             }
         } catch (e) {
-            // Continue to check other fields
+            // If parsing fails but field exists, still consider it scheduled (might be a format issue)
+            const orderId = order.gloriafood_order_id || order.id;
+            console.log(`[DEBUG] Order ${orderId || 'unknown'} has scheduled_delivery_time field but parsing failed: ${order.scheduled_delivery_time}`);
+            // Continue to check other fields, but if "Later" is selected, return true
         }
     }
     
@@ -5371,9 +5381,10 @@ function hasScheduledDeliveryTime(order) {
                            rawData.is_later === true ||
                            rawData.isLater === true;
     
-    // If "Later" is explicitly selected, it's scheduled
+    // If "Later" is explicitly selected, it's scheduled (even if no time found yet)
+    // This is important for Gloria Food "in later" orders
     if (isLaterSelected) {
-        console.log(`[DEBUG] Order ${orderId || 'unknown'} is scheduled - Later option selected`);
+        console.log(`[DEBUG] Order ${orderId || 'unknown'} is scheduled - Later option selected (delivery_type: ${deliveryType}, delivery_option: ${deliveryOption})`);
         return true;
     }
     
@@ -5594,11 +5605,14 @@ function hasScheduledDeliveryTime(order) {
         
             // If scheduled time is in the future (even 1 minute), it's scheduled
             // This will catch orders scheduled for tomorrow, specific times, etc.
-            if (scheduledDate > now) {
-                const minutesDiff = (scheduledDate.getTime() - now.getTime()) / (1000 * 60);
-                // If more than 1 minute in the future, it's scheduled
-                if (minutesDiff > 1) {
-                    console.log(`[DEBUG] Order ${orderId || 'unknown'} is scheduled - scheduledTime found: ${scheduledTime}, date: ${scheduledDate}, ${minutesDiff.toFixed(1)} min in future`);
+            // Also accept times that are very recent (within last 5 minutes) as they might be just set
+            const timeDiff = scheduledDate.getTime() - now.getTime();
+            const minutesDiff = timeDiff / (1000 * 60);
+            
+            if (scheduledDate > now || (minutesDiff > -5 && minutesDiff < 1440)) {
+                // More than 1 minute in future, or within last 5 minutes (recently scheduled)
+                if (minutesDiff > 1 || (minutesDiff > -5 && minutesDiff < 1440)) {
+                    console.log(`[DEBUG] Order ${orderId || 'unknown'} is scheduled - scheduledTime found: ${scheduledTime}, date: ${scheduledDate}, ${minutesDiff.toFixed(1)} min`);
                     return true;
                 }
             }
@@ -5606,7 +5620,7 @@ function hasScheduledDeliveryTime(order) {
             // Also check if it's a different day (tomorrow or later) - definitely scheduled
             const scheduledDay = scheduledDate.toDateString();
             const today = now.toDateString();
-            if (scheduledDay !== today && scheduledDate >= now) {
+            if (scheduledDay !== today && scheduledDate >= new Date(now.getTime() - 5 * 60 * 1000)) {
                 console.log(`[DEBUG] Order ${orderId || 'unknown'} is scheduled - different day (${scheduledDay} vs ${today})`);
                 return true;
             }
@@ -5615,9 +5629,12 @@ function hasScheduledDeliveryTime(order) {
             // Check if we have both delivery_date and delivery_time_only
             const hasDate = rawData.delivery_date || rawData.deliveryDate || rawData.scheduled_date;
             const hasTime = rawData.delivery_time_only || rawData.deliveryTimeOnly || rawData.scheduled_time;
-            if (hasDate && hasTime) {
-                console.log(`[DEBUG] Order ${orderId || 'unknown'} has both date and time (scheduled): date=${hasDate}, time=${hasTime}`);
-                return true; // Has both date and time = scheduled order
+            if (hasDate || hasTime) {
+                console.log(`[DEBUG] Order ${orderId || 'unknown'} has date/time (scheduled): date=${hasDate}, time=${hasTime}`);
+                // If we have date or time and it's not ASAP, it's likely scheduled
+                if (!isAsap) {
+                    return true;
+                }
             }
         }
     }
@@ -6542,6 +6559,9 @@ function checkForNewOrders(orders) {
     });
     
     if (newOrders.length > 0) {
+        // Play a short notification sound once per batch of new orders
+        playNotificationSound();
+
         // Add notification for each new order
         newOrders.forEach(order => {
             const orderId = order.gloriafood_order_id || order.id;
@@ -6556,6 +6576,33 @@ function checkForNewOrders(orders) {
         
         // Update last order IDs
         lastOrderIds = currentOrderIds;
+    }
+}
+
+// Play a short beep using Web Audio API (no external assets)
+function playNotificationSound() {
+    try {
+        // Initialize audio context lazily
+        audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+        const duration = 0.2; // seconds
+        const now = audioCtx.currentTime;
+
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(880, now); // A5 tone
+
+        gainNode.gain.setValueAtTime(0.12, now);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        oscillator.start(now);
+        oscillator.stop(now + duration);
+    } catch (e) {
+        // Ignore audio errors (e.g., autoplay restrictions)
     }
 }
 
