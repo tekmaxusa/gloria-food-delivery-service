@@ -575,7 +575,7 @@ class GloriaFoodWebhookServer {
         return;
       }
 
-      console.log(chalk.blue(`\n🔄 Syncing DoorDash status for ${pendingOrders.length} pending order(s)...`));
+      let updateCount = 0;
 
       for (const order of pendingOrders) {
         try {
@@ -594,6 +594,7 @@ class GloriaFoodWebhookServer {
                 (this.database as any).updateOrderStatus(order.gloriafood_order_id, 'CANCELLED')
               );
               if (updated) {
+                updateCount++;
                 console.log(chalk.yellow(`  ⚠️  Updated order #${order.gloriafood_order_id} to CANCELLED (DoorDash cancelled)`));
               }
             }
@@ -603,6 +604,7 @@ class GloriaFoodWebhookServer {
                 (this.database as any).updateOrderStatus(order.gloriafood_order_id, 'DELIVERED')
               );
               if (updated) {
+                updateCount++;
                 console.log(chalk.green(`  ✅ Updated order #${order.gloriafood_order_id} to DELIVERED`));
               }
             }
@@ -617,6 +619,11 @@ class GloriaFoodWebhookServer {
           // Log other errors (network issues, auth problems, etc.)
           console.log(chalk.gray(`  ⚠️  Could not sync order #${order.gloriafood_order_id}: ${error.message}`));
         }
+      }
+
+      // Only log sync summary if there were updates or errors
+      if (updateCount > 0) {
+        console.log(chalk.blue(`🔄 DoorDash sync completed: ${updateCount} order(s) updated`));
       }
     } catch (error: any) {
       console.error(chalk.red('Error syncing DoorDash statuses:'), error.message);
