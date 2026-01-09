@@ -582,11 +582,55 @@ class GloriaFoodWebhookServer {
       for (const order of pendingOrders) {
         try {
           const doorDashId = (order as any).doordash_order_id;
-          if (!doorDashId) {
+          const externalDeliveryId = order.gloriafood_order_id; // Use GloriaFood order ID as external_delivery_id
+          
+          // Try to get status by doordash_order_id first, then by external_delivery_id
+          let ddStatus = null;
+          let statusError = null;
+
+          if (doorDashId) {
+            try {
+              ddStatus = await this.doorDashClient.getOrderStatus(doorDashId);
+            } catch (error: any) {
+              statusError = error;
+              // If 404, try with external_delivery_id
+              if (error.message?.includes('404') || error.message?.includes('not found')) {
+                if (externalDeliveryId) {
+                  try {
+                    ddStatus = await this.doorDashClient.getOrderStatus(externalDeliveryId);
+                  } catch (error2: any) {
+                    // Both failed, skip this order
+                    continue;
+                  }
+                } else {
+                  continue;
+                }
+              } else {
+                // Other error, log and continue
+                console.log(chalk.gray(`  ⚠️  Could not sync order #${order.gloriafood_order_id}: ${error.message}`));
+                continue;
+              }
+            }
+          } else if (externalDeliveryId) {
+            // No doordash_order_id, try with external_delivery_id
+            try {
+              ddStatus = await this.doorDashClient.getOrderStatus(externalDeliveryId);
+            } catch (error: any) {
+              // If 404, order might not exist in DoorDash yet - this is normal
+              if (error.message?.includes('404') || error.message?.includes('not found')) {
+                continue;
+              }
+              console.log(chalk.gray(`  ⚠️  Could not sync order #${order.gloriafood_order_id}: ${error.message}`));
+              continue;
+            }
+          } else {
             continue;
           }
 
-          const ddStatus = await this.doorDashClient.getOrderStatus(doorDashId);
+          if (!ddStatus || !ddStatus.status) {
+            continue;
+          }
+
           const normalizedStatus = (ddStatus.status || '').toLowerCase();
 
           // Update order status if DoorDash shows cancelled

@@ -1551,14 +1551,36 @@ async function fetchOrdersReport() {
     
     // Enrich orders with merchant names from merchants table
     return orders.map(order => {
-        // If order doesn't have valid merchant_name, get from merchants map
-        if (!order.merchant_name || 
-            order.merchant_name === order.store_id || 
-            order.merchant_name.startsWith('Merchant ') ||
-            order.merchant_name === 'Unknown Merchant' ||
-            order.merchant_name === 'N/A') {
+        // Check if current merchant_name is valid (not a fallback)
+        const isFallbackName = !order.merchant_name || 
+                               order.merchant_name === order.store_id || 
+                               order.merchant_name.startsWith('Merchant ') ||
+                               order.merchant_name === 'Unknown Merchant' ||
+                               order.merchant_name === 'N/A';
+
+        // If merchant_name is a fallback or missing, try to get from merchants map
+        if (isFallbackName) {
             if (order.store_id && merchantsMap.has(order.store_id)) {
                 order.merchant_name = merchantsMap.get(order.store_id);
+            } else if (order.store_id) {
+                // Last resort: try to get from raw_data
+                try {
+                    const rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : (order.raw_data || {});
+                    const merchantNameFromRaw = rawData.merchant_name || 
+                                              rawData.restaurant?.name || 
+                                              rawData.store?.name ||
+                                              rawData.restaurant_name ||
+                                              rawData.store_name ||
+                                              rawData.restaurant?.restaurant_name;
+                    if (merchantNameFromRaw && 
+                        merchantNameFromRaw.trim() !== '' &&
+                        merchantNameFromRaw !== order.store_id &&
+                        !merchantNameFromRaw.startsWith('Merchant ')) {
+                        order.merchant_name = merchantNameFromRaw.trim();
+                    }
+                } catch (e) {
+                    // Ignore parsing errors
+                }
             }
         }
         return order;
@@ -1736,12 +1758,17 @@ function renderOrdersReport(orders) {
                 let merchantName = order.merchant_name;
                 
                 // Only show N/A if merchant_name is truly missing or is a fallback
+                // After enrichment, merchant_name should be valid if available
                 if (!merchantName || 
                     merchantName === order.store_id || 
                     merchantName.startsWith('Merchant ') ||
                     merchantName === 'Unknown Merchant' ||
-                    merchantName === 'N/A') {
+                    merchantName === 'N/A' ||
+                    merchantName.trim() === '') {
                     merchantName = 'N/A';
+                } else {
+                    // Merchant name is valid, use it as-is
+                    merchantName = merchantName.trim();
                 }
                 merchantName = escapeHtml(merchantName);
                 
