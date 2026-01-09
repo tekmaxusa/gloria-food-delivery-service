@@ -621,13 +621,13 @@ function showOrdersPage() {
                                 <path d="M12 5v14M5 12l7-7 7 7"/>
                             </svg>
                         </th>
-                        <th class="sortable" style="text-align: right;">
+                        <th class="sortable">
                             <span>Amount</span>
                             <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M12 5v14M5 12l7-7 7 7"/>
                             </svg>
                         </th>
-                        <th class="sortable" style="text-align: center;">
+                        <th class="sortable">
                             <span>Distance</span>
                             <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M12 5v14M5 12l7-7 7 7"/>
@@ -645,37 +645,37 @@ function showOrdersPage() {
                                 <path d="M12 5v14M5 12l7-7 7 7"/>
                             </svg>
                         </th>
-                        <th class="sortable" style="text-align: center;">
+                        <th class="sortable">
                             <span>Elapsed Time</span>
                             <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M12 5v14M5 12l7-7 7 7"/>
                             </svg>
                         </th>
-                        <th class="sortable" style="text-align: center;">
+                        <th class="sortable">
                             <span>Ready for pick-up</span>
                             <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M12 5v14M5 12l7-7 7 7"/>
                             </svg>
                         </th>
-                        <th class="sortable" style="text-align: center;">
+                        <th class="sortable">
                             <span>Driver</span>
                             <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M12 5v14M5 12l7-7 7 7"/>
                             </svg>
                         </th>
-                        <th class="sortable" style="text-align: center;">
+                        <th class="sortable">
                             <span>Status</span>
                             <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M12 5v14M5 12l7-7 7 7"/>
                             </svg>
                         </th>
-                        <th class="sortable" style="text-align: center;">
+                        <th class="sortable">
                             <span>Tracking</span>
                             <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M12 5v14M5 12l7-7 7 7"/>
                             </svg>
                         </th>
-                        <th style="width: 40px;"></th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody id="ordersTableBody">
@@ -5964,12 +5964,7 @@ function createOrderRow(order) {
 
     const orderId = order.gloriafood_order_id || order.id || 'N/A';
     const customerName = escapeHtml(order.customer_name || 'N/A');
-    // Truncate long addresses for better display
-    let customerAddress = order.delivery_address || order.customer_address || 'N/A';
-    if (customerAddress !== 'N/A' && customerAddress.length > 50) {
-        customerAddress = customerAddress.substring(0, 47) + '...';
-    }
-    customerAddress = escapeHtml(customerAddress);
+    const customerAddress = escapeHtml(order.delivery_address || order.customer_address || 'N/A');
 
     // Use cached parsed raw_data if available (pre-processed in loadOrders)
     let rawData = order._parsedRawData || {};
@@ -6170,7 +6165,7 @@ function createOrderRow(order) {
     };
 
     // Only display distance if DoorDash/Shipday has provided route data
-    let formattedDistance = 'N/A';
+    let formattedDistance = '';
     if (distance) {
         if (typeof distance === 'number') {
             // Assume distance is in km (default from API)
@@ -6188,7 +6183,7 @@ function createOrderRow(order) {
             formattedDistance = String(distance);
         }
     }
-    // If no distance from DoorDash/Shipday, show "N/A"
+    // If no distance from DoorDash/Shipday, show empty string (not "N/A")
 
     // Get pickup time from various possible fields (comprehensive search)
     const scheduleObj = rawData.schedule || {};
@@ -6574,25 +6569,25 @@ function createOrderRow(order) {
 
     return `
         <tr data-order-id="${escapeHtml(String(orderId))}">
-            <td style="text-align: center; width: 40px;">
+            <td>
                 <input type="checkbox" class="order-checkbox" value="${escapeHtml(String(orderId))}">
             </td>
-            <td style="font-weight: 600; white-space: nowrap;">
+            <td>
                 ${clockIcon}
                 <strong>#${escapeHtml(String(orderId))}</strong>
             </td>
-            <td style="white-space: nowrap; max-width: 150px; overflow: hidden; text-overflow: ellipsis;" title="${escapeHtml(order.customer_name || 'N/A')}">${customerName}</td>
-            <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis;" title="${escapeHtml(order.delivery_address || order.customer_address || 'N/A')}">${customerAddress}</td>
-            <td style="text-align: right; font-weight: 600; white-space: nowrap;">${amount}</td>
-            <td style="text-align: center; white-space: nowrap;">${formattedDistance}</td>
-            <td style="white-space: nowrap;">${orderPlaced}</td>
-            <td style="white-space: nowrap;">${formattedDeliveryTime}</td>
-            <td style="text-align: center; white-space: nowrap; color: #6b7280;">${elapsedTime}</td>
-            <td style="text-align: center;">${formattedReadyForPickup}</td>
-            <td style="text-align: center;">${formattedDriver}</td>
-            <td style="text-align: center;"><span class="status-badge status-${status.toLowerCase()}">${escapeHtml(status)}</span></td>
-            <td style="text-align: center; white-space: nowrap;">${tracking}</td>
-            <td style="text-align: center; width: 40px;">${moreMenu}</td>
+            <td>${customerName}</td>
+            <td>${customerAddress}</td>
+            <td>${amount}</td>
+            <td>${formattedDistance}</td>
+            <td>${orderPlaced}</td>
+            <td>${formattedDeliveryTime}</td>
+            <td>${elapsedTime}</td>
+            <td>${formattedReadyForPickup}</td>
+            <td>${formattedDriver}</td>
+            <td><span class="status-badge status-${status.toLowerCase()}">${escapeHtml(status)}</span></td>
+            <td>${tracking}</td>
+            <td>${moreMenu}</td>
         </tr>
     `;
 }
