@@ -603,7 +603,21 @@ export class OrderDatabasePostgreSQL {
           updated_at = EXCLUDED.updated_at,
           fetched_at = EXCLUDED.fetched_at,
           raw_data = EXCLUDED.raw_data,
-          merchant_name = COALESCE(EXCLUDED.merchant_name, orders.merchant_name),
+          merchant_name = CASE 
+            WHEN EXCLUDED.merchant_name IS NOT NULL 
+                 AND EXCLUDED.merchant_name != ''
+                 AND EXCLUDED.merchant_name != EXCLUDED.store_id
+                 AND EXCLUDED.merchant_name NOT LIKE 'Merchant %'
+                 AND EXCLUDED.merchant_name != 'Unknown Merchant'
+            THEN EXCLUDED.merchant_name
+            WHEN orders.merchant_name IS NOT NULL 
+                 AND orders.merchant_name != ''
+                 AND orders.merchant_name != orders.store_id
+                 AND orders.merchant_name NOT LIKE 'Merchant %'
+                 AND orders.merchant_name != 'Unknown Merchant'
+            THEN orders.merchant_name
+            ELSE COALESCE(EXCLUDED.merchant_name, orders.merchant_name)
+          END,
           store_id = EXCLUDED.store_id
         RETURNING *
       `, [

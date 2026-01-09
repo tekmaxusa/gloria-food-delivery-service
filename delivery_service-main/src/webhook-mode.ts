@@ -1016,19 +1016,31 @@ class GloriaFoodWebhookServer {
         }
         
         // Enrich orders with merchant information
-        // Always get merchant_name from merchants table to ensure it's up-to-date
+        // Prioritize saved merchant_name in order (for persistence), only use merchants table if order doesn't have a valid name
         const enrichedOrders = orders.map(order => {
+          // Check if order has a valid saved merchant_name (not a fallback)
+          const hasValidSavedName = order.merchant_name && 
+                                    order.merchant_name !== order.store_id && 
+                                    !order.merchant_name.startsWith('Merchant ') &&
+                                    order.merchant_name !== 'Unknown Merchant' &&
+                                    order.merchant_name.trim() !== '';
+          
+          // If order has a valid saved merchant_name, use it (persists across commits/restarts)
+          if (hasValidSavedName) {
+            return order;
+          }
+          
+          // Otherwise, get from merchants table
           const merchant = order.store_id 
             ? this.merchantManager.getMerchantByStoreId(order.store_id)
             : null;
           
-          // Always use merchant_name from merchants table if available (most up-to-date)
-          // Only use stored merchant_name if merchant is not found in merchants table (for historical accuracy)
-          const merchantName = merchant?.merchant_name 
+          // Use merchant_name from merchants table if available, otherwise use fallback
+          const merchantName = merchant?.merchant_name && 
+                              merchant.merchant_name !== order.store_id &&
+                              !merchant.merchant_name.startsWith('Merchant ')
             ? merchant.merchant_name 
-            : (order.merchant_name && order.merchant_name !== `Merchant ${order.store_id}` && !order.merchant_name.startsWith('Merchant '))
-              ? order.merchant_name 
-              : (order.store_id ? `Merchant ${order.store_id}` : 'Unknown Merchant');
+            : (order.store_id ? `Merchant ${order.store_id}` : 'Unknown Merchant');
           
           return {
             ...order,
