@@ -538,21 +538,21 @@ class GloriaFoodWebhookServer {
       return;
     }
 
-    // Sync every 2 minutes
+    // Sync every 1 minute for faster cancellation detection
     this.doorDashSyncInterval = setInterval(async () => {
       try {
         await this.syncDoorDashStatuses();
       } catch (error: any) {
         console.error(chalk.red('Error in DoorDash status sync:'), error.message);
       }
-    }, 2 * 60 * 1000); // 2 minutes
+    }, 1 * 60 * 1000); // 1 minute
 
-    // Run initial sync after 30 seconds
+    // Run initial sync after 10 seconds
     setTimeout(() => {
       this.syncDoorDashStatuses().catch(err => {
         console.error(chalk.red('Error in initial DoorDash status sync:'), err.message);
       });
-    }, 30000);
+    }, 10000);
   }
 
   /**
@@ -564,22 +564,23 @@ class GloriaFoodWebhookServer {
     }
 
     try {
-      // Get all orders that are sent to DoorDash but still pending
-      const allOrders = await this.handleAsync(this.database.getAllOrders(100));
-      const pendingOrders = allOrders.filter(order => {
+      // Get all orders that are sent to DoorDash - check all statuses to catch cancellations
+      const allOrders = await this.handleAsync(this.database.getAllOrders(1000));
+      const ordersToCheck = allOrders.filter(order => {
         const status = (order.status || '').toUpperCase();
-        const isPending = ['PENDING', 'ACCEPTED', 'CONFIRMED'].includes(status);
+        // Check orders that are not already cancelled or delivered, and have DoorDash ID
+        const isNotFinal = !['CANCELLED', 'CANCELED', 'DELIVERED', 'COMPLETED'].includes(status);
         const hasDoorDashId = (order as any).doordash_order_id || (order as any).sent_to_doordash;
-        return isPending && hasDoorDashId;
+        return isNotFinal && hasDoorDashId;
       });
 
-      if (pendingOrders.length === 0) {
+      if (ordersToCheck.length === 0) {
         return;
       }
 
       let updateCount = 0;
 
-      for (const order of pendingOrders) {
+      for (const order of ordersToCheck) {
         try {
           const doorDashId = (order as any).doordash_order_id;
           const externalDeliveryId = order.gloriafood_order_id; // Use GloriaFood order ID as external_delivery_id
@@ -642,7 +643,11 @@ class GloriaFoodWebhookServer {
               if (updated) {
                 updateCount++;
                 console.log(chalk.yellow(`  ⚠️  Updated order #${order.gloriafood_order_id} to CANCELLED (DoorDash cancelled)`));
+              } else {
+                console.log(chalk.red(`  ❌ Failed to update order #${order.gloriafood_order_id} to CANCELLED`));
               }
+            } else {
+              console.log(chalk.red(`  ❌ updateOrderStatus method not available for order #${order.gloriafood_order_id}`));
             }
           } else if (normalizedStatus === 'delivered' || normalizedStatus === 'completed') {
             if ((this.database as any).updateOrderStatus) {
@@ -652,7 +657,11 @@ class GloriaFoodWebhookServer {
               if (updated) {
                 updateCount++;
                 console.log(chalk.green(`  ✅ Updated order #${order.gloriafood_order_id} to DELIVERED`));
+              } else {
+                console.log(chalk.red(`  ❌ Failed to update order #${order.gloriafood_order_id} to DELIVERED`));
               }
+            } else {
+              console.log(chalk.red(`  ❌ updateOrderStatus method not available for order #${order.gloriafood_order_id}`));
             }
           }
         } catch (error: any) {
