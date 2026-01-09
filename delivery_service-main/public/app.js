@@ -1466,9 +1466,45 @@ function getReportTitle(type) {
 
 // Fetch sales report data
 async function fetchSalesReport() {
-    const response = await authenticatedFetch(`${API_BASE}/orders?limit=1000`);
-    const data = await response.json();
-    return data.orders || data || [];
+    const [ordersResponse, merchantsResponse] = await Promise.all([
+        authenticatedFetch(`${API_BASE}/orders?limit=1000`),
+        authenticatedFetch(`${API_BASE}/merchants`).catch(() => null)
+    ]);
+    
+    const ordersData = await ordersResponse.json();
+    const orders = ordersData.orders || ordersData || [];
+    
+    // Get merchants map for enrichment
+    let merchantsMap = new Map();
+    if (merchantsResponse) {
+        try {
+            const merchantsData = await merchantsResponse.json();
+            if (merchantsData.success && merchantsData.merchants) {
+                merchantsData.merchants.forEach(merchant => {
+                    if (merchant.store_id && merchant.merchant_name) {
+                        merchantsMap.set(merchant.store_id, merchant.merchant_name);
+                    }
+                });
+            }
+        } catch (e) {
+            console.error('Error parsing merchants:', e);
+        }
+    }
+    
+    // Enrich orders with merchant names from merchants table
+    return orders.map(order => {
+        // If order doesn't have valid merchant_name, get from merchants map
+        if (!order.merchant_name || 
+            order.merchant_name === order.store_id || 
+            order.merchant_name.startsWith('Merchant ') ||
+            order.merchant_name === 'Unknown Merchant' ||
+            order.merchant_name === 'N/A') {
+            if (order.store_id && merchantsMap.has(order.store_id)) {
+                order.merchant_name = merchantsMap.get(order.store_id);
+            }
+        }
+        return order;
+    });
 }
 
 // Fetch orders report data
@@ -1552,12 +1588,43 @@ function renderSalesReport(orders) {
                 <tbody>
                     ${orders.length === 0 ? '<tr><td colspan="6" class="empty-state-cell"><div class="empty-state"><div class="empty-state-text">No sales data available</div></div></td></tr>' :
             orders.slice(0, 100).map(order => {
-                // Backend should provide merchant_name from merchants table
-                // Only use fallback if merchant_name is missing or is a fallback pattern
+                // Get merchant name - use order.merchant_name if valid, otherwise try raw_data
                 let merchantName = order.merchant_name;
-                if (!merchantName || merchantName === order.store_id || merchantName.startsWith('Merchant ')) {
-                    merchantName = 'N/A';
+                
+                // Check if merchant_name is valid (not a fallback)
+                const isValidName = merchantName && 
+                                    merchantName !== order.store_id && 
+                                    !merchantName.startsWith('Merchant ') &&
+                                    merchantName !== 'Unknown Merchant' &&
+                                    merchantName !== 'N/A' &&
+                                    merchantName.trim() !== '';
+                
+                if (!isValidName) {
+                    // Try to get from raw_data
+                    let rawData = {};
+                    if (order.raw_data) {
+                        try {
+                            rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+                        } catch (e) {
+                            rawData = {};
+                        }
+                    }
+                    
+                    merchantName = rawData.merchant_name ||
+                        rawData.merchantName ||
+                        rawData.restaurant_name ||
+                        rawData.restaurantName ||
+                        (rawData.restaurant && rawData.restaurant.name) ||
+                        (rawData.restaurant && rawData.restaurant.restaurant_name) ||
+                        (rawData.merchant && rawData.merchant.name) ||
+                        null;
+                    
+                    // Final fallback
+                    if (!merchantName || merchantName === order.store_id) {
+                        merchantName = 'N/A';
+                    }
                 }
+                
                 merchantName = escapeHtml(merchantName);
                 
                 return `
