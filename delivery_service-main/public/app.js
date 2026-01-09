@@ -40,11 +40,11 @@ function authenticatedFetch(url, options = {}) {
         'Content-Type': 'application/json',
         ...(options.headers || {})
     };
-    
+
     if (sessionId) {
         headers['X-Session-Id'] = sessionId;
     }
-    
+
     return fetch(url, {
         ...options,
         headers: headers,
@@ -59,7 +59,7 @@ async function checkAuth() {
         showLogin();
         return false;
     }
-    
+
     try {
         const response = await fetch(`${API_BASE}/api/auth/me`, {
             method: 'GET',
@@ -68,7 +68,7 @@ async function checkAuth() {
             },
             credentials: 'include'
         });
-        
+
         if (response.ok) {
             const data = await response.json();
             if (data.success && data.user) {
@@ -91,7 +91,7 @@ async function checkAuth() {
             }
         }
     }
-    
+
     // Clear invalid session
     saveSessionId(null);
     showLogin();
@@ -102,10 +102,10 @@ async function checkAuth() {
 function showLogin() {
     const authContainer = document.getElementById('authContainer');
     const dashboardContainer = document.getElementById('dashboardContainer');
-    
+
     if (authContainer) authContainer.classList.remove('hidden');
     if (dashboardContainer) dashboardContainer.classList.add('hidden');
-    
+
     // Make sure login form is active
     const loginForm = document.getElementById('loginForm');
     const signupForm = document.getElementById('signupForm');
@@ -120,17 +120,17 @@ function showDashboard() {
     if (authContainer) {
         authContainer.classList.add('hidden');
     }
-    
+
     // Show dashboard container
     const dashboardContainer = document.getElementById('dashboardContainer');
     if (dashboardContainer) {
         dashboardContainer.classList.remove('hidden');
-    
-    // Show dashboard page by default
-    showDashboardPage();
-    
-    // Start auto-refresh only when authenticated
-    startAutoRefresh();
+
+        // Show dashboard page by default
+        showDashboardPage();
+
+        // Start auto-refresh only when authenticated
+        startAutoRefresh();
     }
 }
 
@@ -143,13 +143,13 @@ function setupDashboardUI() {
             document.querySelectorAll('.status-tab').forEach(t => t.classList.remove('active'));
             // Add active class to clicked tab
             e.target.classList.add('active');
-            
+
             const status = e.target.dataset.status;
             currentStatusFilter = status;
             filterAndDisplayOrders();
         });
     });
-    
+
     // Setup search
     const searchInput = document.getElementById('searchInput');
     if (searchInput) {
@@ -158,7 +158,7 @@ function setupDashboardUI() {
             filterAndDisplayOrders();
         });
     }
-    
+
     // Setup select all checkbox
     const selectAllCheckbox = document.querySelector('.select-all-checkbox');
     if (selectAllCheckbox) {
@@ -167,19 +167,19 @@ function setupDashboardUI() {
             checkboxes.forEach(cb => cb.checked = e.target.checked);
         });
     }
-    
+
     // New order button
     const newOrderBtn = document.getElementById('newOrderBtn');
     if (newOrderBtn) {
         newOrderBtn.addEventListener('click', handleNewOrder);
     }
-    
+
     // Help button
     const helpBtn = document.querySelector('.icon-btn[title="Help"]');
     if (helpBtn) {
         helpBtn.addEventListener('click', handleHelp);
     }
-    
+
     // Re-setup header buttons to ensure they're clickable
     setupHeaderButtons();
 }
@@ -202,16 +202,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     const signupForm = document.getElementById('signupForm');
     if (loginForm) loginForm.classList.add('active');
     if (signupForm) signupForm.classList.remove('active');
-    
+
     // Setup authentication handlers first
     setupAuth();
-    
+
     // Setup navigation links
     setupNavigation();
-    
+
     // Setup header buttons (always available)
     setupHeaderButtons();
-    
+
     // Check authentication - this will show login or dashboard
     checkAuth();
 });
@@ -226,7 +226,7 @@ function setupHeaderButtons() {
         profileBtn.parentNode.replaceChild(newProfileBtn, profileBtn);
         newProfileBtn.addEventListener('click', handleProfile);
     }
-    
+
     // Notifications button
     const notificationsBtn = document.getElementById('notificationsBtn');
     if (notificationsBtn) {
@@ -235,7 +235,7 @@ function setupHeaderButtons() {
         notificationsBtn.parentNode.replaceChild(newNotificationsBtn, notificationsBtn);
         newNotificationsBtn.addEventListener('click', handleNotifications);
     }
-    
+
     // Logout button (already in setupAuth, but ensure it's set up)
     const logoutBtn = document.getElementById('logoutBtn');
     if (logoutBtn && !logoutBtn.hasAttribute('data-listener-attached')) {
@@ -246,7 +246,7 @@ function setupHeaderButtons() {
             if (!confirmed) {
                 return;
             }
-            
+
             try {
                 await authenticatedFetch(`${API_BASE}/api/auth/logout`, {
                     method: 'POST'
@@ -254,7 +254,7 @@ function setupHeaderButtons() {
             } catch (error) {
                 console.error('Logout error:', error);
             }
-            
+
             currentUser = null;
             sessionId = null;
             saveSessionId(null);
@@ -267,7 +267,7 @@ function setupHeaderButtons() {
 function setupAuth() {
     // Setup password toggle buttons
     setupPasswordToggles();
-    
+
     // Login form
     const loginForm = document.getElementById('loginFormElement');
     if (loginForm) {
@@ -276,12 +276,12 @@ function setupAuth() {
             const email = document.getElementById('loginEmail')?.value;
             const password = document.getElementById('loginPassword')?.value;
             const errorDiv = document.getElementById('loginError');
-            
+
             if (errorDiv) {
                 errorDiv.style.display = 'none';
                 errorDiv.textContent = '';
             }
-            
+
             if (!email || !password) {
                 const errorMsg = 'Please enter email and password';
                 if (errorDiv) {
@@ -290,14 +290,14 @@ function setupAuth() {
                 }
                 return;
             }
-            
+
             try {
                 const response = await fetch(`${API_BASE}/api/auth/login`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email, password })
                 });
-                
+
                 if (!response.ok) {
                     const errorData = await response.json().catch(() => ({}));
                     const errorMsg = errorData.error || `Server error: ${response.status}`;
@@ -307,15 +307,15 @@ function setupAuth() {
                     }
                     return;
                 }
-                
+
                 const data = await response.json();
-                
+
                 if (data.success && data.user) {
                     currentUser = data.user;
                     sessionId = data.sessionId;
                     saveSessionId(data.sessionId);
                     showNotification('Success', 'Login successful!');
-                    
+
                     // Redirect to dashboard
                     showDashboard();
                 } else {
@@ -335,7 +335,7 @@ function setupAuth() {
             }
         });
     }
-    
+
     // Signup form
     const signupForm = document.getElementById('signupFormElement');
     if (signupForm) {
@@ -345,12 +345,12 @@ function setupAuth() {
             const email = document.getElementById('signupEmail')?.value;
             const password = document.getElementById('signupPassword')?.value;
             const errorDiv = document.getElementById('signupError');
-            
+
             if (errorDiv) {
                 errorDiv.style.display = 'none';
                 errorDiv.textContent = '';
             }
-            
+
             if (!name || !email || !password) {
                 const errorMsg = 'Please fill in all fields';
                 if (errorDiv) {
@@ -359,7 +359,7 @@ function setupAuth() {
                 }
                 return;
             }
-            
+
             if (password.length < 6) {
                 const errorMsg = 'Password must be at least 6 characters';
                 if (errorDiv) {
@@ -368,14 +368,14 @@ function setupAuth() {
                 }
                 return;
             }
-            
+
             try {
                 const response = await fetch(`${API_BASE}/api/auth/signup`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email, password, fullName: name })
                 });
-                
+
                 if (!response.ok) {
                     const errorData = await response.json().catch(() => ({}));
                     const errorMsg = errorData.error || `Server error: ${response.status}`;
@@ -385,9 +385,9 @@ function setupAuth() {
                     }
                     return;
                 }
-                
+
                 const data = await response.json();
-                
+
                 if (data.success && data.user) {
                     currentUser = data.user;
                     sessionId = data.sessionId;
@@ -411,7 +411,7 @@ function setupAuth() {
             }
         });
     }
-    
+
     // Show signup form
     const showSignupLink = document.getElementById('showSignup');
     if (showSignupLink) {
@@ -419,10 +419,10 @@ function setupAuth() {
             e.preventDefault();
             const loginForm = document.getElementById('loginForm');
             const signupForm = document.getElementById('signupForm');
-            
+
             if (loginForm) loginForm.classList.remove('active');
             if (signupForm) signupForm.classList.add('active');
-            
+
             // Clear any error messages
             const loginError = document.getElementById('loginError');
             if (loginError) {
@@ -431,7 +431,7 @@ function setupAuth() {
             }
         });
     }
-    
+
     // Show login form
     const showLoginLink = document.getElementById('showLogin');
     if (showLoginLink) {
@@ -439,10 +439,10 @@ function setupAuth() {
             e.preventDefault();
             const loginForm = document.getElementById('loginForm');
             const signupForm = document.getElementById('signupForm');
-            
+
             if (signupForm) signupForm.classList.remove('active');
             if (loginForm) loginForm.classList.add('active');
-            
+
             // Clear any error messages
             const signupError = document.getElementById('signupError');
             if (signupError) {
@@ -451,7 +451,7 @@ function setupAuth() {
             }
         });
     }
-    
+
     // Logout button is handled in setupHeaderButtons()
 }
 
@@ -460,12 +460,12 @@ function setupPasswordToggles() {
     // Login password toggle
     const toggleLoginPassword = document.getElementById('toggleLoginPassword');
     const loginPassword = document.getElementById('loginPassword');
-    
+
     if (toggleLoginPassword && loginPassword) {
         toggleLoginPassword.addEventListener('click', () => {
             const type = loginPassword.getAttribute('type') === 'password' ? 'text' : 'password';
             loginPassword.setAttribute('type', type);
-            
+
             // Toggle eye icons
             const eyeOpen = toggleLoginPassword.querySelector('.eye-open');
             const eyeClosed = toggleLoginPassword.querySelector('.eye-closed');
@@ -478,16 +478,16 @@ function setupPasswordToggles() {
             }
         });
     }
-    
+
     // Signup password toggle
     const toggleSignupPassword = document.getElementById('toggleSignupPassword');
     const signupPassword = document.getElementById('signupPassword');
-    
+
     if (toggleSignupPassword && signupPassword) {
         toggleSignupPassword.addEventListener('click', () => {
             const type = signupPassword.getAttribute('type') === 'password' ? 'text' : 'password';
             signupPassword.setAttribute('type', type);
-            
+
             // Toggle eye icons
             const eyeOpen = toggleSignupPassword.querySelector('.eye-open');
             const eyeClosed = toggleSignupPassword.querySelector('.eye-closed');
@@ -507,12 +507,12 @@ function setupNavigation() {
     document.querySelectorAll('.nav-link').forEach(link => {
         link.addEventListener('click', (e) => {
             e.preventDefault();
-            
+
             // Remove active class from all nav links
             document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
             // Add active class to clicked link
             e.target.classList.add('active');
-            
+
             // Handle navigation
             const page = e.target.textContent.trim();
             navigateToPage(page);
@@ -524,10 +524,10 @@ function setupNavigation() {
 function navigateToPage(page) {
     // Remove body classes for settings/profile pages
     document.body.classList.remove('on-settings-page', 'on-profile-page');
-    
+
     const mainContainer = document.querySelector('.main-container');
-    
-    switch(page.toLowerCase()) {
+
+    switch (page.toLowerCase()) {
         case 'dashboard':
             showDashboardPage();
             break;
@@ -549,7 +549,7 @@ function navigateToPage(page) {
         default:
             showOrdersPage();
     }
-    
+
     // Ensure header buttons are always clickable after navigation
     setupHeaderButtons();
 }
@@ -605,12 +605,6 @@ function showOrdersPage() {
                         </th>
                         <th class="sortable">
                             <span>Order No.</span>
-                            <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M12 5v14M5 12l7-7 7 7"/>
-                            </svg>
-                        </th>
-                        <th class="sortable">
-                            <span>Merchant</span>
                             <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M12 5v14M5 12l7-7 7 7"/>
                             </svg>
@@ -690,10 +684,10 @@ function showOrdersPage() {
             </table>
         </div>
     `;
-    
+
     // Set initial status filter to 'current' since that tab is active by default
     currentStatusFilter = 'current';
-    
+
     // Re-initialize event listeners
     initializeOrdersPage();
     filterAndDisplayOrders();
@@ -708,18 +702,18 @@ function initializeOrdersPage() {
             document.querySelectorAll('.status-tab').forEach(t => t.classList.remove('active'));
             // Add active class to clicked tab
             e.target.classList.add('active');
-            
+
             // Get status from data attribute or text content
             const status = e.target.dataset.status || e.target.textContent.trim().toLowerCase();
             currentStatusFilter = status;
-            
+
             console.log(`[DEBUG] Tab clicked: ${status}, filter set to: "${currentStatusFilter}"`);
-            
+
             // Filter and display orders
             filterAndDisplayOrders();
         });
     });
-    
+
     // Setup search
     const searchInput = document.getElementById('searchInput');
     if (searchInput) {
@@ -728,7 +722,7 @@ function initializeOrdersPage() {
             filterAndDisplayOrders();
         });
     }
-    
+
     // Setup select all checkbox
     const selectAllCheckbox = document.querySelector('.select-all-checkbox');
     if (selectAllCheckbox) {
@@ -737,19 +731,19 @@ function initializeOrdersPage() {
             checkboxes.forEach(cb => cb.checked = e.target.checked);
         });
     }
-    
+
     // New order button
     const newOrderBtn = document.getElementById('newOrderBtn');
     if (newOrderBtn) {
         newOrderBtn.addEventListener('click', handleNewOrder);
     }
-    
+
     // Export orders button
     const exportOrdersBtn = document.getElementById('exportOrdersBtn');
     if (exportOrdersBtn) {
         exportOrdersBtn.addEventListener('click', exportOrdersToExcel);
     }
-    
+
     // Delete selected orders button
     const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
     if (deleteSelectedBtn) {
@@ -885,7 +879,7 @@ function showDriversPage() {
             </div>
         </div>
     `;
-    
+
     // Initialize drivers page
     initializeDriversPage();
     loadDrivers();
@@ -900,19 +894,19 @@ function initializeDriversPage() {
             openDriverModal();
         });
     }
-    
+
     // Modal close buttons
     const closeModal = document.getElementById('closeDriverModal');
     const cancelBtn = document.getElementById('cancelDriverBtn');
     if (closeModal) closeModal.addEventListener('click', closeDriverModal);
     if (cancelBtn) cancelBtn.addEventListener('click', closeDriverModal);
-    
+
     // Form submission
     const driverForm = document.getElementById('driverForm');
     if (driverForm) {
         driverForm.addEventListener('submit', handleDriverSubmit);
     }
-    
+
     // Close modal on outside click
     const modal = document.getElementById('driverModal');
     if (modal) {
@@ -930,18 +924,18 @@ function openDriverModal() {
     const form = document.getElementById('driverForm');
     const title = document.getElementById('driverModalTitle');
     const errorDiv = document.getElementById('driverError');
-    
+
     if (!modal || !form || !title) return;
-    
+
     title.textContent = 'Add New Driver';
     form.reset();
     form.dataset.editingDriverId = '';
-    
+
     if (errorDiv) {
         errorDiv.style.display = 'none';
         errorDiv.textContent = '';
     }
-    
+
     modal.classList.remove('hidden');
 }
 
@@ -956,7 +950,7 @@ function closeDriverModal() {
 // Handle driver form submission
 async function handleDriverSubmit(e) {
     e.preventDefault();
-    
+
     const form = e.target;
     const name = document.getElementById('driverName').value.trim();
     const phone = document.getElementById('driverPhone').value.trim();
@@ -964,7 +958,7 @@ async function handleDriverSubmit(e) {
     const vehicleType = document.getElementById('driverVehicleType').value.trim();
     const vehiclePlate = document.getElementById('driverVehiclePlate').value.trim();
     const errorDiv = document.getElementById('driverError');
-    
+
     if (!name) {
         if (errorDiv) {
             errorDiv.textContent = 'Driver name is required';
@@ -972,7 +966,7 @@ async function handleDriverSubmit(e) {
         }
         return;
     }
-    
+
     try {
         const response = await authenticatedFetch(`${API_BASE}/api/drivers`, {
             method: 'POST',
@@ -985,9 +979,9 @@ async function handleDriverSubmit(e) {
                 vehicle_plate: vehiclePlate || undefined
             })
         });
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
             showNotification('Success', 'Driver added successfully!');
             closeDriverModal();
@@ -1016,7 +1010,7 @@ async function loadDrivers() {
     try {
         const response = await authenticatedFetch(`${API_BASE}/api/drivers`);
         const data = await response.json();
-        
+
         if (data.success && data.drivers) {
             displayDrivers(data.drivers);
         } else {
@@ -1031,9 +1025,9 @@ async function loadDrivers() {
 // Display drivers in table
 function displayDrivers(drivers) {
     const tbody = document.getElementById('driversTableBody');
-    
+
     if (!tbody) return;
-    
+
     if (drivers.length === 0) {
         tbody.innerHTML = `
             <tr>
@@ -1046,7 +1040,7 @@ function displayDrivers(drivers) {
         `;
         return;
     }
-    
+
     tbody.innerHTML = drivers.map(driver => `
         <tr>
             <td>${escapeHtml(driver.name || 'N/A')}</td>
@@ -1072,14 +1066,14 @@ async function deleteDriver(driverId) {
     if (!confirm(`Are you sure you want to delete this driver?`)) {
         return;
     }
-    
+
     try {
         const response = await authenticatedFetch(`${API_BASE}/api/drivers/${driverId}`, {
             method: 'DELETE'
         });
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
             showNotification('Success', 'Driver deleted successfully!');
             loadDrivers();
@@ -1171,7 +1165,7 @@ function showMerchantsPage() {
             </div>
         </div>
     `;
-    
+
     // Initialize event listeners
     initializeMerchantsPage();
     loadMerchants();
@@ -1184,13 +1178,13 @@ function initializeMerchantsPage() {
     const cancelBtn = document.getElementById('cancelMerchantBtn');
     if (closeModal) closeModal.addEventListener('click', closeMerchantModal);
     if (cancelBtn) cancelBtn.addEventListener('click', closeMerchantModal);
-    
+
     // Form submission
     const merchantForm = document.getElementById('merchantForm');
     if (merchantForm) {
         merchantForm.addEventListener('submit', handleMerchantSubmit);
     }
-    
+
     // Close modal on outside click
     const modal = document.getElementById('merchantModal');
     if (modal) {
@@ -1207,7 +1201,7 @@ async function loadMerchants() {
     try {
         const response = await authenticatedFetch(`${API_BASE}/merchants`);
         const data = await response.json();
-        
+
         if (data.success) {
             displayMerchants(data.merchants || []);
         } else {
@@ -1225,7 +1219,7 @@ async function loadMerchants() {
 function displayMerchants(merchants) {
     const tbody = document.getElementById('merchantsTableBody');
     if (!tbody) return;
-    
+
     if (merchants.length === 0) {
         tbody.innerHTML = `
             <tr>
@@ -1243,7 +1237,7 @@ function displayMerchants(merchants) {
         `;
         return;
     }
-    
+
     tbody.innerHTML = merchants.map(merchant => `
         <tr data-store-id="${escapeHtml(merchant.store_id)}">
             <td><strong>${escapeHtml(merchant.store_id)}</strong></td>
@@ -1278,30 +1272,30 @@ function openMerchantModal(merchant) {
         showError('Merchant data is required');
         return;
     }
-    
+
     const modal = document.getElementById('merchantModal');
     const form = document.getElementById('merchantForm');
     const title = document.getElementById('merchantModalTitle');
-    
+
     if (!modal || !form || !title) return;
-    
+
     // Set title (only editing is allowed)
     title.textContent = 'Edit Merchant';
-    
+
     // Reset form
     form.reset();
-    
+
     // Populate form for editing
-        document.getElementById('merchantStoreId').value = merchant.store_id;
-        document.getElementById('merchantStoreId').disabled = true; // Can't change store_id
-        document.getElementById('merchantName').value = merchant.merchant_name || '';
-        document.getElementById('merchantApiUrl').value = merchant.api_url || '';
-        document.getElementById('merchantIsActive').checked = merchant.is_active !== false;
-        // Don't populate API key and master key for security
-    
+    document.getElementById('merchantStoreId').value = merchant.store_id;
+    document.getElementById('merchantStoreId').disabled = true; // Can't change store_id
+    document.getElementById('merchantName').value = merchant.merchant_name || '';
+    document.getElementById('merchantApiUrl').value = merchant.api_url || '';
+    document.getElementById('merchantIsActive').checked = merchant.is_active !== false;
+    // Don't populate API key and master key for security
+
     // Store current merchant for form submission
     form.dataset.editingStoreId = merchant.store_id;
-    
+
     // Show modal
     modal.classList.remove('hidden');
 }
@@ -1317,7 +1311,7 @@ function closeMerchantModal() {
 // Handle merchant form submission
 async function handleMerchantSubmit(e) {
     e.preventDefault();
-    
+
     const form = e.target;
     const storeId = document.getElementById('merchantStoreId').value.trim();
     const merchantName = document.getElementById('merchantName').value.trim();
@@ -1325,12 +1319,12 @@ async function handleMerchantSubmit(e) {
     const apiUrl = document.getElementById('merchantApiUrl').value.trim();
     const masterKey = document.getElementById('merchantMasterKey').value.trim();
     const isActive = document.getElementById('merchantIsActive').checked;
-    
+
     if (!storeId || !merchantName) {
         showError('Store ID and Merchant Name are required');
         return;
     }
-    
+
     const editingStoreId = form.dataset.editingStoreId;
     const merchantData = {
         store_id: storeId,
@@ -1338,11 +1332,11 @@ async function handleMerchantSubmit(e) {
         api_url: apiUrl || undefined,
         is_active: isActive
     };
-    
+
     // Only include API key and master key if provided (for security)
     if (apiKey) merchantData.api_key = apiKey;
     if (masterKey) merchantData.master_key = masterKey;
-    
+
     try {
         let response;
         if (editingStoreId) {
@@ -1354,11 +1348,11 @@ async function handleMerchantSubmit(e) {
         } else {
             // Adding new merchants is disabled
             showError('Adding new merchants is not allowed through the UI');
-                return;
+            return;
         }
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
             showNotification('Success', editingStoreId ? 'Merchant updated successfully' : 'Merchant added successfully');
             closeMerchantModal();
@@ -1377,7 +1371,7 @@ async function editMerchant(storeId) {
     try {
         const response = await authenticatedFetch(`${API_BASE}/merchants/${storeId}`);
         const data = await response.json();
-        
+
         if (data.success && data.merchant) {
             openMerchantModal(data.merchant);
         } else {
@@ -1394,14 +1388,14 @@ async function deleteMerchant(storeId, merchantName) {
     if (!confirm(`Are you sure you want to delete merchant "${merchantName}" (${storeId})?\n\nThis action cannot be undone.`)) {
         return;
     }
-    
+
     try {
         const response = await authenticatedFetch(`${API_BASE}/merchants/${storeId}`, {
             method: 'DELETE'
         });
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
             showNotification('Success', 'Merchant deleted successfully');
             loadMerchants();
@@ -1425,7 +1419,7 @@ async function showDashboardPage() {
         console.error('Main container not found');
         return;
     }
-    
+
     // Get merchant name
     let merchantName = 'Dashboard';
     try {
@@ -1433,10 +1427,10 @@ async function showDashboardPage() {
         const data = await response.json();
         if (data.success && data.merchants && data.merchants.length > 0) {
             const merchant = data.merchants.find(m => m.is_active) || data.merchants[0];
-            
+
             // Check if merchant_name is valid (not empty, not null, and not the same as store_id)
-            if (merchant.merchant_name && 
-                merchant.merchant_name.trim() !== '' && 
+            if (merchant.merchant_name &&
+                merchant.merchant_name.trim() !== '' &&
                 merchant.merchant_name !== merchant.store_id &&
                 merchant.merchant_name.toLowerCase() !== merchant.store_id.toLowerCase()) {
                 merchantName = merchant.merchant_name;
@@ -1447,9 +1441,9 @@ async function showDashboardPage() {
                     const ordersData = await ordersResponse.json();
                     if (ordersData.success && ordersData.orders && ordersData.orders.length > 0) {
                         // Find an order with merchant_name that's different from store_id
-                        const orderWithMerchant = ordersData.orders.find(o => 
-                            o.store_id === merchant.store_id && 
-                            o.merchant_name && 
+                        const orderWithMerchant = ordersData.orders.find(o =>
+                            o.store_id === merchant.store_id &&
+                            o.merchant_name &&
                             o.merchant_name.trim() !== '' &&
                             o.merchant_name !== merchant.store_id &&
                             o.merchant_name.toLowerCase() !== merchant.store_id.toLowerCase()
@@ -1471,7 +1465,7 @@ async function showDashboardPage() {
     } catch (error) {
         console.error('Error fetching merchant:', error);
     }
-    
+
     mainContainer.innerHTML = `
         <div class="orders-header">
             <h1 class="page-title">${escapeHtml(merchantName)}</h1>
@@ -1552,7 +1546,7 @@ async function showDashboardPage() {
             </table>
         </div>
     `;
-    
+
     // Load dashboard data
     loadDashboardData();
 }
@@ -1572,7 +1566,7 @@ async function loadDashboardData() {
                 document.getElementById('totalRevenue').textContent = formatCurrency(stats.revenue?.total || 0, 'USD');
             }
         }
-        
+
         // Load recent orders
         const ordersResponse = await authenticatedFetch(`${API_BASE}/orders?limit=10`);
         if (ordersResponse.ok) {
@@ -1590,7 +1584,7 @@ async function loadDashboardData() {
 function displayDashboardOrders(orders) {
     const tbody = document.getElementById('dashboardOrdersTableBody');
     if (!tbody) return;
-    
+
     if (orders.length === 0) {
         tbody.innerHTML = `
             <tr>
@@ -1603,7 +1597,7 @@ function displayDashboardOrders(orders) {
         `;
         return;
     }
-    
+
     tbody.innerHTML = orders.map(order => `
         <tr>
             <td>#${order.gloriafood_order_id || order.id}</td>
@@ -1687,14 +1681,14 @@ function showReportsPage() {
 }
 
 // Generate report - show actual report data
-window.generateReport = function(type) {
+window.generateReport = function (type) {
     showReportView(type);
 };
 
 // Show report view with actual data
 async function showReportView(reportType) {
     const mainContainer = document.querySelector('.main-container');
-    
+
     // Show loading state
     mainContainer.innerHTML = `
         <div class="orders-header">
@@ -1712,15 +1706,15 @@ async function showReportView(reportType) {
             <div class="empty-state-text">Loading report data...</div>
         </div>
     `;
-    
+
     try {
         let reportData = null;
         let reportHTML = '';
-        
+
         // Store current report data and type for export
         currentReportType = reportType;
-        
-        switch(reportType) {
+
+        switch (reportType) {
             case 'sales':
                 reportData = await fetchSalesReport();
                 currentReportData = reportData;
@@ -1749,7 +1743,7 @@ async function showReportView(reportType) {
             default:
                 reportHTML = '<div class="empty-state-text">Invalid report type</div>';
         }
-        
+
         mainContainer.innerHTML = `
             <div class="orders-header">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -1849,7 +1843,7 @@ function renderSalesReport(orders) {
     const totalSales = orders.reduce((sum, o) => sum + (parseFloat(o.total_price) || 0), 0);
     const completedOrders = orders.filter(o => o.status === 'DELIVERED' || o.status === 'COMPLETED').length;
     const pendingOrders = orders.filter(o => o.status !== 'DELIVERED' && o.status !== 'COMPLETED' && o.status !== 'CANCELLED').length;
-    
+
     return `
         <div class="dashboard-grid" style="margin-bottom: 24px;">
             <div class="dashboard-card">
@@ -1895,8 +1889,8 @@ function renderSalesReport(orders) {
                     </tr>
                 </thead>
                 <tbody>
-                    ${orders.length === 0 ? '<tr><td colspan="6" class="empty-state-cell"><div class="empty-state"><div class="empty-state-text">No sales data available</div></div></td></tr>' : 
-                      orders.slice(0, 100).map(order => `
+                    ${orders.length === 0 ? '<tr><td colspan="6" class="empty-state-cell"><div class="empty-state"><div class="empty-state-text">No sales data available</div></div></td></tr>' :
+            orders.slice(0, 100).map(order => `
                         <tr>
                             <td>#${order.gloriafood_order_id || order.id}</td>
                             <td>${order.customer_name || 'N/A'}</td>
@@ -1919,7 +1913,7 @@ function renderOrdersReport(orders) {
         const status = order.status || 'UNKNOWN';
         statusCounts[status] = (statusCounts[status] || 0) + 1;
     });
-    
+
     return `
         <div class="dashboard-grid" style="margin-bottom: 24px;">
             ${Object.entries(statusCounts).map(([status, count]) => `
@@ -1947,8 +1941,8 @@ function renderOrdersReport(orders) {
                     </tr>
                 </thead>
                 <tbody>
-                    ${orders.length === 0 ? '<tr><td colspan="7" class="empty-state-cell"><div class="empty-state"><div class="empty-state-text">No orders available</div></div></td></tr>' : 
-                      orders.slice(0, 100).map(order => `
+                    ${orders.length === 0 ? '<tr><td colspan="7" class="empty-state-cell"><div class="empty-state"><div class="empty-state-text">No orders available</div></div></td></tr>' :
+            orders.slice(0, 100).map(order => `
                         <tr>
                             <td>#${order.gloriafood_order_id || order.id}</td>
                             <td>${order.customer_name || 'N/A'}</td>
@@ -1969,14 +1963,14 @@ function renderOrdersReport(orders) {
 function renderRevenueReport(data) {
     const { orders, stats } = data;
     const totalRevenue = stats.revenue?.total || orders.reduce((sum, o) => sum + (parseFloat(o.total_price) || 0), 0);
-    
+
     // Group by date
     const revenueByDate = {};
     orders.forEach(order => {
         const date = new Date(order.created_at || order.fetched_at).toLocaleDateString();
         revenueByDate[date] = (revenueByDate[date] || 0) + (parseFloat(order.total_price) || 0);
     });
-    
+
     return `
         <div class="dashboard-grid" style="margin-bottom: 24px;">
             <div class="dashboard-card">
@@ -2012,17 +2006,17 @@ function renderRevenueReport(data) {
                     </tr>
                 </thead>
                 <tbody>
-                    ${Object.keys(revenueByDate).length === 0 ? '<tr><td colspan="3" class="empty-state-cell"><div class="empty-state"><div class="empty-state-text">No revenue data available</div></div></td></tr>' : 
-                      Object.entries(revenueByDate).sort((a, b) => new Date(b[0]) - new Date(a[0])).slice(0, 50).map(([date, revenue]) => {
-                          const dateOrders = orders.filter(o => new Date(o.created_at || o.fetched_at).toLocaleDateString() === date);
-                          return `
+                    ${Object.keys(revenueByDate).length === 0 ? '<tr><td colspan="3" class="empty-state-cell"><div class="empty-state"><div class="empty-state-text">No revenue data available</div></div></td></tr>' :
+            Object.entries(revenueByDate).sort((a, b) => new Date(b[0]) - new Date(a[0])).slice(0, 50).map(([date, revenue]) => {
+                const dateOrders = orders.filter(o => new Date(o.created_at || o.fetched_at).toLocaleDateString() === date);
+                return `
                             <tr>
                                 <td>${date}</td>
                                 <td>${formatCurrency(revenue, 'USD')}</td>
                                 <td>${dateOrders.length}</td>
                             </tr>
                         `;
-                      }).join('')}
+            }).join('')}
                 </tbody>
             </table>
         </div>
@@ -2062,8 +2056,8 @@ function renderDriversReport(drivers) {
                     </tr>
                 </thead>
                 <tbody>
-                    ${drivers.length === 0 ? '<tr><td colspan="6" class="empty-state-cell"><div class="empty-state"><div class="empty-state-text">No drivers available</div></div></td></tr>' : 
-                      drivers.map(driver => `
+                    ${drivers.length === 0 ? '<tr><td colspan="6" class="empty-state-cell"><div class="empty-state"><div class="empty-state-text">No drivers available</div></div></td></tr>' :
+            drivers.map(driver => `
                         <tr>
                             <td>${driver.name || driver.full_name || 'N/A'}</td>
                             <td>${driver.phone || 'N/A'}</td>
@@ -2097,9 +2091,9 @@ function renderCustomersReport(orders) {
         customerData[email].orders++;
         customerData[email].totalSpent += parseFloat(order.total_price) || 0;
     });
-    
+
     const customers = Object.values(customerData).sort((a, b) => b.totalSpent - a.totalSpent);
-    
+
     return `
         <div class="dashboard-grid" style="margin-bottom: 24px;">
             <div class="dashboard-card">
@@ -2138,8 +2132,8 @@ function renderCustomersReport(orders) {
                     </tr>
                 </thead>
                 <tbody>
-                    ${customers.length === 0 ? '<tr><td colspan="6" class="empty-state-cell"><div class="empty-state"><div class="empty-state-text">No customer data available</div></div></td></tr>' : 
-                      customers.slice(0, 100).map(customer => `
+                    ${customers.length === 0 ? '<tr><td colspan="6" class="empty-state-cell"><div class="empty-state"><div class="empty-state-text">No customer data available</div></div></td></tr>' :
+            customers.slice(0, 100).map(customer => `
                         <tr>
                             <td>${customer.name}</td>
                             <td>${customer.email || 'N/A'}</td>
@@ -2160,12 +2154,12 @@ function exportOrdersToExcel() {
     try {
         // Get currently displayed orders (filtered)
         const displayedOrders = getFilteredOrders();
-        
+
         if (displayedOrders.length === 0) {
             showNotification('Info', 'No orders to export', 'info');
             return;
         }
-        
+
         // Prepare CSV data
         const headers = [
             'Order No.',
@@ -2185,7 +2179,7 @@ function exportOrdersToExcel() {
             'Customer Email',
             'Order Type'
         ];
-        
+
         const rows = displayedOrders.map(order => {
             // Extract fields same way as createOrderRow
             const orderId = order.gloriafood_order_id || order.id || 'N/A';
@@ -2199,7 +2193,7 @@ function exportOrdersToExcel() {
             const customerPhone = order.customer_phone || 'N/A';
             const customerEmail = order.customer_email || 'N/A';
             const trackingUrl = order.doordash_tracking_url || 'N/A';
-            
+
             // Extract from raw_data
             let rawData = {};
             try {
@@ -2209,43 +2203,43 @@ function exportOrdersToExcel() {
             } catch (e) {
                 // Ignore parsing errors
             }
-            
+
             // Get merchant name (same logic as createOrderRow)
             // Use merchant_name from backend (already enriched by backend)
             let merchantName = order.merchant_name;
-            
+
             // Only check raw_data if backend didn't provide merchant_name
             if (!merchantName || merchantName === order.store_id || merchantName === 'Unknown Merchant') {
                 if (rawData) {
-                    merchantName = rawData.merchant_name || 
-                                  rawData.merchantName ||
-                                  rawData.restaurant_name ||
-                                  rawData.restaurantName ||
-                                  (rawData.restaurant && rawData.restaurant.name) ||
-                                  (rawData.restaurant && rawData.restaurant.restaurant_name) ||
-                                  (rawData.merchant && rawData.merchant.name) ||
-                                  null;
+                    merchantName = rawData.merchant_name ||
+                        rawData.merchantName ||
+                        rawData.restaurant_name ||
+                        rawData.restaurantName ||
+                        (rawData.restaurant && rawData.restaurant.name) ||
+                        (rawData.restaurant && rawData.restaurant.restaurant_name) ||
+                        (rawData.merchant && rawData.merchant.name) ||
+                        null;
                 }
-                
+
                 // Final fallback - only show store_id if absolutely no merchant name found
                 if (!merchantName || merchantName === order.store_id) {
                     merchantName = order.store_id ? `Merchant ${order.store_id}` : 'N/A';
                 }
             }
-            
+
             // Ensure we don't show store_id as merchant name
             if (merchantName === order.store_id) {
                 merchantName = `Merchant ${order.store_id}`;
             }
-            
+
             // Get distance (same logic as createOrderRow)
             // Priority: DoorDash/Shipday API response > stored distance > calculated
             let doordashData = null;
             let shipdayData = null;
             if (rawData.doordash_data) {
                 try {
-                    doordashData = typeof rawData.doordash_data === 'string' 
-                        ? JSON.parse(rawData.doordash_data) 
+                    doordashData = typeof rawData.doordash_data === 'string'
+                        ? JSON.parse(rawData.doordash_data)
                         : rawData.doordash_data;
                 } catch (e) {
                     // Ignore parsing errors
@@ -2253,53 +2247,53 @@ function exportOrdersToExcel() {
             }
             if (rawData.shipday_data) {
                 try {
-                    shipdayData = typeof rawData.shipday_data === 'string' 
-                        ? JSON.parse(rawData.shipday_data) 
+                    shipdayData = typeof rawData.shipday_data === 'string'
+                        ? JSON.parse(rawData.shipday_data)
                         : rawData.shipday_data;
                 } catch (e) {
                     // Ignore parsing errors
                 }
             }
-            
-            const doordashDistance = doordashData?.distance || 
-                                    doordashData?.distance_miles ||
-                                    doordashData?.distance_km ||
-                                    doordashData?.estimated_distance ||
-                                    doordashData?.actual_distance ||
-                                    doordashData?.delivery_distance ||
-                                    (doordashData?.quote && doordashData.quote.distance) ||
-                                    (doordashData?.delivery && doordashData.delivery.distance) ||
-                                    null;
-            
+
+            const doordashDistance = doordashData?.distance ||
+                doordashData?.distance_miles ||
+                doordashData?.distance_km ||
+                doordashData?.estimated_distance ||
+                doordashData?.actual_distance ||
+                doordashData?.delivery_distance ||
+                (doordashData?.quote && doordashData.quote.distance) ||
+                (doordashData?.delivery && doordashData.delivery.distance) ||
+                null;
+
             const shipdayDistance = shipdayData?.distance ||
-                                    shipdayData?.distance_miles ||
-                                    shipdayData?.distance_km ||
-                                    shipdayData?.estimated_distance ||
-                                    shipdayData?.actual_distance ||
-                                    shipdayData?.delivery_distance ||
-                                    (shipdayData?.quote && shipdayData.quote.distance) ||
-                                    null;
-            
+                shipdayData?.distance_miles ||
+                shipdayData?.distance_km ||
+                shipdayData?.estimated_distance ||
+                shipdayData?.actual_distance ||
+                shipdayData?.delivery_distance ||
+                (shipdayData?.quote && shipdayData.quote.distance) ||
+                null;
+
             const distance = shipdayDistance ||   // Priority 1: Shipday API distance (most accurate)
-                             doordashDistance ||   // Priority 2: DoorDash API distance (accurate)
-                             order.distance ||     // Priority 3: Stored distance
-                            rawData.distance || 
-                            rawData.delivery_distance ||
-                            rawData.distance_km ||
-                            rawData.distance_miles ||
-                            (rawData.delivery && rawData.delivery.distance) ||
-                            (rawData.delivery && rawData.delivery.delivery_distance) ||
-                            (rawData.delivery && rawData.delivery.distance_km) ||
-                            (rawData.location && rawData.location.distance) ||
-                            (rawData.restaurant && rawData.restaurant.distance) ||
-                            null;
+                doordashDistance ||   // Priority 2: DoorDash API distance (accurate)
+                order.distance ||     // Priority 3: Stored distance
+                rawData.distance ||
+                rawData.delivery_distance ||
+                rawData.distance_km ||
+                rawData.distance_miles ||
+                (rawData.delivery && rawData.delivery.distance) ||
+                (rawData.delivery && rawData.delivery.delivery_distance) ||
+                (rawData.delivery && rawData.delivery.distance_km) ||
+                (rawData.location && rawData.location.distance) ||
+                (rawData.restaurant && rawData.restaurant.distance) ||
+                null;
             // Get distance unit from localStorage
             const distanceUnit = localStorage.getItem('distanceUnit') || 'mile';
-            
+
             // Helper function to format distance based on selected unit
             const formatDistance = (value, fromUnit, toUnit) => {
                 let numValue = value;
-                
+
                 // Extract numeric value if string contains unit
                 if (typeof value === 'string') {
                     if (value.includes('km')) {
@@ -2315,9 +2309,9 @@ function exportOrdersToExcel() {
                         fromUnit = 'km';
                     }
                 }
-                
+
                 if (isNaN(numValue)) return String(value);
-                
+
                 // Convert to target unit
                 let convertedValue = numValue;
                 if (fromUnit === 'km' && toUnit === 'mile') {
@@ -2325,12 +2319,12 @@ function exportOrdersToExcel() {
                 } else if (fromUnit === 'mile' && toUnit === 'km') {
                     convertedValue = numValue * 1.60934;
                 }
-                
+
                 // Format with appropriate unit
                 const unitLabel = toUnit === 'km' ? 'km' : 'miles';
                 return convertedValue.toFixed(2) + ' ' + unitLabel;
             };
-            
+
             // Only display distance if DoorDash/Shipday has provided route data
             let formattedDistance = '';
             if (distance) {
@@ -2351,29 +2345,29 @@ function exportOrdersToExcel() {
                 }
             }
             // If no distance from DoorDash/Shipday, show empty string (not "N/A")
-            
+
             // Get pickup time (same logic as createOrderRow)
-            const pickupTime = order.pickup_time || 
-                              order.pickupTime || 
-                              rawData.pickup_time || 
-                              rawData.pickupTime || 
-                              rawData.requested_pickup_time ||
-                              rawData.requestedPickupTime ||
-                              rawData.scheduled_pickup_time ||
-                              rawData.scheduledPickupTime ||
-                              rawData.pickup_at ||
-                              rawData.pickupAt ||
-                              rawData.pickup_datetime ||
-                              rawData.pickupDateTime ||
-                              rawData.requested_pickup_datetime ||
-                              (rawData.delivery && rawData.delivery.pickup_time) ||
-                              (rawData.delivery && rawData.delivery.requested_pickup_time) ||
-                              (rawData.delivery && rawData.delivery.pickup_at) ||
-                              (rawData.schedule && rawData.schedule.pickup_time) ||
-                              (rawData.schedule && rawData.schedule.requested_pickup_time) ||
-                              (rawData.time && rawData.time.pickup) ||
-                              (rawData.times && rawData.times.pickup) ||
-                              null;
+            const pickupTime = order.pickup_time ||
+                order.pickupTime ||
+                rawData.pickup_time ||
+                rawData.pickupTime ||
+                rawData.requested_pickup_time ||
+                rawData.requestedPickupTime ||
+                rawData.scheduled_pickup_time ||
+                rawData.scheduledPickupTime ||
+                rawData.pickup_at ||
+                rawData.pickupAt ||
+                rawData.pickup_datetime ||
+                rawData.pickupDateTime ||
+                rawData.requested_pickup_datetime ||
+                (rawData.delivery && rawData.delivery.pickup_time) ||
+                (rawData.delivery && rawData.delivery.requested_pickup_time) ||
+                (rawData.delivery && rawData.delivery.pickup_at) ||
+                (rawData.schedule && rawData.schedule.pickup_time) ||
+                (rawData.schedule && rawData.schedule.requested_pickup_time) ||
+                (rawData.time && rawData.time.pickup) ||
+                (rawData.times && rawData.times.pickup) ||
+                null;
             let formattedPickupTime = 'N/A';
             if (pickupTime) {
                 try {
@@ -2382,30 +2376,30 @@ function exportOrdersToExcel() {
                     formattedPickupTime = typeof pickupTime === 'string' ? pickupTime : new Date(pickupTime).toISOString();
                 }
             }
-            
+
             // Get delivery time (same logic as createOrderRow)
-            const deliveryTime = order.delivery_time || 
-                                order.deliveryTime || 
-                                rawData.delivery_time || 
-                                rawData.deliveryTime || 
-                                rawData.requested_delivery_time ||
-                                rawData.requestedDeliveryTime ||
-                                rawData.scheduled_delivery_time ||
-                                rawData.scheduledDeliveryTime ||
-                                rawData.delivery_at ||
-                                rawData.deliveryAt ||
-                                rawData.delivery_datetime ||
-                                rawData.deliveryDateTime ||
-                                rawData.requested_delivery_datetime ||
-                                (rawData.delivery && rawData.delivery.delivery_time) ||
-                                (rawData.delivery && rawData.delivery.requested_delivery_time) ||
-                                (rawData.delivery && rawData.delivery.scheduled_delivery_time) ||
-                                (rawData.delivery && rawData.delivery.delivery_at) ||
-                                (rawData.schedule && rawData.schedule.delivery_time) ||
-                                (rawData.schedule && rawData.schedule.requested_delivery_time) ||
-                                (rawData.time && rawData.time.delivery) ||
-                                (rawData.times && rawData.times.delivery) ||
-                                null;
+            const deliveryTime = order.delivery_time ||
+                order.deliveryTime ||
+                rawData.delivery_time ||
+                rawData.deliveryTime ||
+                rawData.requested_delivery_time ||
+                rawData.requestedDeliveryTime ||
+                rawData.scheduled_delivery_time ||
+                rawData.scheduledDeliveryTime ||
+                rawData.delivery_at ||
+                rawData.deliveryAt ||
+                rawData.delivery_datetime ||
+                rawData.deliveryDateTime ||
+                rawData.requested_delivery_datetime ||
+                (rawData.delivery && rawData.delivery.delivery_time) ||
+                (rawData.delivery && rawData.delivery.requested_delivery_time) ||
+                (rawData.delivery && rawData.delivery.scheduled_delivery_time) ||
+                (rawData.delivery && rawData.delivery.delivery_at) ||
+                (rawData.schedule && rawData.schedule.delivery_time) ||
+                (rawData.schedule && rawData.schedule.requested_delivery_time) ||
+                (rawData.time && rawData.time.delivery) ||
+                (rawData.times && rawData.times.delivery) ||
+                null;
             let formattedDeliveryTime = 'N/A';
             if (deliveryTime) {
                 try {
@@ -2414,43 +2408,43 @@ function exportOrdersToExcel() {
                     formattedDeliveryTime = typeof deliveryTime === 'string' ? deliveryTime : new Date(deliveryTime).toISOString();
                 }
             }
-            
+
             // Get ready for pickup
-            const readyForPickup = order.ready_for_pickup || 
-                                   order.readyForPickup || 
-                                   rawData.ready_for_pickup || 
-                                   rawData.readyForPickup ||
-                                   rawData.ready_for_pick_up ||
-                                   rawData.readyForPickUp ||
-                                   rawData.ready_time ||
-                                   rawData.readyTime ||
-                                   rawData.ready_at ||
-                                   rawData.readyAt ||
-                                   rawData.prepared_at ||
-                                   rawData.preparedAt ||
-                                   (rawData.status && rawData.status.ready_time) ||
-                                   (rawData.delivery && rawData.delivery.ready_for_pickup) ||
-                                   null;
+            const readyForPickup = order.ready_for_pickup ||
+                order.readyForPickup ||
+                rawData.ready_for_pickup ||
+                rawData.readyForPickup ||
+                rawData.ready_for_pick_up ||
+                rawData.readyForPickUp ||
+                rawData.ready_time ||
+                rawData.readyTime ||
+                rawData.ready_at ||
+                rawData.readyAt ||
+                rawData.prepared_at ||
+                rawData.preparedAt ||
+                (rawData.status && rawData.status.ready_time) ||
+                (rawData.delivery && rawData.delivery.ready_for_pickup) ||
+                null;
             const formattedReadyForPickup = readyForPickup ? (typeof readyForPickup === 'string' ? readyForPickup : new Date(readyForPickup).toISOString()) : 'N/A';
-            
+
             // Get driver
-            const driver = order.driver_name || 
-                          order.driverName || 
-                          order.driver || 
-                          rawData.driver_name || 
-                          rawData.driverName || 
-                          rawData.driver ||
-                          rawData.assigned_driver ||
-                          rawData.assignedDriver ||
-                          rawData.driver_id ||
-                          rawData.driverId ||
-                          (rawData.delivery && rawData.delivery.driver_name) ||
-                          (rawData.delivery && rawData.delivery.driver) ||
-                          (rawData.delivery && rawData.delivery.assigned_driver) ||
-                          (rawData.driver && rawData.driver.name) ||
-                          (rawData.driver && rawData.driver.full_name) ||
-                          'N/A';
-            
+            const driver = order.driver_name ||
+                order.driverName ||
+                order.driver ||
+                rawData.driver_name ||
+                rawData.driverName ||
+                rawData.driver ||
+                rawData.assigned_driver ||
+                rawData.assignedDriver ||
+                rawData.driver_id ||
+                rawData.driverId ||
+                (rawData.delivery && rawData.delivery.driver_name) ||
+                (rawData.delivery && rawData.delivery.driver) ||
+                (rawData.delivery && rawData.delivery.assigned_driver) ||
+                (rawData.driver && rawData.driver.name) ||
+                (rawData.driver && rawData.driver.full_name) ||
+                'N/A';
+
             // Format order placed date
             let formattedOrderPlaced = 'N/A';
             if (orderPlaced && orderPlaced !== 'N/A') {
@@ -2460,7 +2454,7 @@ function exportOrdersToExcel() {
                     formattedOrderPlaced = orderPlaced;
                 }
             }
-            
+
             // Escape CSV values (handle commas, quotes, newlines)
             const escapeCSV = (value) => {
                 if (value === null || value === undefined) return '';
@@ -2470,7 +2464,7 @@ function exportOrdersToExcel() {
                 }
                 return str;
             };
-            
+
             return [
                 escapeCSV(orderId),
                 escapeCSV(customerName),
@@ -2490,33 +2484,33 @@ function exportOrdersToExcel() {
                 escapeCSV(orderType)
             ];
         });
-        
+
         // Create CSV content
         const csvContent = [
             headers.join(','),
             ...rows.map(row => row.join(','))
         ].join('\n');
-        
+
         // Add BOM for Excel UTF-8 support
         const BOM = '\uFEFF';
         const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
-        
+
         // Create download link
         const link = document.createElement('a');
         const url = URL.createObjectURL(blob);
         link.href = url;
-        
+
         // Generate filename with current date
         const now = new Date();
         const dateStr = now.toISOString().split('T')[0];
         const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
         const statusFilter = currentStatusFilter || 'all';
         link.download = `orders_${statusFilter}_${dateStr}_${timeStr}.csv`;
-        
+
         // Ensure download works
         link.style.display = 'none';
         document.body.appendChild(link);
-        
+
         // Trigger download
         setTimeout(() => {
             link.click();
@@ -2526,7 +2520,7 @@ function exportOrdersToExcel() {
                 URL.revokeObjectURL(url);
             }, 100);
         }, 10);
-        
+
         showNotification('Success', `Exported ${displayedOrders.length} orders to Excel`, 'success');
     } catch (error) {
         console.error('Error exporting orders:', error);
@@ -2539,9 +2533,9 @@ function getFilteredOrders() {
     if (!allOrders || allOrders.length === 0) {
         return [];
     }
-    
+
     let filtered = [...allOrders];
-    
+
     // Apply status filter
     if (currentStatusFilter && currentStatusFilter !== 'current') {
         filtered = filtered.filter(order => {
@@ -2554,7 +2548,7 @@ function getFilteredOrders() {
             return category === 'current';
         });
     }
-    
+
     // Apply search filter
     if (searchQuery) {
         const query = searchQuery.toLowerCase();
@@ -2564,31 +2558,31 @@ function getFilteredOrders() {
             const merchantName = (order.merchant_name || order.store_id || '').toLowerCase();
             const address = (order.delivery_address || order.customer_address || '').toLowerCase();
             const status = (order.status || '').toLowerCase();
-            
+
             return orderId.includes(query) ||
-                   customerName.includes(query) ||
-                   merchantName.includes(query) ||
-                   address.includes(query) ||
-                   status.includes(query);
+                customerName.includes(query) ||
+                merchantName.includes(query) ||
+                address.includes(query) ||
+                status.includes(query);
         });
     }
-    
+
     return filtered;
 }
 
 // Export report to Excel
-window.exportReport = function(type) {
+window.exportReport = function (type) {
     try {
         if (!currentReportData || currentReportType !== type) {
             showNotification('Error', 'No report data available. Please reload the report.', 'error');
             return;
         }
-        
+
         let headers = [];
         let rows = [];
         let filename = '';
-        
-        switch(type) {
+
+        switch (type) {
             case 'sales':
                 headers = ['Order No.', 'Customer', 'Merchant', 'Amount', 'Currency', 'Status', 'Date'];
                 rows = currentReportData.map(order => {
@@ -2611,7 +2605,7 @@ window.exportReport = function(type) {
                 });
                 filename = `sales_report_${new Date().toISOString().split('T')[0]}.csv`;
                 break;
-                
+
             case 'orders':
                 headers = ['Order No.', 'Customer', 'Merchant', 'Address', 'Amount', 'Currency', 'Status', 'Date'];
                 rows = currentReportData.map(order => {
@@ -2635,7 +2629,7 @@ window.exportReport = function(type) {
                 });
                 filename = `orders_report_${new Date().toISOString().split('T')[0]}.csv`;
                 break;
-                
+
             case 'revenue':
                 // Group by date - handle both {orders, stats} structure and array structure
                 const revenueOrders = currentReportData.orders || currentReportData || [];
@@ -2646,7 +2640,7 @@ window.exportReport = function(type) {
                     revenueByDate[date].revenue += parseFloat(order.total_price) || 0;
                     revenueByDate[date].orders++;
                 });
-                
+
                 headers = ['Date', 'Revenue', 'Orders', 'Average Order Value'];
                 rows = Object.entries(revenueByDate)
                     .sort((a, b) => new Date(b[0]) - new Date(a[0]))
@@ -2668,7 +2662,7 @@ window.exportReport = function(type) {
                     });
                 filename = `revenue_report_${new Date().toISOString().split('T')[0]}.csv`;
                 break;
-                
+
             case 'drivers':
                 headers = ['Name', 'Phone', 'Email', 'Vehicle', 'Status', 'Rating'];
                 rows = currentReportData.map(driver => {
@@ -2690,7 +2684,7 @@ window.exportReport = function(type) {
                 });
                 filename = `drivers_report_${new Date().toISOString().split('T')[0]}.csv`;
                 break;
-                
+
             case 'customers':
                 // Group by customer (same logic as renderCustomersReport)
                 const customerData = {};
@@ -2708,9 +2702,9 @@ window.exportReport = function(type) {
                     customerData[email].orders++;
                     customerData[email].totalSpent += parseFloat(order.total_price) || 0;
                 });
-                
+
                 const customers = Object.values(customerData).sort((a, b) => b.totalSpent - a.totalSpent);
-                
+
                 headers = ['Customer Name', 'Email', 'Phone', 'Total Orders', 'Total Spent', 'Average Order Value'];
                 rows = customers.map(customer => {
                     const escapeCSV = (val) => {
@@ -2732,37 +2726,37 @@ window.exportReport = function(type) {
                 });
                 filename = `customers_report_${new Date().toISOString().split('T')[0]}.csv`;
                 break;
-                
+
             default:
                 showNotification('Error', 'Unknown report type', 'error');
                 return;
         }
-        
+
         if (rows.length === 0) {
             showNotification('Info', 'No data to export', 'info');
             return;
         }
-        
+
         // Create CSV content
         const csvContent = [
             headers.join(','),
             ...rows.map(row => row.join(','))
         ].join('\n');
-        
+
         // Add BOM for Excel UTF-8 support
         const BOM = '\uFEFF';
         const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
-        
+
         // Create download link
         const link = document.createElement('a');
         const url = URL.createObjectURL(blob);
         link.href = url;
         link.download = filename;
-        
+
         // Ensure download works
         link.style.display = 'none';
         document.body.appendChild(link);
-        
+
         // Trigger download
         setTimeout(() => {
             link.click();
@@ -2772,7 +2766,7 @@ window.exportReport = function(type) {
                 URL.revokeObjectURL(url);
             }, 100);
         }, 10);
-        
+
         showNotification('Success', `Exported ${rows.length} records to Excel`, 'success');
     } catch (error) {
         console.error('Error exporting report:', error);
@@ -2840,33 +2834,33 @@ function handleNewOrder() {
             </div>
         </div>
     `;
-    
+
     document.body.appendChild(modal);
-    
+
     // Close modal on X button
     modal.querySelector('.modal-close').addEventListener('click', () => {
         modal.remove();
     });
-    
+
     // Close modal on overlay click
     modal.addEventListener('click', (e) => {
         if (e.target === modal) {
             modal.remove();
         }
     });
-    
+
     // Handle form submission
     modal.querySelector('#newOrderForm').addEventListener('submit', (e) => {
         e.preventDefault();
         const formData = new FormData(e.target);
         const orderData = Object.fromEntries(formData);
-        
+
         showNotification('Success', 'Order created successfully! (This is a demo - order not actually saved)');
-                modal.remove();
-        
+        modal.remove();
+
         // Refresh orders if on orders page
         if (document.querySelector('.page-title')?.textContent === 'Orders') {
-                loadOrders();
+            loadOrders();
         }
     });
 }
@@ -2921,11 +2915,11 @@ function createProfileDropdown() {
     if (existing) {
         existing.remove();
     }
-    
+
     const dropdown = document.createElement('div');
     dropdown.id = 'profileDropdown';
     dropdown.className = 'profile-dropdown';
-    
+
     dropdown.innerHTML = `
         <div class="profile-dropdown-item" id="myAccountItem">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -2950,7 +2944,7 @@ function createProfileDropdown() {
             <span>Log Out</span>
         </div>
     `;
-    
+
     // Position dropdown near profile button
     const profileBtn = document.getElementById('profileBtn');
     if (profileBtn) {
@@ -2959,21 +2953,21 @@ function createProfileDropdown() {
         dropdown.style.top = `${rect.bottom + 8}px`;
         dropdown.style.right = `${window.innerWidth - rect.right}px`;
     }
-    
+
     document.body.appendChild(dropdown);
-    
+
     // Handle My Account click
     document.getElementById('myAccountItem')?.addEventListener('click', () => {
         dropdown.classList.add('hidden');
         showMyAccountPage();
     });
-    
+
     // Handle Settings click
     document.getElementById('settingsItem')?.addEventListener('click', () => {
         dropdown.classList.add('hidden');
         showSettingsPage();
     });
-    
+
     // Handle Log Out click
     document.getElementById('logoutItem')?.addEventListener('click', async () => {
         dropdown.classList.add('hidden');
@@ -2982,7 +2976,7 @@ function createProfileDropdown() {
         if (!confirmed) {
             return;
         }
-        
+
         try {
             await authenticatedFetch(`${API_BASE}/api/auth/logout`, {
                 method: 'POST'
@@ -2990,7 +2984,7 @@ function createProfileDropdown() {
         } catch (error) {
             console.error('Logout error:', error);
         }
-        
+
         currentUser = null;
         sessionId = null;
         saveSessionId(null);
@@ -3002,11 +2996,11 @@ function createProfileDropdown() {
 async function showMyAccountPage() {
     const mainContainer = document.querySelector('.main-container');
     if (!mainContainer) return;
-    
+
     const userName = currentUser?.full_name || currentUser?.email || 'User';
     const userEmail = currentUser?.email || '';
     const userPhone = currentUser?.phone || '';
-    
+
     // Get restaurant API key from merchants
     let restaurantApiKey = 'Not configured';
     try {
@@ -3020,7 +3014,7 @@ async function showMyAccountPage() {
     } catch (error) {
         console.error('Error fetching merchants:', error);
     }
-    
+
     mainContainer.innerHTML = `
         <div class="profile-page-container">
             <div class="profile-page-header">
@@ -3118,7 +3112,7 @@ async function showMyAccountPage() {
             </div>
         </div>
     `;
-    
+
     // Store original API key for toggle
     window._originalApiKey = restaurantApiKey;
 }
@@ -3127,14 +3121,14 @@ async function showMyAccountPage() {
 function editField(fieldId, fieldLabel, fieldType) {
     const fieldElement = document.getElementById(fieldId);
     if (!fieldElement) return;
-    
+
     const currentValue = fieldElement.textContent;
     const newValue = prompt(`Enter new ${fieldLabel}:`, currentValue);
-    
+
     if (newValue !== null && newValue.trim() !== '') {
         // Update the field
         fieldElement.textContent = newValue.trim();
-        
+
         // TODO: Save to backend API
         showNotification('Success', `${fieldLabel} updated successfully`, 'success');
     }
@@ -3144,9 +3138,9 @@ function editField(fieldId, fieldLabel, fieldType) {
 async function toggleApiKey() {
     const apiKeyElement = document.getElementById('apiKey');
     const toggleBtn = document.getElementById('apiKeyToggle');
-    
+
     if (!apiKeyElement || !toggleBtn) return;
-    
+
     if (apiKeyElement.textContent === '********') {
         // Show API key
         try {
@@ -3180,7 +3174,7 @@ function editPassword() {
             showNotification('Error', 'Password must be at least 6 characters', 'error');
             return;
         }
-        
+
         // TODO: Save to backend API
         showNotification('Success', 'Password updated successfully', 'success');
     }
@@ -3195,18 +3189,18 @@ window.editPassword = editPassword;
 function showSettingsPage() {
     const mainContainer = document.querySelector('.main-container');
     if (!mainContainer) return;
-    
+
     // Remove active class from all nav links when on settings page
     document.querySelectorAll('.nav-link').forEach(link => {
         link.classList.remove('active');
     });
-    
+
     // Add class to body to indicate we're on settings page
     document.body.classList.add('on-settings-page');
-    
+
     // Default selected item
     let selectedItem = localStorage.getItem('settingsSelectedItem') || 'business-settings';
-    
+
     mainContainer.innerHTML = `
         <div class="settings-page-container">
             <div class="settings-sidebar">
@@ -3282,7 +3276,7 @@ function showSettingsPage() {
             </div>
         </div>
     `;
-    
+
     // Load content asynchronously
     loadSettingsContent(selectedItem);
 }
@@ -3291,7 +3285,7 @@ function showSettingsPage() {
 async function loadSettingsContent(itemId) {
     const contentArea = document.getElementById('settingsContentArea');
     if (!contentArea) return;
-    
+
     try {
         let content = '';
         if (itemId === 'business-settings') {
@@ -3330,17 +3324,17 @@ async function getBusinessSettingsContent() {
     let merchant = null;
     let merchantPhone = '';
     let merchantAddress = '';
-    
+
     try {
         const response = await authenticatedFetch(`${API_BASE}/merchants`);
         const data = await response.json();
         if (data.success && data.merchants && data.merchants.length > 0) {
             merchant = data.merchants.find(m => m.is_active) || data.merchants[0];
-            
+
             // Get phone and address from merchant object if available
             merchantPhone = merchant.phone || localStorage.getItem('merchantPhone') || '';
             merchantAddress = merchant.address || localStorage.getItem('merchantAddress') || '';
-            
+
             // If not in merchant object, try to get from recent orders
             if (!merchantPhone || !merchantAddress) {
                 try {
@@ -3354,32 +3348,32 @@ async function getBusinessSettingsContent() {
                                 if (order.raw_data) {
                                     rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
                                 }
-                            } catch (e) {}
-                            
+                            } catch (e) { }
+
                             // Get merchant phone
                             if (!merchantPhone) {
-                                merchantPhone = rawData.phone || 
-                                              rawData.merchant_phone || 
-                                              rawData.store_phone || 
-                                              rawData.restaurant?.phone ||
-                                              rawData.store?.phone ||
-                                              order.phone || '';
+                                merchantPhone = rawData.phone ||
+                                    rawData.merchant_phone ||
+                                    rawData.store_phone ||
+                                    rawData.restaurant?.phone ||
+                                    rawData.store?.phone ||
+                                    order.phone || '';
                             }
-                            
+
                             // Get merchant store address (NOT delivery address)
                             if (!merchantAddress) {
-                                merchantAddress = rawData.store_address || 
-                                                rawData.restaurant_address || 
-                                                rawData.restaurant?.address ||
-                                                rawData.store?.address ||
-                                                rawData.pickup_address ||
-                                                rawData.merchant_address ||
-                                                (rawData.restaurant && rawData.restaurant.address) ||
-                                                (rawData.store && rawData.store.address) ||
-                                                order.store_address || 
-                                                '';
+                                merchantAddress = rawData.store_address ||
+                                    rawData.restaurant_address ||
+                                    rawData.restaurant?.address ||
+                                    rawData.store?.address ||
+                                    rawData.pickup_address ||
+                                    rawData.merchant_address ||
+                                    (rawData.restaurant && rawData.restaurant.address) ||
+                                    (rawData.store && rawData.store.address) ||
+                                    order.store_address ||
+                                    '';
                             }
-                            
+
                             // If we found both, break
                             if (merchantPhone && merchantAddress) break;
                         }
@@ -3392,13 +3386,13 @@ async function getBusinessSettingsContent() {
     } catch (error) {
         console.error('Error fetching merchant:', error);
     }
-    
+
     // Get business name - use same logic as dashboard
     let businessName = 'Not set';
     if (merchant) {
         // Check if merchant_name is valid (not empty, not null, and not the same as store_id)
-        if (merchant.merchant_name && 
-            merchant.merchant_name.trim() !== '' && 
+        if (merchant.merchant_name &&
+            merchant.merchant_name.trim() !== '' &&
             merchant.merchant_name !== merchant.store_id &&
             merchant.merchant_name.toLowerCase() !== merchant.store_id.toLowerCase()) {
             businessName = merchant.merchant_name;
@@ -3409,9 +3403,9 @@ async function getBusinessSettingsContent() {
                 const ordersData = await ordersResponse.json();
                 if (ordersData.success && ordersData.orders && ordersData.orders.length > 0) {
                     // Find an order with merchant_name that's different from store_id
-                    const orderWithMerchant = ordersData.orders.find(o => 
-                        o.store_id === merchant.store_id && 
-                        o.merchant_name && 
+                    const orderWithMerchant = ordersData.orders.find(o =>
+                        o.store_id === merchant.store_id &&
+                        o.merchant_name &&
                         o.merchant_name.trim() !== '' &&
                         o.merchant_name !== merchant.store_id &&
                         o.merchant_name.toLowerCase() !== merchant.store_id.toLowerCase()
@@ -3431,7 +3425,7 @@ async function getBusinessSettingsContent() {
     const acceptTakeoutOrders = localStorage.getItem('acceptTakeoutOrders') === 'true';
     const maxDeliveryTime = localStorage.getItem('maxDeliveryTime') || '60';
     const orderPrepTime = localStorage.getItem('orderPrepTime') || '60';
-    
+
     return `
         <h1 class="settings-content-title">Business settings</h1>
         
@@ -3616,7 +3610,7 @@ async function getBusinessSettingsContent() {
 async function getDispatchSettingsContent() {
     const autoAssign = localStorage.getItem('dispatchAutoAssign') === 'true';
     const dispatchTimeWindow = localStorage.getItem('dispatchTimeWindow') || '1';
-    
+
     return `
         <h1 class="settings-content-title">Dispatch settings</h1>
         
@@ -3677,7 +3671,7 @@ async function getDriverSettingsContent() {
     const percentageTips = localStorage.getItem('percentageTips') === 'true';
     const percentageTipsValue = localStorage.getItem('percentageTipsValue') || '100';
     const payPerHoursOnline = localStorage.getItem('payPerHoursOnline') === 'true';
-    
+
     return `
         <h1 class="settings-content-title">Driver settings</h1>
         
@@ -3913,7 +3907,7 @@ async function getThirdPartyDeliveryContent() {
     const doordashEnabled = localStorage.getItem('doordashEnabled') === 'true';
     const autoAssignOrders = localStorage.getItem('autoAssignOrders') === 'true';
     const thirdPartyPickupInstructions = localStorage.getItem('thirdPartyPickupInstructions') === 'true';
-    
+
     return `
         <h1 class="settings-content-title">Third Party Delivery Services</h1>
         
@@ -3991,7 +3985,7 @@ async function getUsersContent() {
     } catch (error) {
         console.error('Error fetching users:', error);
     }
-    
+
     return `
         <h1 class="settings-content-title">Users</h1>
         
@@ -4065,14 +4059,14 @@ async function getLocationContent() {
     const timezoneAuto = localStorage.getItem('timezoneAuto') === 'true';
     let timezone = localStorage.getItem('timezone') || '';
     const distanceUnit = localStorage.getItem('distanceUnit') || 'mile';
-    
+
     // Try to get actual data from merchant/orders
     try {
         const response = await authenticatedFetch(`${API_BASE}/merchants`);
         const data = await response.json();
         if (data.success && data.merchants && data.merchants.length > 0) {
             const merchant = data.merchants.find(m => m.is_active) || data.merchants[0];
-            
+
             // Extract city from merchant address if available
             if (merchant.address && !city) {
                 const addressParts = merchant.address.split(',');
@@ -4080,7 +4074,7 @@ async function getLocationContent() {
                     city = addressParts[addressParts.length - 2]?.trim() || city;
                 }
             }
-            
+
             // Try to get currency from recent orders
             if (!currency || currency === 'USD') {
                 try {
@@ -4100,23 +4094,23 @@ async function getLocationContent() {
     } catch (error) {
         console.error('Error fetching merchant for location:', error);
     }
-    
+
     // Auto-detect timezone if enabled
     if (timezoneAuto || !timezone) {
         const offset = -new Date().getTimezoneOffset() / 60;
         const sign = offset >= 0 ? '+' : '';
         timezone = `UTC${sign}${offset.toString().padStart(2, '0')}:00`;
     }
-    
+
     // Get current local time based on selected timezone
     const now = new Date();
-    let localTime = now.toLocaleTimeString('en-US', { 
-        hour: '2-digit', 
-        minute: '2-digit', 
+    let localTime = now.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
         hour12: true,
         timeZone: timezoneAuto ? Intl.DateTimeFormat().resolvedOptions().timeZone : undefined
     });
-    
+
     return `
         <h1 class="settings-content-title">Location</h1>
         
@@ -4222,7 +4216,7 @@ async function getCustomerNotificationContent() {
     const allowEditInstructions = localStorage.getItem('allowEditInstructions') === 'true';
     const deliveryReceiptEmail = localStorage.getItem('deliveryReceiptEmail') === 'true';
     const deliveryFeedbackEmail = localStorage.getItem('deliveryFeedbackEmail') === 'true';
-    
+
     return `
         <h1 class="settings-content-title">Customer notification</h1>
         
@@ -4318,24 +4312,24 @@ async function getSettingsContent(itemId) {
     if (itemId === 'business-settings') {
         return await getBusinessSettingsContent();
     }
-    
+
     if (itemId === 'dispatch-settings') {
         return await getDispatchSettingsContent();
     }
-    
+
     return '<p>Settings content not found</p>';
 }
 
 // Generic modal for editing settings
 function showEditModal(config) {
     const { title, label, currentValue, placeholder, type = 'text', min, max, onSubmit } = config;
-    
+
     // Remove existing modal if any
     const existingModal = document.getElementById('editSettingsModal');
     if (existingModal) {
         existingModal.remove();
     }
-    
+
     // Create modal HTML
     const modalHTML = `
         <div id="editSettingsModal" class="modal">
@@ -4363,44 +4357,44 @@ function showEditModal(config) {
             </div>
         </div>
     `;
-    
+
     // Insert modal into body
     document.body.insertAdjacentHTML('beforeend', modalHTML);
-    
+
     const modal = document.getElementById('editSettingsModal');
     const form = document.getElementById('editSettingsForm');
     const input = document.getElementById('editSettingsInput');
     const errorDiv = document.getElementById('editSettingsError');
     const closeBtn = document.getElementById('closeEditModal');
     const cancelBtn = document.getElementById('cancelEditBtn');
-    
+
     // Focus input
     setTimeout(() => input.focus(), 100);
-    
+
     // Close modal function
     const closeModal = () => {
         modal.remove();
     };
-    
+
     // Close handlers
     closeBtn.addEventListener('click', closeModal);
     cancelBtn.addEventListener('click', closeModal);
     modal.addEventListener('click', (e) => {
         if (e.target === modal) closeModal();
     });
-    
+
     // Form submission
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        
+
         const value = input.value.trim();
-        
+
         if (!value) {
             errorDiv.textContent = `${label} is required`;
             errorDiv.style.display = 'block';
             return;
         }
-        
+
         // Validate number inputs
         if (type === 'number') {
             const numValue = parseInt(value);
@@ -4420,9 +4414,9 @@ function showEditModal(config) {
                 return;
             }
         }
-        
+
         errorDiv.style.display = 'none';
-        
+
         try {
             await onSubmit(value);
             closeModal();
@@ -4437,9 +4431,9 @@ function showEditModal(config) {
 async function editBusinessName() {
     const valueElement = document.getElementById('businessNameValue');
     if (!valueElement) return;
-    
+
     const currentValue = valueElement.textContent;
-    
+
     showEditModal({
         title: 'Edit Business Name',
         label: 'Business Name',
@@ -4447,70 +4441,70 @@ async function editBusinessName() {
         placeholder: 'Enter business name',
         type: 'text',
         onSubmit: async (newValue) => {
-        try {
-            // Get merchant data
-            let merchant = null;
             try {
-                const response = await authenticatedFetch(`${API_BASE}/merchants`);
+                // Get merchant data
+                let merchant = null;
+                try {
+                    const response = await authenticatedFetch(`${API_BASE}/merchants`);
+                    const data = await response.json();
+                    if (data.success && data.merchants && data.merchants.length > 0) {
+                        merchant = data.merchants.find(m => m.is_active) || data.merchants[0];
+                    }
+                } catch (e) {
+                    console.error('Error fetching merchant:', e);
+                }
+
+                if (!merchant) {
+                    throw new Error('No active merchant found');
+                }
+
+                // Update merchant name in backend
+                const updateData = {
+                    merchant_name: newValue.trim()
+                };
+
+                const response = await authenticatedFetch(`${API_BASE}/merchants/${merchant.store_id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updateData)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
                 const data = await response.json();
-                if (data.success && data.merchants && data.merchants.length > 0) {
-                    merchant = data.merchants.find(m => m.is_active) || data.merchants[0];
+
+                if (data.success) {
+                    valueElement.textContent = newValue.trim();
+                    showNotification('Success', 'Business name updated successfully and saved to database', 'success');
+
+                    // Refresh dashboard header if we're on dashboard
+                    const dashboardTitle = document.querySelector('.page-title');
+                    if (dashboardTitle && dashboardTitle.textContent !== 'Dashboard') {
+                        // Reload dashboard to show updated merchant name
+                        setTimeout(() => {
+                            const currentPage = document.querySelector('.page.active');
+                            if (currentPage && currentPage.id === 'dashboardPage') {
+                                showDashboardPage();
+                            }
+                        }, 500);
+                    }
+
+                    // Reload business settings to show updated name
+                    const settingsContent = document.querySelector('.settings-content');
+                    if (settingsContent) {
+                        setTimeout(() => {
+                            loadSettingsContent('business-settings');
+                        }, 500);
+                    }
+                } else {
+                    throw new Error(data.error || 'Failed to update business name');
                 }
-            } catch (e) {
-                console.error('Error fetching merchant:', e);
+            } catch (error) {
+                console.error('Error updating business name:', error);
+                throw new Error('Error updating business name: ' + error.message);
             }
-            
-            if (!merchant) {
-                throw new Error('No active merchant found');
-            }
-            
-            // Update merchant name in backend
-            const updateData = {
-                merchant_name: newValue.trim()
-            };
-            
-            const response = await authenticatedFetch(`${API_BASE}/merchants/${merchant.store_id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(updateData)
-            });
-            
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            
-            const data = await response.json();
-            
-            if (data.success) {
-                valueElement.textContent = newValue.trim();
-                showNotification('Success', 'Business name updated successfully and saved to database', 'success');
-                
-                // Refresh dashboard header if we're on dashboard
-                const dashboardTitle = document.querySelector('.page-title');
-                if (dashboardTitle && dashboardTitle.textContent !== 'Dashboard') {
-                    // Reload dashboard to show updated merchant name
-                    setTimeout(() => {
-                        const currentPage = document.querySelector('.page.active');
-                        if (currentPage && currentPage.id === 'dashboardPage') {
-                            showDashboardPage();
-                        }
-                    }, 500);
-                }
-                
-                // Reload business settings to show updated name
-                const settingsContent = document.querySelector('.settings-content');
-                if (settingsContent) {
-                    setTimeout(() => {
-                        loadSettingsContent('business-settings');
-                    }, 500);
-                }
-            } else {
-                throw new Error(data.error || 'Failed to update business name');
-            }
-        } catch (error) {
-            console.error('Error updating business name:', error);
-            throw new Error('Error updating business name: ' + error.message);
-        }
         }
     });
 }
@@ -4555,9 +4549,9 @@ function switchBusinessTab(tab) {
 async function editMaxDeliveryTimeDC() {
     const valueElement = document.getElementById('maxDeliveryTimeValueDC');
     if (!valueElement) return;
-    
+
     const currentValue = valueElement.textContent.replace(' Minutes', '');
-    
+
     showEditModal({
         title: 'Edit Maximum Delivery Time',
         label: 'Maximum Delivery Time (minutes)',
@@ -4578,9 +4572,9 @@ async function editMaxDeliveryTimeDC() {
 async function editOrderPrepTimeDC() {
     const valueElement = document.getElementById('orderPrepTimeValueDC');
     if (!valueElement) return;
-    
+
     const currentValue = valueElement.textContent.replace(' Minutes', '');
-    
+
     showEditModal({
         title: 'Edit Order Preparation Time',
         label: 'Order Preparation Time (minutes)',
@@ -4617,31 +4611,31 @@ async function saveBusinessSettings() {
         } catch (e) {
             console.error('Error fetching merchant:', e);
         }
-        
+
         if (!merchant) {
             showNotification('Error', 'No active merchant found. Please set up a merchant first.', 'error');
             return;
         }
-        
+
         // Get values from form inputs
         const merchantPhone = document.getElementById('merchantPhone')?.value || '';
         const merchantAddress = document.getElementById('merchantAddress')?.value || '';
         // Get business name from UI element (in case it was edited)
         const businessNameElement = document.getElementById('businessNameValue');
         const businessName = businessNameElement ? businessNameElement.textContent.trim() : merchant.merchant_name;
-        const maxDeliveryTime = document.getElementById('maxDeliveryTimeValueDC')?.textContent.replace(' Minutes', '') || 
-                               document.getElementById('maxDeliveryTimeValue')?.textContent.replace(' Minutes', '') || 
-                               localStorage.getItem('maxDeliveryTime') || '60';
-        const orderPrepTime = document.getElementById('orderPrepTimeValueDC')?.textContent.replace(' Minutes', '') || 
-                             document.getElementById('orderPrepTimeValue')?.textContent.replace(' Minutes', '') || 
-                             localStorage.getItem('orderPrepTime') || '60';
-        
+        const maxDeliveryTime = document.getElementById('maxDeliveryTimeValueDC')?.textContent.replace(' Minutes', '') ||
+            document.getElementById('maxDeliveryTimeValue')?.textContent.replace(' Minutes', '') ||
+            localStorage.getItem('maxDeliveryTime') || '60';
+        const orderPrepTime = document.getElementById('orderPrepTimeValueDC')?.textContent.replace(' Minutes', '') ||
+            document.getElementById('orderPrepTimeValue')?.textContent.replace(' Minutes', '') ||
+            localStorage.getItem('orderPrepTime') || '60';
+
         // Save to localStorage
         localStorage.setItem('maxDeliveryTime', maxDeliveryTime);
         localStorage.setItem('orderPrepTime', orderPrepTime);
         localStorage.setItem('merchantPhone', merchantPhone);
         localStorage.setItem('merchantAddress', merchantAddress);
-        
+
         // Save merchant name, phone and address to backend
         // Use business name from UI if available, otherwise use merchant.merchant_name
         const updateData = {
@@ -4649,19 +4643,19 @@ async function saveBusinessSettings() {
             phone: merchantPhone,
             address: merchantAddress
         };
-        
+
         const response = await authenticatedFetch(`${API_BASE}/merchants/${merchant.store_id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(updateData)
         });
-        
+
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
             showNotification('Success', 'Settings saved successfully', 'success');
             // Update the business name in UI if it was changed
@@ -4694,9 +4688,9 @@ async function toggleTakeoutOrders(enabled) {
 async function editMaxDeliveryTime() {
     const valueElement = document.getElementById('maxDeliveryTimeValue');
     if (!valueElement) return;
-    
+
     const currentValue = valueElement.textContent.replace(' Minutes', '');
-    
+
     showEditModal({
         title: 'Edit Maximum Delivery Time',
         label: 'Maximum Delivery Time (minutes)',
@@ -4717,9 +4711,9 @@ async function editMaxDeliveryTime() {
 async function editOrderPrepTime() {
     const valueElement = document.getElementById('orderPrepTimeValue');
     if (!valueElement) return;
-    
+
     const currentValue = valueElement.textContent.replace(' Minutes', '');
-    
+
     showEditModal({
         title: 'Edit Order Preparation Time',
         label: 'Order Preparation Time (minutes)',
@@ -4818,7 +4812,7 @@ function calculatePaymentSummary() {
     const percentageDeliveryFeeValue = localStorage.getItem('percentageDeliveryFeeValue') || '0';
     const percentageTips = localStorage.getItem('percentageTips') === 'true';
     const percentageTipsValue = localStorage.getItem('percentageTipsValue') || '0';
-    
+
     let parts = [];
     if (fixPay) {
         parts.push(`$${fixPayAmount}/Order`);
@@ -4829,7 +4823,7 @@ function calculatePaymentSummary() {
     if (percentageTips) {
         parts.push(`${percentageTipsValue}% of tips`);
     }
-    
+
     return parts.length > 0 ? `<p style="margin-top: 16px; padding: 12px; background: #f8fafc; border-radius: 8px; color: #0f172a; font-weight: 500;">Total pay = ${parts.join(' + ')}</p>` : '';
 }
 
@@ -4916,7 +4910,7 @@ async function toggleTimezoneAuto(enabled) {
 
 async function selectDistanceUnit(unit) {
     await saveSetting('distanceUnit', unit);
-    
+
     // Update button active states
     document.querySelectorAll('.distance-unit-btn').forEach(btn => {
         btn.classList.remove('active');
@@ -4924,9 +4918,9 @@ async function selectDistanceUnit(unit) {
             btn.classList.add('active');
         }
     });
-    
+
     showNotification('Success', `Distance unit set to ${unit}`, 'success');
-    
+
     // Refresh orders display to update distance units
     if (typeof filterAndDisplayOrders === 'function') {
         filterAndDisplayOrders();
@@ -4996,7 +4990,7 @@ function saveDispatchSettings() {
             localStorage.setItem('dispatchTimeWindow', dispatchTimeWindow);
         }
     }
-    
+
     showNotification('Success', 'Dispatch settings saved successfully', 'success');
 }
 
@@ -5066,40 +5060,40 @@ window.cancelLocationSettings = cancelLocationSettings;
 function handleProfilePictureUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
-    
+
     // Validate file type
     if (!file.type.startsWith('image/')) {
         addNotification('Error', 'Please select an image file', 'error');
         return;
     }
-    
+
     // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
         addNotification('Error', 'Image size must be less than 5MB', 'error');
         return;
     }
-    
+
     // Read file as data URL
     const reader = new FileReader();
-    reader.onload = function(event) {
+    reader.onload = function (event) {
         const dataUrl = event.target.result;
-        
+
         // Save to localStorage
         localStorage.setItem('profilePicture', dataUrl);
-        
+
         // Update preview
         const preview = document.getElementById('profilePicturePreview');
         if (preview) {
             preview.src = dataUrl;
         }
-        
+
         addNotification('Success', 'Profile picture updated successfully', 'success');
     };
-    
-    reader.onerror = function() {
+
+    reader.onerror = function () {
         addNotification('Error', 'Error reading image file', 'error');
     };
-    
+
     reader.readAsDataURL(file);
 }
 
@@ -5110,11 +5104,11 @@ function createNotificationsPanel() {
     if (existing) {
         existing.remove();
     }
-    
+
     const panel = document.createElement('div');
     panel.id = 'notificationsPanel';
     panel.className = 'notifications-panel';
-    
+
     panel.innerHTML = `
         <div class="notifications-header">
             <h3>Notifications</h3>
@@ -5127,18 +5121,18 @@ function createNotificationsPanel() {
             ${notifications.length === 0 ? '<div class="no-notifications">No notifications</div>' : ''}
         </div>
     `;
-    
+
     document.body.appendChild(panel);
-    
+
     // Render notifications
     renderNotifications();
-    
+
     // Setup event listeners
     document.getElementById('clearAllNotifications')?.addEventListener('click', clearAllNotifications);
     document.getElementById('closeNotificationsPanel')?.addEventListener('click', () => {
         panel.classList.add('hidden');
     });
-    
+
     // Close when clicking outside
     document.addEventListener('click', function closeOnOutsideClick(e) {
         if (!panel.contains(e.target) && !e.target.closest('#notificationsBtn')) {
@@ -5158,20 +5152,20 @@ function addNotification(title, message, type = 'info', orderId = null) {
         orderId,
         timestamp: new Date()
     };
-    
+
     notifications.unshift(notification); // Add to beginning
-    
+
     // Keep only last 50 notifications
     if (notifications.length > 50) {
         notifications = notifications.slice(0, 50);
     }
-    
+
     // Update panel if it exists
     const panel = document.getElementById('notificationsPanel');
     if (panel && !panel.classList.contains('hidden')) {
         renderNotifications();
     }
-    
+
     // Update notification badge
     updateNotificationBadge();
 }
@@ -5180,12 +5174,12 @@ function addNotification(title, message, type = 'info', orderId = null) {
 function renderNotifications() {
     const list = document.getElementById('notificationsList');
     if (!list) return;
-    
+
     if (notifications.length === 0) {
         list.innerHTML = '<div class="no-notifications">No notifications</div>';
         return;
     }
-    
+
     list.innerHTML = notifications.map(notif => `
         <div class="notification-item ${notif.type}" data-id="${notif.id}">
             <div class="notification-content">
@@ -5199,7 +5193,7 @@ function renderNotifications() {
 }
 
 // Remove single notification
-window.removeNotification = function(id) {
+window.removeNotification = function (id) {
     notifications = notifications.filter(n => n.id !== id);
     renderNotifications();
     updateNotificationBadge();
@@ -5218,7 +5212,7 @@ function formatNotificationTime(timestamp) {
     const now = new Date();
     const time = new Date(timestamp);
     const diff = now - time;
-    
+
     if (diff < 60000) return 'Just now';
     if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
     if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
@@ -5229,10 +5223,10 @@ function formatNotificationTime(timestamp) {
 function updateNotificationBadge() {
     const btn = document.getElementById('notificationsBtn');
     if (!btn) return;
-    
+
     const count = notifications.length;
     let badge = btn.querySelector('.notification-badge');
-    
+
     if (count > 0) {
         if (!badge) {
             badge = document.createElement('span');
@@ -5263,11 +5257,11 @@ function handleHelp() {
 async function loadOrders() {
     try {
         const url = `${API_BASE}/orders?limit=100`;
-        
+
         console.log('Fetching orders from:', url);
-        
+
         const response = await authenticatedFetch(url);
-        
+
         if (!response.ok) {
             // Handle 401 (Unauthorized) - session might have expired
             if (response.status === 401) {
@@ -5278,14 +5272,14 @@ async function loadOrders() {
             }
             throw new Error(`HTTP error! status: ${response.status}`);
         }
-        
+
         const data = await response.json();
         console.log('API response:', data);
-        
+
         if (data.success !== false && (data.orders || Array.isArray(data))) {
             allOrders = data.orders || data || [];
             console.log('Loaded orders:', allOrders.length);
-            
+
             // Pre-process orders: cache parsed raw_data to avoid repeated parsing
             allOrders.forEach(order => {
                 if (order.raw_data && typeof order.raw_data === 'string' && !order._parsedRawData) {
@@ -5298,10 +5292,10 @@ async function loadOrders() {
                     order._parsedRawData = order.raw_data;
                 }
             });
-            
+
             // Check for new orders
             checkForNewOrders(allOrders);
-            
+
             // Filter and display
             filterAndDisplayOrders();
         } else {
@@ -5325,7 +5319,7 @@ function hasScheduledDeliveryTime(order) {
     if (order._isScheduled !== undefined) {
         return order._isScheduled;
     }
-    
+
     // First check if scheduled_delivery_time is already extracted and stored in the order object
     // This is the most reliable source since it's extracted by the backend
     if (order.scheduled_delivery_time) {
@@ -5336,7 +5330,7 @@ function hasScheduledDeliveryTime(order) {
             // This handles cases where the time might be just set
             const timeDiff = scheduledDate.getTime() - now.getTime();
             const minutesDiff = timeDiff / (1000 * 60);
-            
+
             if (scheduledDate > now || (minutesDiff > -1 && minutesDiff < 60)) {
                 order._isScheduled = true;
                 return true;
@@ -5346,7 +5340,7 @@ function hasScheduledDeliveryTime(order) {
             // Continue to check other fields, but if "Later" is selected, return true
         }
     }
-    
+
     // Use cached parsed raw_data if available
     let rawData = order._parsedRawData;
     if (!rawData) {
@@ -5361,71 +5355,71 @@ function hasScheduledDeliveryTime(order) {
             rawData = {};
         }
     }
-    
+
     // Reduced debug logging for performance
     const orderId = order.gloriafood_order_id || order.id;
-    
+
     // Check if "Later" option is selected (GloriaFood sends delivery_type or delivery_option)
     // Also check for "asap" vs "later" indicators
     const deliveryType = (rawData.delivery_type || rawData.deliveryOption || rawData.delivery_option || rawData.deliveryType || rawData.delivery_time_type || rawData.time_type || rawData.delivery_method || '').toLowerCase();
     const deliveryOption = (rawData.delivery_option || rawData.deliveryOption || rawData.available_time || rawData.availableTime || rawData.time_option || rawData.timeOption || rawData.selected_time_option || '').toLowerCase();
     const asapOption = (rawData.asap || rawData.as_soon_as_possible || rawData.asSoonAsPossible || rawData.is_asap || rawData.isAsap || '').toLowerCase();
-    
+
     // Check for "Later" or "Scheduled" in various fields
-    const isLaterSelected = deliveryType === 'later' || 
-                           deliveryType === 'scheduled' || 
-                           deliveryOption === 'later' || 
-                           deliveryOption === 'scheduled' ||
-                           deliveryOption === 'schedule' ||
-                           rawData.is_scheduled === true ||
-                           rawData.isScheduled === true ||
-                           rawData.scheduled === true ||
-                           rawData.is_later === true ||
-                           rawData.isLater === true;
-    
+    const isLaterSelected = deliveryType === 'later' ||
+        deliveryType === 'scheduled' ||
+        deliveryOption === 'later' ||
+        deliveryOption === 'scheduled' ||
+        deliveryOption === 'schedule' ||
+        rawData.is_scheduled === true ||
+        rawData.isScheduled === true ||
+        rawData.scheduled === true ||
+        rawData.is_later === true ||
+        rawData.isLater === true;
+
     // If "Later" is explicitly selected, it's scheduled (even if no time found yet)
     // This is important for Gloria Food "in later" orders
     if (isLaterSelected) {
         order._isScheduled = true;
         return true;
     }
-    
+
     // If NOT "asap" and has delivery date/time, it's likely scheduled
-    const isAsap = asapOption === 'true' || 
-                   asapOption === '1' || 
-                   asapOption === 'yes' ||
-                   rawData.asap === true ||
-                   rawData.is_asap === true ||
-                   rawData.isAsap === true;
-    
+    const isAsap = asapOption === 'true' ||
+        asapOption === '1' ||
+        asapOption === 'yes' ||
+        rawData.asap === true ||
+        rawData.is_asap === true ||
+        rawData.isAsap === true;
+
     // If NOT "asap" and has delivery date/time, it's likely scheduled
     if (!isAsap) {
         // Check if we have any delivery date/time fields
-        const hasDeliveryDate = rawData.delivery_date || 
-                               rawData.deliveryDate || 
-                               rawData.scheduled_date ||
-                               rawData.selected_delivery_date ||
-                               rawData.chosen_delivery_date ||
-                               rawData.preferred_delivery_date;
-        
-        const hasDeliveryTime = rawData.delivery_time || 
-                               rawData.requested_delivery_time || 
-                               rawData.scheduled_delivery_time ||
-                               rawData.delivery_time_only ||
-                               rawData.selected_delivery_time ||
-                               rawData.chosen_delivery_time ||
-                               rawData.preferred_delivery_time ||
-                               rawData.time_slot ||
-                               rawData.delivery_time_slot;
-        
+        const hasDeliveryDate = rawData.delivery_date ||
+            rawData.deliveryDate ||
+            rawData.scheduled_date ||
+            rawData.selected_delivery_date ||
+            rawData.chosen_delivery_date ||
+            rawData.preferred_delivery_date;
+
+        const hasDeliveryTime = rawData.delivery_time ||
+            rawData.requested_delivery_time ||
+            rawData.scheduled_delivery_time ||
+            rawData.delivery_time_only ||
+            rawData.selected_delivery_time ||
+            rawData.chosen_delivery_time ||
+            rawData.preferred_delivery_time ||
+            rawData.time_slot ||
+            rawData.delivery_time_slot;
+
         // If we have date or time, and it's not ASAP, check if it's in the future
         if (hasDeliveryDate || hasDeliveryTime) {
-            const checkTime = rawData.delivery_time || 
-                            rawData.requested_delivery_time || 
-                            rawData.scheduled_delivery_time ||
-                            rawData.preferred_delivery_time ||
-                            rawData.selected_delivery_time;
-            
+            const checkTime = rawData.delivery_time ||
+                rawData.requested_delivery_time ||
+                rawData.scheduled_delivery_time ||
+                rawData.preferred_delivery_time ||
+                rawData.selected_delivery_time;
+
             if (checkTime) {
                 try {
                     const checkDate = new Date(checkTime);
@@ -5437,7 +5431,7 @@ function hasScheduledDeliveryTime(order) {
                     // Ignore parsing errors, will check date/time separately below
                 }
             }
-            
+
             // If we have date but no time yet, still consider it scheduled (time might be in separate field)
             if (hasDeliveryDate && !isAsap) {
                 try {
@@ -5454,102 +5448,102 @@ function hasScheduledDeliveryTime(order) {
             }
         }
     }
-    
+
     // Check for scheduled delivery time in various possible fields
     // Also check nested delivery object and schedule object
     const deliveryObj = rawData.delivery || order.delivery || {};
     const scheduleObj = rawData.schedule || order.schedule || {};
     const timeObj = rawData.time || order.time || rawData.times || order.times || {};
-    
+
     // Check for date and time separately (GloriaFood might send delivery_date and delivery_time separately)
-    let scheduledTime = order.scheduled_delivery_time || 
-                         order.scheduledDeliveryTime ||
-                         order.delivery_time ||
-                         order.deliveryTime ||
-                         order.delivery_datetime ||
-                         order.deliveryDateTime ||
-                         order.estimated_delivery_time ||
-                         order.estimatedDeliveryTime ||
-                         order.preferred_delivery_time ||
-                         order.preferredDeliveryTime ||
-                         order.scheduled_at ||
-                         order.scheduledAt ||
-                         rawData.scheduled_delivery_time ||
-                         rawData.scheduledDeliveryTime ||
-                         rawData.delivery_time ||
-                         rawData.deliveryTime ||
-                         rawData.delivery_datetime ||
-                         rawData.deliveryDateTime ||
-                         rawData.estimated_delivery_time ||
-                         rawData.estimatedDeliveryTime ||
-                         rawData.requested_delivery_time ||
-                         rawData.requestedDeliveryTime ||
-                         rawData.preferred_delivery_time ||
-                         rawData.preferredDeliveryTime ||
-                         rawData.scheduled_at ||
-                         rawData.scheduledAt ||
-                         rawData.schedule_time ||
-                         rawData.scheduleTime ||
-                         deliveryObj.delivery_time ||
-                         deliveryObj.deliveryTime ||
-                         deliveryObj.scheduled_delivery_time ||
-                         deliveryObj.scheduledDeliveryTime ||
-                         deliveryObj.estimated_delivery_time ||
-                         deliveryObj.estimatedDeliveryTime ||
-                         deliveryObj.requested_delivery_time ||
-                         deliveryObj.requestedDeliveryTime ||
-                         scheduleObj.delivery_time ||
-                         scheduleObj.deliveryTime ||
-                         scheduleObj.scheduled_delivery_time ||
-                         scheduleObj.scheduledDeliveryTime ||
-                         scheduleObj.requested_delivery_time ||
-                         scheduleObj.requestedDeliveryTime ||
-                         timeObj.delivery ||
-                         timeObj.delivery_time ||
-                         timeObj.scheduled_delivery ||
-                         null;
-    
+    let scheduledTime = order.scheduled_delivery_time ||
+        order.scheduledDeliveryTime ||
+        order.delivery_time ||
+        order.deliveryTime ||
+        order.delivery_datetime ||
+        order.deliveryDateTime ||
+        order.estimated_delivery_time ||
+        order.estimatedDeliveryTime ||
+        order.preferred_delivery_time ||
+        order.preferredDeliveryTime ||
+        order.scheduled_at ||
+        order.scheduledAt ||
+        rawData.scheduled_delivery_time ||
+        rawData.scheduledDeliveryTime ||
+        rawData.delivery_time ||
+        rawData.deliveryTime ||
+        rawData.delivery_datetime ||
+        rawData.deliveryDateTime ||
+        rawData.estimated_delivery_time ||
+        rawData.estimatedDeliveryTime ||
+        rawData.requested_delivery_time ||
+        rawData.requestedDeliveryTime ||
+        rawData.preferred_delivery_time ||
+        rawData.preferredDeliveryTime ||
+        rawData.scheduled_at ||
+        rawData.scheduledAt ||
+        rawData.schedule_time ||
+        rawData.scheduleTime ||
+        deliveryObj.delivery_time ||
+        deliveryObj.deliveryTime ||
+        deliveryObj.scheduled_delivery_time ||
+        deliveryObj.scheduledDeliveryTime ||
+        deliveryObj.estimated_delivery_time ||
+        deliveryObj.estimatedDeliveryTime ||
+        deliveryObj.requested_delivery_time ||
+        deliveryObj.requestedDeliveryTime ||
+        scheduleObj.delivery_time ||
+        scheduleObj.deliveryTime ||
+        scheduleObj.scheduled_delivery_time ||
+        scheduleObj.scheduledDeliveryTime ||
+        scheduleObj.requested_delivery_time ||
+        scheduleObj.requestedDeliveryTime ||
+        timeObj.delivery ||
+        timeObj.delivery_time ||
+        timeObj.scheduled_delivery ||
+        null;
+
     // If date and time are separate, combine them (GloriaFood "Later" option)
     if (!scheduledTime) {
-        const deliveryDate = rawData.delivery_date || 
-                           rawData.deliveryDate || 
-                           rawData.scheduled_date ||
-                           rawData.scheduledDate ||
-                           rawData.selected_delivery_date ||
-                           rawData.selectedDeliveryDate ||
-                           rawData.chosen_delivery_date ||
-                           rawData.chosenDeliveryDate ||
-                           rawData.preferred_delivery_date ||
-                           rawData.preferredDeliveryDate ||
-                           deliveryObj.delivery_date || 
-                           deliveryObj.deliveryDate ||
-                           scheduleObj.delivery_date ||
-                           scheduleObj.deliveryDate ||
-                           scheduleObj.scheduled_date ||
-                           (rawData.schedule && rawData.schedule.date) ||
-                           (rawData.schedule && rawData.schedule.delivery_date);
-                           
-        const deliveryTimeOnly = rawData.delivery_time_only || 
-                                rawData.deliveryTimeOnly || 
-                                rawData.scheduled_time ||
-                                rawData.scheduledTime ||
-                                rawData.selected_delivery_time ||
-                                rawData.selectedDeliveryTime ||
-                                rawData.chosen_delivery_time ||
-                                rawData.chosenDeliveryTime ||
-                                rawData.preferred_delivery_time ||
-                                rawData.preferredDeliveryTime ||
-                                rawData.time_slot ||
-                                rawData.delivery_time_slot ||
-                                rawData.requested_delivery_time_only ||
-                                deliveryObj.delivery_time_only || 
-                                deliveryObj.deliveryTimeOnly ||
-                                scheduleObj.delivery_time_only ||
-                                scheduleObj.deliveryTimeOnly ||
-                                scheduleObj.scheduled_time ||
-                                (rawData.schedule && rawData.schedule.time) ||
-                                (rawData.schedule && rawData.schedule.delivery_time);
-        
+        const deliveryDate = rawData.delivery_date ||
+            rawData.deliveryDate ||
+            rawData.scheduled_date ||
+            rawData.scheduledDate ||
+            rawData.selected_delivery_date ||
+            rawData.selectedDeliveryDate ||
+            rawData.chosen_delivery_date ||
+            rawData.chosenDeliveryDate ||
+            rawData.preferred_delivery_date ||
+            rawData.preferredDeliveryDate ||
+            deliveryObj.delivery_date ||
+            deliveryObj.deliveryDate ||
+            scheduleObj.delivery_date ||
+            scheduleObj.deliveryDate ||
+            scheduleObj.scheduled_date ||
+            (rawData.schedule && rawData.schedule.date) ||
+            (rawData.schedule && rawData.schedule.delivery_date);
+
+        const deliveryTimeOnly = rawData.delivery_time_only ||
+            rawData.deliveryTimeOnly ||
+            rawData.scheduled_time ||
+            rawData.scheduledTime ||
+            rawData.selected_delivery_time ||
+            rawData.selectedDeliveryTime ||
+            rawData.chosen_delivery_time ||
+            rawData.chosenDeliveryTime ||
+            rawData.preferred_delivery_time ||
+            rawData.preferredDeliveryTime ||
+            rawData.time_slot ||
+            rawData.delivery_time_slot ||
+            rawData.requested_delivery_time_only ||
+            deliveryObj.delivery_time_only ||
+            deliveryObj.deliveryTimeOnly ||
+            scheduleObj.delivery_time_only ||
+            scheduleObj.deliveryTimeOnly ||
+            scheduleObj.scheduled_time ||
+            (rawData.schedule && rawData.schedule.time) ||
+            (rawData.schedule && rawData.schedule.delivery_time);
+
         if (deliveryDate && deliveryTimeOnly) {
             // Combine date and time - try different formats
             scheduledTime = `${deliveryDate} ${deliveryTimeOnly}`;
@@ -5598,19 +5592,19 @@ function hasScheduledDeliveryTime(order) {
             }
         }
     }
-    
+
     // Check if scheduled time is in the future (any future time means it's scheduled)
     if (scheduledTime) {
-    try {
-        const scheduledDate = new Date(scheduledTime);
-        const now = new Date();
-        
+        try {
+            const scheduledDate = new Date(scheduledTime);
+            const now = new Date();
+
             // If scheduled time is in the future (even 1 minute), it's scheduled
             // This will catch orders scheduled for tomorrow, specific times, etc.
             // Also accept times that are very recent (within last 5 minutes) as they might be just set
             const timeDiff = scheduledDate.getTime() - now.getTime();
             const minutesDiff = timeDiff / (1000 * 60);
-            
+
             if (scheduledDate > now || (minutesDiff > -5 && minutesDiff < 1440)) {
                 // More than 1 minute in future, or within last 5 minutes (recently scheduled)
                 if (minutesDiff > 1 || (minutesDiff > -5 && minutesDiff < 1440)) {
@@ -5618,7 +5612,7 @@ function hasScheduledDeliveryTime(order) {
                     return true;
                 }
             }
-            
+
             // Also check if it's a different day (tomorrow or later) - definitely scheduled
             const scheduledDay = scheduledDate.toDateString();
             const today = now.toDateString();
@@ -5640,65 +5634,65 @@ function hasScheduledDeliveryTime(order) {
             }
         }
     }
-    
+
     // Also check delivery time if scheduled time not found - use same comprehensive extraction
-    const deliveryTime = order.delivery_time || 
-                        order.deliveryTime || 
-                        order.delivery_at ||
-                        order.deliveryAt ||
-                        order.delivery_datetime ||
-                        order.deliveryDateTime ||
-                        order.scheduled_delivery_time ||
-                        order.scheduledDeliveryTime ||
-                        rawData.delivery_time ||
-                        rawData.deliveryTime ||
-                        rawData.delivery_at ||
-                        rawData.deliveryAt ||
-                        rawData.delivery_datetime ||
-                        rawData.deliveryDateTime ||
-                        rawData.requested_delivery_time ||
-                        rawData.requestedDeliveryTime ||
-                        rawData.scheduled_delivery_time ||
-                        rawData.scheduledDeliveryTime ||
-                        rawData.preferred_delivery_time ||
-                        rawData.preferredDeliveryTime ||
-                        rawData.delivery_date ||
-                        rawData.deliveryDate ||
-                        deliveryObj.delivery_time ||
-                        deliveryObj.deliveryTime ||
-                        deliveryObj.scheduled_delivery_time ||
-                        deliveryObj.requested_delivery_time ||
-                        deliveryObj.delivery_at ||
-                        deliveryObj.delivery_date ||
-                        scheduleObj.delivery_time ||
-                        scheduleObj.scheduled_delivery_time ||
-                        scheduleObj.requested_delivery_time ||
-                        scheduleObj.delivery_date ||
-                        timeObj.delivery ||
-                        timeObj.delivery_time ||
-                        null;
-    
+    const deliveryTime = order.delivery_time ||
+        order.deliveryTime ||
+        order.delivery_at ||
+        order.deliveryAt ||
+        order.delivery_datetime ||
+        order.deliveryDateTime ||
+        order.scheduled_delivery_time ||
+        order.scheduledDeliveryTime ||
+        rawData.delivery_time ||
+        rawData.deliveryTime ||
+        rawData.delivery_at ||
+        rawData.deliveryAt ||
+        rawData.delivery_datetime ||
+        rawData.deliveryDateTime ||
+        rawData.requested_delivery_time ||
+        rawData.requestedDeliveryTime ||
+        rawData.scheduled_delivery_time ||
+        rawData.scheduledDeliveryTime ||
+        rawData.preferred_delivery_time ||
+        rawData.preferredDeliveryTime ||
+        rawData.delivery_date ||
+        rawData.deliveryDate ||
+        deliveryObj.delivery_time ||
+        deliveryObj.deliveryTime ||
+        deliveryObj.scheduled_delivery_time ||
+        deliveryObj.requested_delivery_time ||
+        deliveryObj.delivery_at ||
+        deliveryObj.delivery_date ||
+        scheduleObj.delivery_time ||
+        scheduleObj.scheduled_delivery_time ||
+        scheduleObj.requested_delivery_time ||
+        scheduleObj.delivery_date ||
+        timeObj.delivery ||
+        timeObj.delivery_time ||
+        null;
+
     if (deliveryTime) {
         try {
             const deliveryDate = new Date(deliveryTime);
             const now = new Date();
-            
+
             // If delivery time is in the future, it's scheduled
             // Be more lenient - any future time means scheduled (for tomorrow, specific times, etc.)
             if (deliveryDate > now) {
                 console.log(`[DEBUG] Order ${orderId || 'unknown'} delivery time is in future: ${deliveryTime} -> ${deliveryDate}`);
-                
+
                 // If delivery time is in the future (even 1 minute), it's scheduled
                 // This catches orders with specific date/time (Later option)
                 const timeDiff = deliveryDate.getTime() - now.getTime();
-        const minutesDiff = timeDiff / (1000 * 60);
-        
+                const minutesDiff = timeDiff / (1000 * 60);
+
                 // If more than 1 minute in the future, it's scheduled
                 if (minutesDiff > 1) {
                     order._isScheduled = true;
                     return true;
                 }
-                
+
                 // Also check if it's a different day (tomorrow or later)
                 const deliveryDay = deliveryDate.toDateString();
                 const today = now.toDateString();
@@ -5707,11 +5701,11 @@ function hasScheduledDeliveryTime(order) {
                     return true; // Different day = scheduled
                 }
             }
-    } catch (e) {
+        } catch (e) {
             // Ignore parsing errors
         }
     }
-    
+
     // Cache result
     order._isScheduled = false;
     return false;
@@ -5722,39 +5716,39 @@ function getOrderCategory(order) {
     const status = (order.status || '').toUpperCase();
     const isCompleted = ['DELIVERED', 'COMPLETED', 'FULFILLED'].includes(status);
     const isIncomplete = ['CANCELLED', 'FAILED', 'REJECTED', 'CANCELED'].includes(status);
-    
+
     // Priority: completed/incomplete override scheduled
     // Completed and incomplete orders should not be in scheduled tab
     if (isCompleted) return 'completed';
     if (isIncomplete) return 'incomplete';
-    
+
     // Check if scheduled (only if not completed/incomplete)
     const isScheduled = hasScheduledDeliveryTime(order);
     if (isScheduled) {
         // For scheduled orders, check if scheduled delivery time has passed
         let scheduledTime = null;
-        
+
         // Try to get scheduled delivery time (use cached parsed data if available)
         try {
             // Use cached parsed raw_data if available
             const rawData = order._parsedRawData || (order.raw_data ? (typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data) : {});
-            
-            scheduledTime = order.scheduled_delivery_time || 
-                          rawData.scheduled_delivery_time ||
-                          rawData.delivery_time ||
-                          rawData.requested_delivery_time ||
-                          rawData.preferred_delivery_time ||
-                          rawData.selected_delivery_time;
-            
+
+            scheduledTime = order.scheduled_delivery_time ||
+                rawData.scheduled_delivery_time ||
+                rawData.delivery_time ||
+                rawData.requested_delivery_time ||
+                rawData.preferred_delivery_time ||
+                rawData.selected_delivery_time;
+
             if (scheduledTime) {
                 const scheduledDate = new Date(scheduledTime);
                 const now = new Date();
-                
+
                 // If scheduled time has already passed significantly (more than 1 hour), move to incomplete
                 // But keep in scheduled if it's very recent (within last hour) - might be running late
                 const timeDiff = now.getTime() - scheduledDate.getTime();
                 const hoursDiff = timeDiff / (1000 * 60 * 60);
-                
+
                 if (hoursDiff > 1) {
                     // If order is delivered/completed, it should be in completed
                     if (isCompleted) {
@@ -5768,11 +5762,11 @@ function getOrderCategory(order) {
             // If can't parse scheduled time, still consider it scheduled if hasScheduledDeliveryTime returned true
             // This handles edge cases where time format might be different
         }
-        
+
         // Scheduled order with future time or recent past time - stay in scheduled
         return 'scheduled';
     }
-    
+
     // For non-scheduled orders, check if order is older than 1 day from creation
     // If older than 1 day, move to incomplete
     const orderDate = order.created_at || order.fetched_at || order.updated_at;
@@ -5781,7 +5775,7 @@ function getOrderCategory(order) {
             const orderDateTime = new Date(orderDate);
             const now = new Date();
             const daysDiff = (now.getTime() - orderDateTime.getTime()) / (1000 * 60 * 60 * 24);
-            
+
             // If order is older than 1 day, move to incomplete
             if (daysDiff >= 1) {
                 return 'incomplete';
@@ -5791,14 +5785,14 @@ function getOrderCategory(order) {
             console.error('Error parsing order date:', e);
         }
     }
-    
+
     return 'current';
 }
 
 // Filter and display orders
 function filterAndDisplayOrders() {
     let filtered = [...allOrders];
-    
+
     // Apply status filter
     if (currentStatusFilter && currentStatusFilter !== 'current') {
         if (currentStatusFilter === 'scheduled') {
@@ -5824,13 +5818,13 @@ function filterAndDisplayOrders() {
     } else if (currentStatusFilter === 'current') {
         // Current = all active orders, BUT respect dispatch time window for scheduled orders
         const dispatchTimeWindow = parseFloat(localStorage.getItem('dispatchTimeWindow') || '1');
-        
+
         filtered = filtered.filter(order => {
             const status = (order.status || '').toUpperCase();
             const isActive = status && !['DELIVERED', 'COMPLETED', 'CANCELLED', 'CANCELED', 'FAILED', 'REJECTED'].includes(status);
-            
+
             if (!isActive) return false;
-            
+
             // If it's a scheduled order, check if it's within the dispatch window
             if (getOrderCategory(order) === 'scheduled') {
                 try {
@@ -5842,37 +5836,37 @@ function filterAndDisplayOrders() {
 
                     // Get scheduled time (try to match logic from other helpers)
                     const rawData = order._parsedRawData || (order.raw_data ? (typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data) : {});
-                    
-                    const scheduledTime = order.scheduled_delivery_time || 
-                                        rawData.scheduled_delivery_time ||
-                                        rawData.delivery_time ||
-                                        rawData.requested_delivery_time ||
-                                        rawData.preferred_delivery_time ||
-                                        rawData.selected_delivery_time ||
-                                        (rawData.delivery && rawData.delivery.expected_delivery_time) ||
-                                        (rawData.delivery && rawData.delivery.expectedDeliveryTime);
-                    
+
+                    const scheduledTime = order.scheduled_delivery_time ||
+                        rawData.scheduled_delivery_time ||
+                        rawData.delivery_time ||
+                        rawData.requested_delivery_time ||
+                        rawData.preferred_delivery_time ||
+                        rawData.selected_delivery_time ||
+                        (rawData.delivery && rawData.delivery.expected_delivery_time) ||
+                        (rawData.delivery && rawData.delivery.expectedDeliveryTime);
+
                     if (scheduledTime) {
-                         const scheduledDate = new Date(scheduledTime);
-                         const now = new Date();
-                         // Difference in hours
-                         const hoursDiff = (scheduledDate.getTime() - now.getTime()) / (1000 * 60 * 60);
-                         
-                         // If scheduled time is more than dispatchTimeWindow hours in future, hide from Current
-                         // (Allow a 15 min buffer where we might show it slightly early or if time is very close)
-                         if (hoursDiff > dispatchTimeWindow) {
-                             return false; 
-                         }
+                        const scheduledDate = new Date(scheduledTime);
+                        const now = new Date();
+                        // Difference in hours
+                        const hoursDiff = (scheduledDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+                        // If scheduled time is more than dispatchTimeWindow hours in future, hide from Current
+                        // (Allow a 15 min buffer where we might show it slightly early or if time is very close)
+                        if (hoursDiff > dispatchTimeWindow) {
+                            return false;
+                        }
                     }
                 } catch (e) {
                     console.error('Error checking scheduled time for current filter:', e);
                 }
             }
-            
+
             return true;
         });
     }
-    
+
     // Apply search filter
     if (searchQuery) {
         filtered = filtered.filter(order => {
@@ -5885,23 +5879,23 @@ function filterAndDisplayOrders() {
                 order.status,
                 order.merchant_name || order.store_id
             ].join(' ').toLowerCase();
-            
+
             return searchableText.includes(searchQuery);
         });
     }
-    
+
     displayOrders(filtered);
 }
 
 // Display orders in table (optimized with DocumentFragment for faster rendering)
 function displayOrders(orders) {
     const tbody = document.getElementById('ordersTableBody');
-    
+
     // Silently return if orders table doesn't exist (we might be on a different page)
     if (!tbody) {
         return;
     }
-    
+
     if (!orders || orders.length === 0) {
         tbody.innerHTML = `
             <tr>
@@ -5924,21 +5918,21 @@ function displayOrders(orders) {
         `;
         return;
     }
-    
+
     try {
         // Use DocumentFragment for faster DOM updates
         const fragment = document.createDocumentFragment();
         const tempDiv = document.createElement('div');
-        
+
         // Build HTML string
         const rowsHtml = orders.map(order => createOrderRow(order)).join('');
         tempDiv.innerHTML = rowsHtml;
-        
+
         // Move all rows to fragment
         while (tempDiv.firstChild) {
             fragment.appendChild(tempDiv.firstChild);
         }
-        
+
         // Clear and append in one operation
         tbody.innerHTML = '';
         tbody.appendChild(fragment);
@@ -5967,11 +5961,11 @@ function escapeHtml(text) {
 // Create order table row
 function createOrderRow(order) {
     if (!order) return '';
-    
+
     const orderId = order.gloriafood_order_id || order.id || 'N/A';
     const customerName = escapeHtml(order.customer_name || 'N/A');
     const customerAddress = escapeHtml(order.delivery_address || order.customer_address || 'N/A');
-    
+
     // Use cached parsed raw_data if available (pre-processed in loadOrders)
     let rawData = order._parsedRawData || {};
     if (!rawData && order.raw_data) {
@@ -5982,24 +5976,24 @@ function createOrderRow(order) {
             rawData = {};
         }
     }
-    
+
     // Use merchant_name from backend (already enriched by backend)
     // Backend enriches orders with merchant_name from merchants table
     let merchantName = order.merchant_name;
-    
+
     // Only check raw_data if backend didn't provide merchant_name
     if (!merchantName || merchantName === order.store_id || merchantName === 'Unknown Merchant') {
         if (rawData) {
-            merchantName = rawData.merchant_name || 
-                          rawData.merchantName ||
-                          rawData.restaurant_name ||
-                          rawData.restaurantName ||
-                          (rawData.restaurant && rawData.restaurant.name) ||
-                          (rawData.restaurant && rawData.restaurant.restaurant_name) ||
-                          (rawData.merchant && rawData.merchant.name) ||
-                          null;
+            merchantName = rawData.merchant_name ||
+                rawData.merchantName ||
+                rawData.restaurant_name ||
+                rawData.restaurantName ||
+                (rawData.restaurant && rawData.restaurant.name) ||
+                (rawData.restaurant && rawData.restaurant.restaurant_name) ||
+                (rawData.merchant && rawData.merchant.name) ||
+                null;
         }
-        
+
         // Final fallback - only show store_id if absolutely no merchant name found
         if (!merchantName || merchantName === order.store_id) {
             // Try to get from merchants API if available
@@ -6007,33 +6001,33 @@ function createOrderRow(order) {
             merchantName = order.store_id ? `Merchant ${order.store_id}` : 'N/A';
         }
     }
-    
+
     // Ensure we don't show store_id as merchant name
     if (merchantName === order.store_id) {
         merchantName = `Merchant ${order.store_id}`;
     }
-    
+
     merchantName = escapeHtml(merchantName);
     const amount = formatCurrency(order.total_price || 0, order.currency || 'USD');
     const orderPlaced = formatDateShipday(order.fetched_at || order.created_at || order.updated_at);
     const elapsedTime = calculateElapsedTime(order.fetched_at || order.created_at || order.updated_at);
-    
+
     // Check if order is scheduled
     const isScheduled = hasScheduledDeliveryTime(order);
-    
+
     // Get distance from various possible fields (more comprehensive)
     // Priority: DoorDash/Shipday API response > stored distance > calculated
     const deliveryObj = rawData.delivery || {};
     const locationObj = rawData.location || {};
     const restaurantObj = rawData.restaurant || rawData.store || {};
-    
+
     // First, check DoorDash/Shipday API response for accurate distance (highest priority)
     let doordashData = null;
     let shipdayData = null;
     if (rawData.doordash_data) {
         try {
-            doordashData = typeof rawData.doordash_data === 'string' 
-                ? JSON.parse(rawData.doordash_data) 
+            doordashData = typeof rawData.doordash_data === 'string'
+                ? JSON.parse(rawData.doordash_data)
                 : rawData.doordash_data;
         } catch (e) {
             // Ignore parsing errors
@@ -6041,42 +6035,42 @@ function createOrderRow(order) {
     }
     if (rawData.shipday_data) {
         try {
-            shipdayData = typeof rawData.shipday_data === 'string' 
-                ? JSON.parse(rawData.shipday_data) 
+            shipdayData = typeof rawData.shipday_data === 'string'
+                ? JSON.parse(rawData.shipday_data)
                 : rawData.shipday_data;
         } catch (e) {
             // Ignore parsing errors
         }
     }
-    
+
     // Extract distance from DoorDash/Shipday response (most accurate - actual driving distance)
-    const doordashDistance = doordashData?.distance || 
-                            doordashData?.distance_miles ||
-                            doordashData?.distance_km ||
-                            doordashData?.estimated_distance ||
-                            doordashData?.actual_distance ||
-                            doordashData?.delivery_distance ||
-                            doordashData?.distance_mi ||
-                            doordashData?.distanceMi ||
-                            (doordashData?.quote && doordashData.quote.distance) ||
-                            (doordashData?.quote && doordashData.quote.distance_miles) ||
-                            (doordashData?.quote && doordashData.quote.distance_km) ||
-                            (doordashData?.delivery && doordashData.delivery.distance) ||
-                            (doordashData?.delivery && doordashData.delivery.distance_miles) ||
-                            (doordashData?.delivery && doordashData.delivery.distance_km) ||
-                    null;
-    
+    const doordashDistance = doordashData?.distance ||
+        doordashData?.distance_miles ||
+        doordashData?.distance_km ||
+        doordashData?.estimated_distance ||
+        doordashData?.actual_distance ||
+        doordashData?.delivery_distance ||
+        doordashData?.distance_mi ||
+        doordashData?.distanceMi ||
+        (doordashData?.quote && doordashData.quote.distance) ||
+        (doordashData?.quote && doordashData.quote.distance_miles) ||
+        (doordashData?.quote && doordashData.quote.distance_km) ||
+        (doordashData?.delivery && doordashData.delivery.distance) ||
+        (doordashData?.delivery && doordashData.delivery.distance_miles) ||
+        (doordashData?.delivery && doordashData.delivery.distance_km) ||
+        null;
+
     const shipdayDistance = shipdayData?.distance ||
-                            shipdayData?.distance_miles ||
-                            shipdayData?.distance_km ||
-                            shipdayData?.estimated_distance ||
-                            shipdayData?.actual_distance ||
-                            shipdayData?.delivery_distance ||
-                            (shipdayData?.quote && shipdayData.quote.distance) ||
-                            (shipdayData?.quote && shipdayData.quote.distance_miles) ||
-                            (shipdayData?.quote && shipdayData.quote.distance_km) ||
-                            null;
-    
+        shipdayData?.distance_miles ||
+        shipdayData?.distance_km ||
+        shipdayData?.estimated_distance ||
+        shipdayData?.actual_distance ||
+        shipdayData?.delivery_distance ||
+        (shipdayData?.quote && shipdayData.quote.distance) ||
+        (shipdayData?.quote && shipdayData.quote.distance_miles) ||
+        (shipdayData?.quote && shipdayData.quote.distance_km) ||
+        null;
+
     // Priority: Shipday distance > DoorDash distance (ONLY if DoorDash has provided route data)
     // Only use DoorDash distance if DoorDash has actually provided route/distance data
     const hasDoorDashRoute = doordashData && (
@@ -6086,25 +6080,25 @@ function createOrderRow(order) {
         (doordashData.quote && doordashData.quote.distance) ||
         (doordashData.delivery && doordashData.delivery.distance)
     );
-    
+
     let distance = shipdayDistance ||   // Priority 1: Shipday API distance (most accurate)
-                    (hasDoorDashRoute ? doordashDistance : null) ||  // Priority 2: DoorDash API distance (only if route provided)
-                    null;  // Don't use stored or calculated distance - only show if DoorDash/Shipday provides it
-    
+        (hasDoorDashRoute ? doordashDistance : null) ||  // Priority 2: DoorDash API distance (only if route provided)
+        null;  // Don't use stored or calculated distance - only show if DoorDash/Shipday provides it
+
     // Note: We don't calculate distance from coordinates anymore - only show if DoorDash/Shipday provides it
-    
+
     // Determine status based on DoorDash response
     // Check DoorDash status from response data
     let doordashStatus = null;
     if (doordashData) {
-        doordashStatus = doordashData.status || 
-                        doordashData.delivery_status || 
-                        doordashData.state ||
-                        doordashData.delivery?.status ||
-                        doordashData.delivery?.delivery_status ||
-                        null;
+        doordashStatus = doordashData.status ||
+            doordashData.delivery_status ||
+            doordashData.state ||
+            doordashData.delivery?.status ||
+            doordashData.delivery?.delivery_status ||
+            null;
     }
-    
+
     // If order was sent to DoorDash, use DoorDash status
     // PENDING if no rider accepted yet, ACCEPTED when rider accepts
     let status = (order.status || 'UNKNOWN').toUpperCase();
@@ -6131,14 +6125,14 @@ function createOrderRow(order) {
             status = 'PENDING';
         }
     }
-    
+
     // Get distance unit from localStorage
     const distanceUnit = localStorage.getItem('distanceUnit') || 'mile';
-    
+
     // Helper function to format distance based on selected unit
     const formatDistance = (value, fromUnit, toUnit) => {
         let numValue = value;
-        
+
         // Extract numeric value if string contains unit
         if (typeof value === 'string') {
             if (value.includes('km')) {
@@ -6154,9 +6148,9 @@ function createOrderRow(order) {
                 fromUnit = 'km';
             }
         }
-        
+
         if (isNaN(numValue)) return String(value);
-        
+
         // Convert to target unit
         let convertedValue = numValue;
         if (fromUnit === 'km' && toUnit === 'mile') {
@@ -6164,12 +6158,12 @@ function createOrderRow(order) {
         } else if (fromUnit === 'mile' && toUnit === 'km') {
             convertedValue = numValue * 1.60934;
         }
-        
+
         // Format with appropriate unit
         const unitLabel = toUnit === 'km' ? 'km' : 'miles';
         return convertedValue.toFixed(2) + ' ' + unitLabel;
     };
-    
+
     // Only display distance if DoorDash/Shipday has provided route data
     let formattedDistance = '';
     if (distance) {
@@ -6190,55 +6184,55 @@ function createOrderRow(order) {
         }
     }
     // If no distance from DoorDash/Shipday, show empty string (not "N/A")
-    
+
     // Get pickup time from various possible fields (comprehensive search)
     const scheduleObj = rawData.schedule || {};
     const timeObj = rawData.time || rawData.times || {};
-    
-    let pickupTime = order.pickup_time || 
-                      order.pickupTime || 
-                      order.pickup_at ||
-                      order.pickupAt ||
-                      order.pickup_datetime ||
-                      order.pickupDateTime ||
-                      order.requested_pickup_time ||
-                      order.requestedPickupTime ||
-                      rawData.pickup_time || 
-                      rawData.pickupTime || 
-                      rawData.requested_pickup_time ||
-                      rawData.requestedPickupTime ||
-                      rawData.scheduled_pickup_time ||
-                      rawData.scheduledPickupTime ||
-                      rawData.pickup_at ||
-                      rawData.pickupAt ||
-                      rawData.pickup_datetime ||
-                      rawData.pickupDateTime ||
-                      rawData.requested_pickup_datetime ||
-                      rawData.estimated_pickup_time ||
-                      rawData.estimatedPickupTime ||
-                      rawData.pickup_time_iso ||
-                      deliveryObj.pickup_time ||
-                      deliveryObj.pickupTime ||
-                      deliveryObj.requested_pickup_time ||
-                      deliveryObj.requestedPickupTime ||
-                      deliveryObj.pickup_at ||
-                      deliveryObj.pickupAt ||
-                      deliveryObj.pickup_datetime ||
-                      scheduleObj.pickup_time ||
-                      scheduleObj.pickupTime ||
-                      scheduleObj.requested_pickup_time ||
-                      scheduleObj.requestedPickupTime ||
-                      scheduleObj.scheduled_pickup_time ||
-                      timeObj.pickup ||
-                      timeObj.pickup_time ||
-                      (rawData.restaurant && rawData.restaurant.pickup_time) ||
-                      null;
-    
+
+    let pickupTime = order.pickup_time ||
+        order.pickupTime ||
+        order.pickup_at ||
+        order.pickupAt ||
+        order.pickup_datetime ||
+        order.pickupDateTime ||
+        order.requested_pickup_time ||
+        order.requestedPickupTime ||
+        rawData.pickup_time ||
+        rawData.pickupTime ||
+        rawData.requested_pickup_time ||
+        rawData.requestedPickupTime ||
+        rawData.scheduled_pickup_time ||
+        rawData.scheduledPickupTime ||
+        rawData.pickup_at ||
+        rawData.pickupAt ||
+        rawData.pickup_datetime ||
+        rawData.pickupDateTime ||
+        rawData.requested_pickup_datetime ||
+        rawData.estimated_pickup_time ||
+        rawData.estimatedPickupTime ||
+        rawData.pickup_time_iso ||
+        deliveryObj.pickup_time ||
+        deliveryObj.pickupTime ||
+        deliveryObj.requested_pickup_time ||
+        deliveryObj.requestedPickupTime ||
+        deliveryObj.pickup_at ||
+        deliveryObj.pickupAt ||
+        deliveryObj.pickup_datetime ||
+        scheduleObj.pickup_time ||
+        scheduleObj.pickupTime ||
+        scheduleObj.requested_pickup_time ||
+        scheduleObj.requestedPickupTime ||
+        scheduleObj.scheduled_pickup_time ||
+        timeObj.pickup ||
+        timeObj.pickup_time ||
+        (rawData.restaurant && rawData.restaurant.pickup_time) ||
+        null;
+
     // If date and time are separate for pickup, combine them
     if (!pickupTime) {
         const pickupDate = rawData.pickup_date || rawData.pickupDate || deliveryObj.pickup_date || scheduleObj.pickup_date || rawData.requested_pickup_date;
         const pickupTimeOnly = rawData.pickup_time_only || rawData.pickupTimeOnly || deliveryObj.pickup_time_only || scheduleObj.pickup_time_only || rawData.requested_pickup_time_only;
-        
+
         if (pickupDate && pickupTimeOnly) {
             pickupTime = `${pickupDate} ${pickupTimeOnly}`;
         } else if (pickupDate) {
@@ -6249,66 +6243,66 @@ function createOrderRow(order) {
             pickupTime = `${today} ${pickupTimeOnly}`;
         }
     }
-    
+
     // Also check if pickup time is in raw_data at root level with different names
     if (!pickupTime) {
-        pickupTime = rawData.pickup || rawData.pickup_datetime || rawData.pickupDateTime || 
-                     rawData.collection_time || rawData.collectionTime ||
-                      (rawData.times && rawData.times.pickup) ||
-                     (rawData.time && rawData.time.pickup) ||
-                      null;
+        pickupTime = rawData.pickup || rawData.pickup_datetime || rawData.pickupDateTime ||
+            rawData.collection_time || rawData.collectionTime ||
+            (rawData.times && rawData.times.pickup) ||
+            (rawData.time && rawData.time.pickup) ||
+            null;
     }
-    
+
     // Get delivery time from various possible fields (comprehensive search)
     // Also check for separate date and time fields (GloriaFood "Later" option)
     // First check for DoorDash estimated_delivery_time (from deliveries table or order object)
     let deliveryTime = order.estimated_delivery_time ||
-                        order.estimatedDeliveryTime ||
-                        order.delivery_time || 
-                        order.deliveryTime || 
-                        order.delivery_at ||
-                        order.deliveryAt ||
-                        order.delivery_datetime ||
-                        order.deliveryDateTime ||
-                        order.scheduled_delivery_time ||
-                        order.scheduledDeliveryTime ||
-                        rawData.delivery_time || 
-                        rawData.deliveryTime || 
-                        rawData.requested_delivery_time ||
-                        rawData.requestedDeliveryTime ||
-                        rawData.scheduled_delivery_time ||
-                        rawData.scheduledDeliveryTime ||
-                        rawData.delivery_at ||
-                        rawData.deliveryAt ||
-                        rawData.delivery_datetime ||
-                        rawData.deliveryDateTime ||
-                        rawData.requested_delivery_datetime ||
-                        rawData.estimated_delivery_time ||
-                        rawData.estimatedDeliveryTime ||
-                        rawData.preferred_delivery_time ||
-                        rawData.preferredDeliveryTime ||
-                        deliveryObj.delivery_time ||
-                        deliveryObj.deliveryTime ||
-                        deliveryObj.requested_delivery_time ||
-                        deliveryObj.requestedDeliveryTime ||
-                        deliveryObj.scheduled_delivery_time ||
-                        deliveryObj.scheduledDeliveryTime ||
-                        deliveryObj.delivery_at ||
-                        deliveryObj.deliveryAt ||
-                        scheduleObj.delivery_time ||
-                        scheduleObj.deliveryTime ||
-                        scheduleObj.requested_delivery_time ||
-                        scheduleObj.requestedDeliveryTime ||
-                        scheduleObj.scheduled_delivery_time ||
-                        timeObj.delivery ||
-                        timeObj.delivery_time ||
-                        null;
-    
+        order.estimatedDeliveryTime ||
+        order.delivery_time ||
+        order.deliveryTime ||
+        order.delivery_at ||
+        order.deliveryAt ||
+        order.delivery_datetime ||
+        order.deliveryDateTime ||
+        order.scheduled_delivery_time ||
+        order.scheduledDeliveryTime ||
+        rawData.delivery_time ||
+        rawData.deliveryTime ||
+        rawData.requested_delivery_time ||
+        rawData.requestedDeliveryTime ||
+        rawData.scheduled_delivery_time ||
+        rawData.scheduledDeliveryTime ||
+        rawData.delivery_at ||
+        rawData.deliveryAt ||
+        rawData.delivery_datetime ||
+        rawData.deliveryDateTime ||
+        rawData.requested_delivery_datetime ||
+        rawData.estimated_delivery_time ||
+        rawData.estimatedDeliveryTime ||
+        rawData.preferred_delivery_time ||
+        rawData.preferredDeliveryTime ||
+        deliveryObj.delivery_time ||
+        deliveryObj.deliveryTime ||
+        deliveryObj.requested_delivery_time ||
+        deliveryObj.requestedDeliveryTime ||
+        deliveryObj.scheduled_delivery_time ||
+        deliveryObj.scheduledDeliveryTime ||
+        deliveryObj.delivery_at ||
+        deliveryObj.deliveryAt ||
+        scheduleObj.delivery_time ||
+        scheduleObj.deliveryTime ||
+        scheduleObj.requested_delivery_time ||
+        scheduleObj.requestedDeliveryTime ||
+        scheduleObj.scheduled_delivery_time ||
+        timeObj.delivery ||
+        timeObj.delivery_time ||
+        null;
+
     // If date and time are separate, combine them (for "Later" option)
     if (!deliveryTime) {
         const deliveryDate = rawData.delivery_date || rawData.deliveryDate || deliveryObj.delivery_date || scheduleObj.delivery_date || rawData.scheduled_date || scheduleObj.scheduled_date || rawData.requested_delivery_date;
         const deliveryTimeOnly = rawData.delivery_time_only || rawData.deliveryTimeOnly || deliveryObj.delivery_time_only || scheduleObj.delivery_time_only || rawData.scheduled_time || scheduleObj.scheduled_time || rawData.requested_delivery_time_only;
-        
+
         if (deliveryDate && deliveryTimeOnly) {
             deliveryTime = `${deliveryDate} ${deliveryTimeOnly}`;
         } else if (deliveryDate) {
@@ -6320,47 +6314,47 @@ function createOrderRow(order) {
             deliveryTime = `${today} ${deliveryTimeOnly}`;
         }
     }
-    
+
     // Also check if delivery time is in raw_data at root level with different names
     if (!deliveryTime) {
         deliveryTime = rawData.delivery || rawData.delivery_datetime || rawData.deliveryDateTime ||
-                       rawData.requested_time || rawData.requestedTime ||
-                       rawData.preferred_time || rawData.preferredTime ||
-                        (rawData.times && rawData.times.delivery) ||
-                       (rawData.time && rawData.time.delivery) ||
-                        null;
+            rawData.requested_time || rawData.requestedTime ||
+            rawData.preferred_time || rawData.preferredTime ||
+            (rawData.times && rawData.times.delivery) ||
+            (rawData.time && rawData.time.delivery) ||
+            null;
     }
-    
+
     // Check for DoorDash estimated_delivery_time from doordash_data or delivery response
     if (!deliveryTime) {
         // Check if order has doordash_order_id and look for estimated_delivery_time in doordash_data
-        const doordashOrderId = order.doordash_order_id || 
-                               rawData.doordash_order_id || 
-                               rawData.doordashOrderId ||
-                               (rawData.delivery && rawData.delivery.doordash_order_id);
-        
+        const doordashOrderId = order.doordash_order_id ||
+            rawData.doordash_order_id ||
+            rawData.doordashOrderId ||
+            (rawData.delivery && rawData.delivery.doordash_order_id);
+
         if (doordashOrderId) {
             // Try to get from doordash_data
             if (rawData.doordash_data) {
                 try {
-                    const doordashData = typeof rawData.doordash_data === 'string' 
-                        ? JSON.parse(rawData.doordash_data) 
+                    const doordashData = typeof rawData.doordash_data === 'string'
+                        ? JSON.parse(rawData.doordash_data)
                         : rawData.doordash_data;
-                    deliveryTime = doordashData.estimated_delivery_time || 
-                                  doordashData.estimatedDeliveryTime ||
-                                  null;
+                    deliveryTime = doordashData.estimated_delivery_time ||
+                        doordashData.estimatedDeliveryTime ||
+                        null;
                 } catch (e) {
                     // Ignore parsing errors
                 }
             }
-            
+
             // Also check direct fields in raw_data
             if (!deliveryTime) {
                 deliveryTime = rawData.doordash_estimated_delivery_time ||
-                              rawData.doordashEstimatedDeliveryTime ||
-                              null;
+                    rawData.doordashEstimatedDeliveryTime ||
+                    null;
             }
-            
+
             // If still no delivery time but has doordash order, calculate it (45 minutes from order creation)
             if (!deliveryTime) {
                 const orderCreatedAt = order.fetched_at || order.created_at || order.updated_at;
@@ -6379,77 +6373,77 @@ function createOrderRow(order) {
             }
         }
     }
-    
+
     // Get ready for pickup time (comprehensive search)
-    const readyForPickup = order.ready_for_pickup || 
-                           order.readyForPickup || 
-                           order.ready_time ||
-                           order.readyTime ||
-                           order.ready_at ||
-                           order.readyAt ||
-                           order.prepared_at ||
-                           order.preparedAt ||
-                           rawData.ready_for_pickup || 
-                           rawData.readyForPickup ||
-                           rawData.ready_for_pick_up ||
-                           rawData.readyForPickUp ||
-                           rawData.ready_time ||
-                           rawData.readyTime ||
-                           rawData.ready_at ||
-                           rawData.readyAt ||
-                           rawData.prepared_at ||
-                           rawData.preparedAt ||
-                           rawData.estimated_ready_time ||
-                           rawData.estimatedReadyTime ||
-                           (rawData.status && rawData.status.ready_time) ||
-                           (rawData.status && rawData.status.ready_at) ||
-                           (rawData.status && rawData.status.prepared_at) ||
-                           deliveryObj.ready_for_pickup ||
-                           deliveryObj.ready_time ||
-                           deliveryObj.ready_at ||
-                           (rawData.restaurant && rawData.restaurant.ready_time) ||
-                           (rawData.store && rawData.store.ready_time) ||
-                           null;
-    
+    const readyForPickup = order.ready_for_pickup ||
+        order.readyForPickup ||
+        order.ready_time ||
+        order.readyTime ||
+        order.ready_at ||
+        order.readyAt ||
+        order.prepared_at ||
+        order.preparedAt ||
+        rawData.ready_for_pickup ||
+        rawData.readyForPickup ||
+        rawData.ready_for_pick_up ||
+        rawData.readyForPickUp ||
+        rawData.ready_time ||
+        rawData.readyTime ||
+        rawData.ready_at ||
+        rawData.readyAt ||
+        rawData.prepared_at ||
+        rawData.preparedAt ||
+        rawData.estimated_ready_time ||
+        rawData.estimatedReadyTime ||
+        (rawData.status && rawData.status.ready_time) ||
+        (rawData.status && rawData.status.ready_at) ||
+        (rawData.status && rawData.status.prepared_at) ||
+        deliveryObj.ready_for_pickup ||
+        deliveryObj.ready_time ||
+        deliveryObj.ready_at ||
+        (rawData.restaurant && rawData.restaurant.ready_time) ||
+        (rawData.store && rawData.store.ready_time) ||
+        null;
+
     // Get driver name from various possible fields (comprehensive search)
     const driverObj = rawData.driver || {};
-    const driver = order.driver_name || 
-                  order.driverName || 
-                  order.driver || 
-                  order.assigned_driver ||
-                  order.assignedDriver ||
-                  rawData.driver_name || 
-                  rawData.driverName || 
-                  rawData.driver ||
-                  rawData.assigned_driver ||
-                  rawData.assignedDriver ||
-                  rawData.driver_id ||
-                  rawData.driverId ||
-                  rawData.courier_name ||
-                  rawData.courierName ||
-                  rawData.courier ||
-                  deliveryObj.driver_name ||
-                  deliveryObj.driverName ||
-                  deliveryObj.driver ||
-                  deliveryObj.assigned_driver ||
-                  deliveryObj.assignedDriver ||
-                  deliveryObj.courier_name ||
-                  deliveryObj.courier ||
-                  driverObj.name ||
-                  driverObj.full_name ||
-                  (driverObj.first_name && driverObj.last_name ? driverObj.first_name + ' ' + driverObj.last_name : null) ||
-                  (driverObj.first_name ? driverObj.first_name : null) ||
-                  (rawData.courier && rawData.courier.name) ||
-                  (rawData.courier && rawData.courier.full_name) ||
-                  null;
-    
+    const driver = order.driver_name ||
+        order.driverName ||
+        order.driver ||
+        order.assigned_driver ||
+        order.assignedDriver ||
+        rawData.driver_name ||
+        rawData.driverName ||
+        rawData.driver ||
+        rawData.assigned_driver ||
+        rawData.assignedDriver ||
+        rawData.driver_id ||
+        rawData.driverId ||
+        rawData.courier_name ||
+        rawData.courierName ||
+        rawData.courier ||
+        deliveryObj.driver_name ||
+        deliveryObj.driverName ||
+        deliveryObj.driver ||
+        deliveryObj.assigned_driver ||
+        deliveryObj.assignedDriver ||
+        deliveryObj.courier_name ||
+        deliveryObj.courier ||
+        driverObj.name ||
+        driverObj.full_name ||
+        (driverObj.first_name && driverObj.last_name ? driverObj.first_name + ' ' + driverObj.last_name : null) ||
+        (driverObj.first_name ? driverObj.first_name : null) ||
+        (rawData.courier && rawData.courier.name) ||
+        (rawData.courier && rawData.courier.full_name) ||
+        null;
+
     // Format times - try to format, if invalid date, show raw value or formatted string
     let formattedPickupTime = 'N/A';
     if (pickupTime) {
         try {
             const date = new Date(pickupTime);
             if (!isNaN(date.getTime())) {
-            formattedPickupTime = formatDate(pickupTime);
+                formattedPickupTime = formatDate(pickupTime);
             } else {
                 // If can't parse as date, show as string (might be time-only format)
                 formattedPickupTime = String(pickupTime);
@@ -6459,7 +6453,7 @@ function createOrderRow(order) {
             formattedPickupTime = String(pickupTime);
         }
     }
-    
+
     let formattedDeliveryTime = 'N/A';
     if (deliveryTime) {
         try {
@@ -6475,7 +6469,7 @@ function createOrderRow(order) {
             formattedDeliveryTime = String(deliveryTime);
         }
     }
-    
+
     // Debug: Log if we found times
     if (orderId && (pickupTime || deliveryTime)) {
         if (!window._timeDebugLogged) {
@@ -6491,20 +6485,20 @@ function createOrderRow(order) {
             window._timeDebugLogged.add(orderId);
         }
     }
-    
+
     // Ready for pickup - show as switch/toggle based on status or time
     // First check localStorage for user-set status
     const readyStatusKey = `order_ready_${orderId}`;
     let isReadyForPickup = localStorage.getItem(readyStatusKey) === 'true';
-    
+
     // If not set in localStorage, determine from order data
     if (localStorage.getItem(readyStatusKey) === null) {
-    if (readyForPickup) {
-        try {
+        if (readyForPickup) {
+            try {
                 const readyDate = new Date(readyForPickup);
                 const now = new Date();
                 isReadyForPickup = readyDate <= now; // Ready if time has passed
-        } catch (e) {
+            } catch (e) {
                 // If can't parse date, check if it's a boolean or status
                 isReadyForPickup = readyForPickup === true || readyForPickup === 'true' || readyForPickup === 'ready';
             }
@@ -6516,30 +6510,30 @@ function createOrderRow(order) {
             isReadyForPickup = true;
         }
     }
-    
+
     // Make switch clickable - use order ID for identification
     const switchId = `ready-switch-${orderId}`;
-    const formattedReadyForPickup = isReadyForPickup 
+    const formattedReadyForPickup = isReadyForPickup
         ? `<label class="switch"><input type="checkbox" id="${switchId}" checked data-order-id="${escapeHtml(String(orderId))}" onchange="toggleReadyForPickup('${escapeHtml(String(orderId))}', this.checked)"><span class="slider"></span></label>`
         : `<label class="switch"><input type="checkbox" id="${switchId}" data-order-id="${escapeHtml(String(orderId))}" onchange="toggleReadyForPickup('${escapeHtml(String(orderId))}', this.checked)"><span class="slider"></span></label>`;
-    
+
     // Format driver - show "+ Assign" or "+ Pre-assigned" button
-    const formattedDriver = driver 
+    const formattedDriver = driver
         ? `<button class="btn-assign" style="background: #f3f4f6; border: 1px solid #d1d5db; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; color: #374151;">+ Pre-assigned</button>`
         : `<button class="btn-assign" onclick="assignDriver('${escapeHtml(String(orderId))}')" style="background: #f3f4f6; border: 1px solid #d1d5db; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; color: #374151;">+ Assign</button>`;
-    
+
     // Get tracking information
-    let tracking = order.doordash_tracking_url || 
-                   order.tracking_url ||
-                   order.trackingUrl ||
-                   rawData.tracking_url ||
-                   rawData.trackingUrl ||
-                   rawData.doordash_tracking_url ||
-                   rawData.doordashTrackingUrl ||
-                   (rawData.delivery && rawData.delivery.tracking_url) ||
-                   (rawData.delivery && rawData.delivery.trackingUrl) ||
-                   null;
-    
+    let tracking = order.doordash_tracking_url ||
+        order.tracking_url ||
+        order.trackingUrl ||
+        rawData.tracking_url ||
+        rawData.trackingUrl ||
+        rawData.doordash_tracking_url ||
+        rawData.doordashTrackingUrl ||
+        (rawData.delivery && rawData.delivery.tracking_url) ||
+        (rawData.delivery && rawData.delivery.trackingUrl) ||
+        null;
+
     if (tracking) {
         tracking = `<a href="${escapeHtml(tracking)}" target="_blank" style="color: #22c55e; text-decoration: underline;">Track</a>`;
     } else if (order.doordash_order_id || rawData.doordash_order_id || rawData.doordashOrderId) {
@@ -6547,7 +6541,7 @@ function createOrderRow(order) {
     } else {
         tracking = 'N/A';
     }
-    
+
     // Clock icon for scheduled orders
     const clockIcon = isScheduled ? `
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline-block; vertical-align: middle; margin-left: 4px; color: #22c55e;">
@@ -6555,7 +6549,7 @@ function createOrderRow(order) {
             <polyline points="12 6 12 12 16 14"></polyline>
         </svg>
     ` : '';
-    
+
     // Three dots menu
     const moreMenu = `
         <div class="dropdown" style="position: relative; display: inline-block;">
@@ -6572,7 +6566,7 @@ function createOrderRow(order) {
             </div>
         </div>
     `;
-    
+
     return `
         <tr data-order-id="${escapeHtml(String(orderId))}">
             <td>
@@ -6582,7 +6576,6 @@ function createOrderRow(order) {
                 ${clockIcon}
                 <strong>#${escapeHtml(String(orderId))}</strong>
             </td>
-            <td>${merchantName}</td>
             <td>${customerName}</td>
             <td>${customerAddress}</td>
             <td>${amount}</td>
@@ -6602,13 +6595,13 @@ function createOrderRow(order) {
 // Check for new orders and show notifications
 function checkForNewOrders(orders) {
     const currentOrderIds = new Set(orders.map(o => o.gloriafood_order_id || o.id));
-    
+
     // Find new orders
     const newOrders = orders.filter(order => {
         const orderId = order.gloriafood_order_id || order.id;
         return orderId && !lastOrderIds.has(orderId);
     });
-    
+
     if (newOrders.length > 0) {
         // Play a short notification sound once per batch of new orders
         playNotificationSound();
@@ -6617,14 +6610,14 @@ function checkForNewOrders(orders) {
         newOrders.forEach(order => {
             const orderId = order.gloriafood_order_id || order.id;
             const message = `${order.customer_name || 'Customer'} - ${formatCurrency(order.total_price || 0, order.currency || 'USD')}`;
-            
+
             // Add to notification panel only (no pop-up)
             addNotification(`New Order #${orderId}`, message, 'info', orderId);
-            
+
             // Show browser notification (optional - system notification)
             showBrowserNotification(order);
         });
-        
+
         // Update last order IDs
         lastOrderIds = currentOrderIds;
     }
@@ -6688,9 +6681,9 @@ function startAutoRefresh() {
     if (autoRefreshInterval) {
         clearInterval(autoRefreshInterval);
     }
-    
+
     autoRefreshInterval = setInterval(() => {
-            loadOrders();
+        loadOrders();
     }, REFRESH_INTERVAL);
 }
 
@@ -6716,7 +6709,7 @@ function formatCurrency(amount, currency = 'USD') {
 // Format date
 function formatDate(dateStr) {
     if (!dateStr) return 'N/A';
-    
+
     try {
         const date = new Date(dateStr);
         if (isNaN(date.getTime())) {
@@ -6773,7 +6766,7 @@ function calculateElapsedTime(dateStr) {
         const diffMins = Math.floor(diffMs / (1000 * 60));
         const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
         const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-        
+
         if (diffMins < 1) {
             return 'Just now';
         } else if (diffMins < 60) {
@@ -6792,7 +6785,7 @@ function calculateElapsedTime(dateStr) {
 function toggleOrderMenu(orderId) {
     const menu = document.getElementById(`menu-${orderId}`);
     if (!menu) return;
-    
+
     // Close all other menus
     document.querySelectorAll('.dropdown-menu').forEach(m => {
         if (m.id !== `menu-${orderId}`) {
@@ -6800,7 +6793,7 @@ function toggleOrderMenu(orderId) {
             m.classList.remove('show');
         }
     });
-    
+
     // Toggle current menu
     if (menu.style.display === 'none' || !menu.style.display) {
         menu.style.display = 'block';
@@ -6828,17 +6821,17 @@ async function assignDriver(orderId) {
     if (!confirmed) {
         return;
     }
-    
+
     try {
         showNotification('Info', 'Sending order to DoorDash...', 'info');
-        
+
         const response = await authenticatedFetch(`${API_BASE}/api/orders/${orderId}/assign-driver`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
         });
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
             showNotification('Success', data.message || 'Order sent to DoorDash. Driver will be automatically assigned.', 'success');
             // Reload orders to show updated status
@@ -6864,14 +6857,14 @@ async function viewOrderDetails(orderId) {
         // Fetch order details from API
         const response = await authenticatedFetch(`${API_BASE}/orders/${orderId}`);
         const data = await response.json();
-        
+
         if (!data.success || !data.order) {
             showNotification('Error', 'Order not found', 'error');
             return;
         }
-        
+
         const order = data.order;
-        
+
         // Parse raw_data for additional details
         let rawData = {};
         try {
@@ -6881,7 +6874,7 @@ async function viewOrderDetails(orderId) {
         } catch (e) {
             console.error('Error parsing raw_data:', e);
         }
-        
+
         // Parse items if it's a string
         let parsedItems = null;
         try {
@@ -6891,7 +6884,7 @@ async function viewOrderDetails(orderId) {
         } catch (e) {
             console.error('Error parsing items:', e);
         }
-        
+
         // Parse doordash_data if it exists in raw_data
         let doordashData = null;
         try {
@@ -6903,13 +6896,13 @@ async function viewOrderDetails(orderId) {
         } catch (e) {
             console.error('Error parsing doordash_data:', e);
         }
-        
+
         // Extract customer information
-        let customerName = order.customer_name || 
-                           rawData.customer_name ||
-                           rawData.client_name ||
-                           'N/A';
-        
+        let customerName = order.customer_name ||
+            rawData.customer_name ||
+            rawData.client_name ||
+            'N/A';
+
         // Try to build from client first_name and last_name if name not found
         if (customerName === 'N/A' && rawData.client) {
             const firstName = rawData.client.first_name || '';
@@ -6918,42 +6911,42 @@ async function viewOrderDetails(orderId) {
                 customerName = `${firstName} ${lastName}`.trim();
             }
         }
-        
+
         // Try customer object if still N/A
         if (customerName === 'N/A' && rawData.customer) {
             customerName = rawData.customer.name || rawData.customer.full_name || 'N/A';
         }
-        
+
         // Extract customer phone - prioritize order fields (actual DB data)
-        let customerPhone = order.customer_phone || 
-                            rawData.customer_phone ||
-                            rawData.phone ||
-                            'N/A';
-        
-        let customerEmail = order.customer_email || 
-                            rawData.customer_email ||
-                            rawData.email ||
-                            'N/A';
-        
+        let customerPhone = order.customer_phone ||
+            rawData.customer_phone ||
+            rawData.phone ||
+            'N/A';
+
+        let customerEmail = order.customer_email ||
+            rawData.customer_email ||
+            rawData.email ||
+            'N/A';
+
         // Try client object if still N/A
         if (customerEmail === 'N/A' && rawData.client && rawData.client.email) {
             customerEmail = rawData.client.email;
         }
-        
+
         // Try customer object if still N/A
         if (customerEmail === 'N/A' && rawData.customer && rawData.customer.email) {
             customerEmail = rawData.customer.email;
         }
-        
+
         // Extract customer address - comprehensive extraction
-        let customerAddress = order.delivery_address || 
-                               order.customer_address ||
-                               rawData.delivery_address ||
-                               rawData.customer_address ||
-                               rawData.client_address ||
-                               rawData.address ||
-                               '';
-        
+        let customerAddress = order.delivery_address ||
+            order.customer_address ||
+            rawData.delivery_address ||
+            rawData.customer_address ||
+            rawData.client_address ||
+            rawData.address ||
+            '';
+
         // If address is not a string, try to build from parts
         if (!customerAddress || customerAddress === '') {
             if (rawData.delivery && rawData.delivery.address) {
@@ -6978,28 +6971,28 @@ async function viewOrderDetails(orderId) {
                 customerAddress = addressParts.join(', ');
             }
         }
-        
+
         if (!customerAddress || customerAddress.trim() === '') {
             customerAddress = 'N/A';
         }
-        
+
         // Extract restaurant/pickup information - check order object first
         const restaurantName = order.merchant_name ||  // From DB if available
-                              rawData.merchant_name ||
-                              rawData.restaurant_name ||
-                              (rawData.restaurant && rawData.restaurant.name) ||
-                              (rawData.store && rawData.store.name) ||
-                              rawData.store_name ||
-                              'N/A';
-        
+            rawData.merchant_name ||
+            rawData.restaurant_name ||
+            (rawData.restaurant && rawData.restaurant.name) ||
+            (rawData.store && rawData.store.name) ||
+            rawData.store_name ||
+            'N/A';
+
         // Extract restaurant address - comprehensive extraction
         let restaurantAddress = rawData.restaurant_address ||
-                                 rawData.store_address ||
-                                 rawData.pickup_address ||
-                                 rawData.merchant_address ||
-                                 rawData.restaurant_street ||
-                                 '';
-        
+            rawData.store_address ||
+            rawData.pickup_address ||
+            rawData.merchant_address ||
+            rawData.restaurant_street ||
+            '';
+
         // If address is not a string, try to build from parts
         if (!restaurantAddress || restaurantAddress === '') {
             if (rawData.restaurant && rawData.restaurant.address) {
@@ -7034,22 +7027,22 @@ async function viewOrderDetails(orderId) {
                 restaurantAddress = parts.join(', ');
             }
         }
-        
+
         if (!restaurantAddress || restaurantAddress.trim() === '') {
             restaurantAddress = 'N/A';
         }
-        
+
         const restaurantPhone = rawData.restaurant_phone ||
-                               rawData.store_phone ||
-                               rawData.merchant_phone ||
-                               rawData.pickup_phone ||
-                               rawData.restaurant?.phone ||
-                               rawData.store?.phone ||
-                               (rawData.restaurant && rawData.restaurant.phone) ||
-                               (rawData.store && rawData.store.phone) ||
-                               order.store_phone ||
-                               'N/A';
-        
+            rawData.store_phone ||
+            rawData.merchant_phone ||
+            rawData.pickup_phone ||
+            rawData.restaurant?.phone ||
+            rawData.store?.phone ||
+            (rawData.restaurant && rawData.restaurant.phone) ||
+            (rawData.store && rawData.store.phone) ||
+            order.store_phone ||
+            'N/A';
+
         // Extract order items - prioritize parsed items from order object (actual DB data)
         let orderItems = [];
         try {
@@ -7077,7 +7070,7 @@ async function viewOrderDetails(orderId) {
             console.error('Error parsing items:', e);
             orderItems = [];
         }
-        
+
         // Calculate totals - get item subtotal first
         let itemsSubtotal = 0;
         orderItems.forEach(item => {
@@ -7085,7 +7078,7 @@ async function viewOrderDetails(orderId) {
             const unitPrice = parseFloat(item.price || item.unit_price || item.total_price || 0);
             itemsSubtotal += quantity * unitPrice;
         });
-        
+
         // Extract financial data - prioritize order.total_price (actual DB data)
         const tax = parseFloat(rawData.tax || rawData.tax_value || rawData.tax_amount || rawData.taxes || rawData.vat || 0);
         const deliveryFee = parseFloat(rawData.delivery_fee || rawData.deliveryFee || rawData.delivery?.fee || rawData.delivery_fees || rawData.shipping_fee || 0);
@@ -7096,102 +7089,102 @@ async function viewOrderDetails(orderId) {
         const total = parseFloat(order.total_price || 0) || parseFloat(rawData.total_price || rawData.total || rawData.order_total || 0) || (subtotal + tax + deliveryFee + tip - discount);
         // Use order.currency first (actual DB data)
         const currency = order.currency || rawData.currency || 'USD';
-        
+
         // Extract payment information - comprehensive extraction from multiple sources
         // First, try all possible field names in raw_data
         let paymentMethod = rawData.payment_method ||
-                            rawData.paymentMethod ||
-                            rawData.payment_type ||
-                            rawData.paymentType ||
-                            rawData.payment_method_type ||
-                            rawData.pay_method ||
-                            rawData.payMethod ||
-                            rawData.payment_info ||
-                            rawData.paymentInfo ||
-                            rawData.pay_type ||
-                            rawData.payType ||
-                            rawData.payment ||
-                            rawData.pay ||
-                            rawData.method ||
-                            rawData.payment_method_name ||
-                            rawData.paymentMethodName ||
-                            null;
-        
+            rawData.paymentMethod ||
+            rawData.payment_type ||
+            rawData.paymentType ||
+            rawData.payment_method_type ||
+            rawData.pay_method ||
+            rawData.payMethod ||
+            rawData.payment_info ||
+            rawData.paymentInfo ||
+            rawData.pay_type ||
+            rawData.payType ||
+            rawData.payment ||
+            rawData.pay ||
+            rawData.method ||
+            rawData.payment_method_name ||
+            rawData.paymentMethodName ||
+            null;
+
         // Try payment object if still not found
         if (!paymentMethod && rawData.payment) {
             const payment = typeof rawData.payment === 'string' ? (() => {
-                try { return JSON.parse(rawData.payment); } catch(e) { return null; }
+                try { return JSON.parse(rawData.payment); } catch (e) { return null; }
             })() : rawData.payment;
-            
+
             if (payment && typeof payment === 'object') {
-                paymentMethod = payment.method || 
-                               payment.type || 
-                               payment.payment_method ||
-                               payment.paymentMethod ||
-                               payment.payment_type ||
-                               payment.name ||
-                               payment.payment_name ||
-                               payment.paymentName ||
-                               null;
+                paymentMethod = payment.method ||
+                    payment.type ||
+                    payment.payment_method ||
+                    payment.paymentMethod ||
+                    payment.payment_type ||
+                    payment.name ||
+                    payment.payment_name ||
+                    payment.paymentName ||
+                    null;
             } else if (typeof payment === 'string') {
                 paymentMethod = payment;
             }
         }
-        
+
         // Try nested payment objects
         if (!paymentMethod && rawData.order && rawData.order.payment) {
             const orderPayment = typeof rawData.order.payment === 'string' ? (() => {
-                try { return JSON.parse(rawData.order.payment); } catch(e) { return null; }
+                try { return JSON.parse(rawData.order.payment); } catch (e) { return null; }
             })() : rawData.order.payment;
-            
+
             if (orderPayment && typeof orderPayment === 'object') {
-                paymentMethod = orderPayment.method || 
-                               orderPayment.type || 
-                               orderPayment.payment_method ||
-                               null;
+                paymentMethod = orderPayment.method ||
+                    orderPayment.type ||
+                    orderPayment.payment_method ||
+                    null;
             }
         }
-        
+
         // Try order.payment if available (from order object, not raw_data)
         if (!paymentMethod && order.payment) {
             const orderPayment = typeof order.payment === 'string' ? (() => {
-                try { return JSON.parse(order.payment); } catch(e) { return null; }
+                try { return JSON.parse(order.payment); } catch (e) { return null; }
             })() : order.payment;
-            
+
             if (orderPayment && typeof orderPayment === 'object') {
-                paymentMethod = orderPayment.method || 
-                               orderPayment.type || 
-                               orderPayment.payment_method ||
-                               null;
+                paymentMethod = orderPayment.method ||
+                    orderPayment.type ||
+                    orderPayment.payment_method ||
+                    null;
             } else if (typeof orderPayment === 'string') {
                 paymentMethod = orderPayment;
             }
         }
-        
+
         // Try checking common GloriaFood field names
         if (!paymentMethod) {
             // Check if there's a 'type' field that might indicate payment
-            if (rawData.type && (rawData.type.toLowerCase().includes('cash') || 
-                                 rawData.type.toLowerCase().includes('card') || 
-                                 rawData.type.toLowerCase().includes('pay'))) {
+            if (rawData.type && (rawData.type.toLowerCase().includes('cash') ||
+                rawData.type.toLowerCase().includes('card') ||
+                rawData.type.toLowerCase().includes('pay'))) {
                 paymentMethod = rawData.type;
             }
         }
-        
+
         // If still not found, check all keys in rawData for payment-related fields
         if (!paymentMethod && rawData) {
-            const paymentKeys = Object.keys(rawData).filter(key => 
-                key.toLowerCase().includes('pay') || 
+            const paymentKeys = Object.keys(rawData).filter(key =>
+                key.toLowerCase().includes('pay') ||
                 key.toLowerCase().includes('method') ||
                 key.toLowerCase().includes('cash') ||
                 key.toLowerCase().includes('card')
             );
-            
+
             // Debug: Log available payment-related keys
             if (paymentKeys.length > 0) {
                 console.log('[Payment Debug] Found payment-related keys:', paymentKeys);
             }
-            
+
             for (const key of paymentKeys) {
                 const value = rawData[key];
                 if (value && typeof value === 'string' && value.trim() !== '') {
@@ -7205,15 +7198,15 @@ async function viewOrderDetails(orderId) {
                 }
             }
         }
-        
+
         // Final fallback: Check if there's any field that looks like a payment method
         if (!paymentMethod || paymentMethod === 'N/A') {
             // Check common GloriaFood payment field patterns
             const commonPatterns = [
-                'payment', 'pay', 'method', 'type', 'payment_type', 
+                'payment', 'pay', 'method', 'type', 'payment_type',
                 'payment_method', 'pay_method', 'payment_info'
             ];
-            
+
             for (const pattern of commonPatterns) {
                 // Check exact match
                 if (rawData[pattern] && typeof rawData[pattern] === 'string' && rawData[pattern].trim() !== '') {
@@ -7233,7 +7226,7 @@ async function viewOrderDetails(orderId) {
                 if (paymentMethod && paymentMethod !== 'N/A') break;
             }
         }
-        
+
         // Debug: Log final result and available rawData keys if still N/A
         if (!paymentMethod || paymentMethod === 'N/A') {
             console.log('[Payment Debug] Payment method not found. Available rawData keys:', Object.keys(rawData).slice(0, 50));
@@ -7241,23 +7234,23 @@ async function viewOrderDetails(orderId) {
         } else {
             console.log('[Payment Debug] Final payment method:', paymentMethod);
         }
-        
+
         // Default to 'N/A' if still not found
         if (!paymentMethod || paymentMethod === 'null' || paymentMethod === 'undefined') {
             paymentMethod = 'N/A';
         }
-        
+
         // Format payment method for display (capitalize first letter, handle common values)
         if (paymentMethod !== 'N/A' && paymentMethod) {
             const pmLower = String(paymentMethod).toLowerCase().trim();
             if (pmLower === 'cash' || pmLower === 'cash_on_delivery' || pmLower === 'cod') {
                 paymentMethod = 'CASH';
-            } else if (pmLower === 'card' || pmLower === 'credit_card' || pmLower === 'creditcard' || 
-                      pmLower === 'debit_card' || pmLower === 'debitcard' || pmLower === 'credit' || 
-                      pmLower === 'debit') {
+            } else if (pmLower === 'card' || pmLower === 'credit_card' || pmLower === 'creditcard' ||
+                pmLower === 'debit_card' || pmLower === 'debitcard' || pmLower === 'credit' ||
+                pmLower === 'debit') {
                 paymentMethod = 'CARD';
             } else if (pmLower === 'online' || pmLower === 'online_payment' || pmLower === 'onlinepayment' ||
-                      pmLower === 'online_pay' || pmLower === 'web_payment') {
+                pmLower === 'online_pay' || pmLower === 'web_payment') {
                 paymentMethod = 'ONLINE';
             } else if (pmLower === 'paypal') {
                 paymentMethod = 'PAYPAL';
@@ -7271,84 +7264,84 @@ async function viewOrderDetails(orderId) {
                 paymentMethod = 'GOOGLE PAY';
             } else {
                 // Capitalize first letter of each word
-                paymentMethod = String(paymentMethod).split(/[_\s-]/).map(word => 
+                paymentMethod = String(paymentMethod).split(/[_\s-]/).map(word =>
                     word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
                 ).join(' ');
             }
         }
-        
+
         // Extract delivery instructions
         let deliveryInstructions = rawData.instructions ||
-                                   rawData.delivery_instructions ||
-                                   rawData.special_instructions ||
-                                   rawData.note ||
-                                   rawData.notes ||
-                                   rawData.customer_note ||
-                                   'N/A';
-        
+            rawData.delivery_instructions ||
+            rawData.special_instructions ||
+            rawData.note ||
+            rawData.notes ||
+            rawData.customer_note ||
+            'N/A';
+
         // Try delivery object if still N/A
         if (deliveryInstructions === 'N/A' && rawData.delivery && rawData.delivery.instructions) {
             deliveryInstructions = rawData.delivery.instructions;
         }
-        
+
         // Extract delivery note
         const deliveryNote = rawData.delivery_note ||
-                           rawData.deliveryNote ||
-                           rawData.note ||
-                           'N/A';
-        
+            rawData.deliveryNote ||
+            rawData.note ||
+            'N/A';
+
         // Extract delivery time (similar to createOrderRow logic)
         const deliveryObj = rawData.delivery || {};
         const scheduleObj = rawData.schedule || {};
         const timeObj = rawData.time || rawData.times || {};
-        
+
         let deliveryTime = order.estimated_delivery_time ||
-                          order.estimatedDeliveryTime ||
-                          order.delivery_time || 
-                          order.deliveryTime || 
-                          order.delivery_at ||
-                          order.deliveryAt ||
-                          order.delivery_datetime ||
-                          order.deliveryDateTime ||
-                          order.scheduled_delivery_time ||
-                          order.scheduledDeliveryTime ||
-                          rawData.delivery_time || 
-                          rawData.deliveryTime || 
-                          rawData.requested_delivery_time ||
-                          rawData.requestedDeliveryTime ||
-                          rawData.scheduled_delivery_time ||
-                          rawData.scheduledDeliveryTime ||
-                          rawData.delivery_at ||
-                          rawData.deliveryAt ||
-                          rawData.delivery_datetime ||
-                          rawData.deliveryDateTime ||
-                          rawData.requested_delivery_datetime ||
-                          rawData.estimated_delivery_time ||
-                          rawData.estimatedDeliveryTime ||
-                          rawData.preferred_delivery_time ||
-                          rawData.preferredDeliveryTime ||
-                          deliveryObj.delivery_time ||
-                          deliveryObj.deliveryTime ||
-                          deliveryObj.requested_delivery_time ||
-                          deliveryObj.requestedDeliveryTime ||
-                          deliveryObj.scheduled_delivery_time ||
-                          deliveryObj.scheduledDeliveryTime ||
-                          deliveryObj.delivery_at ||
-                          deliveryObj.deliveryAt ||
-                          scheduleObj.delivery_time ||
-                          scheduleObj.deliveryTime ||
-                          scheduleObj.requested_delivery_time ||
-                          scheduleObj.requestedDeliveryTime ||
-                          scheduleObj.scheduled_delivery_time ||
-                          timeObj.delivery ||
-                          timeObj.delivery_time ||
-                          null;
-        
+            order.estimatedDeliveryTime ||
+            order.delivery_time ||
+            order.deliveryTime ||
+            order.delivery_at ||
+            order.deliveryAt ||
+            order.delivery_datetime ||
+            order.deliveryDateTime ||
+            order.scheduled_delivery_time ||
+            order.scheduledDeliveryTime ||
+            rawData.delivery_time ||
+            rawData.deliveryTime ||
+            rawData.requested_delivery_time ||
+            rawData.requestedDeliveryTime ||
+            rawData.scheduled_delivery_time ||
+            rawData.scheduledDeliveryTime ||
+            rawData.delivery_at ||
+            rawData.deliveryAt ||
+            rawData.delivery_datetime ||
+            rawData.deliveryDateTime ||
+            rawData.requested_delivery_datetime ||
+            rawData.estimated_delivery_time ||
+            rawData.estimatedDeliveryTime ||
+            rawData.preferred_delivery_time ||
+            rawData.preferredDeliveryTime ||
+            deliveryObj.delivery_time ||
+            deliveryObj.deliveryTime ||
+            deliveryObj.requested_delivery_time ||
+            deliveryObj.requestedDeliveryTime ||
+            deliveryObj.scheduled_delivery_time ||
+            deliveryObj.scheduledDeliveryTime ||
+            deliveryObj.delivery_at ||
+            deliveryObj.deliveryAt ||
+            scheduleObj.delivery_time ||
+            scheduleObj.deliveryTime ||
+            scheduleObj.requested_delivery_time ||
+            scheduleObj.requestedDeliveryTime ||
+            scheduleObj.scheduled_delivery_time ||
+            timeObj.delivery ||
+            timeObj.delivery_time ||
+            null;
+
         // If date and time are separate, combine them
         if (!deliveryTime) {
             const deliveryDate = rawData.delivery_date || rawData.deliveryDate || deliveryObj.delivery_date || scheduleObj.delivery_date || rawData.scheduled_date || scheduleObj.scheduled_date || rawData.requested_delivery_date;
             const deliveryTimeOnly = rawData.delivery_time_only || rawData.deliveryTimeOnly || deliveryObj.delivery_time_only || scheduleObj.delivery_time_only || rawData.scheduled_time || scheduleObj.scheduled_time || rawData.requested_delivery_time_only;
-            
+
             if (deliveryDate && deliveryTimeOnly) {
                 deliveryTime = `${deliveryDate} ${deliveryTimeOnly}`;
             } else if (deliveryDate) {
@@ -7358,47 +7351,47 @@ async function viewOrderDetails(orderId) {
                 deliveryTime = `${today} ${deliveryTimeOnly}`;
             }
         }
-        
+
         // Also check if delivery time is in raw_data at root level
         if (!deliveryTime) {
             deliveryTime = rawData.delivery || rawData.delivery_datetime || rawData.deliveryDateTime ||
-                          rawData.requested_time || rawData.requestedTime ||
-                          rawData.preferred_time || rawData.preferredTime ||
-                          (rawData.times && rawData.times.delivery) ||
-                          (rawData.time && rawData.time.delivery) ||
-                          null;
+                rawData.requested_time || rawData.requestedTime ||
+                rawData.preferred_time || rawData.preferredTime ||
+                (rawData.times && rawData.times.delivery) ||
+                (rawData.time && rawData.time.delivery) ||
+                null;
         }
-        
+
         // Extract timeline information - use actual order timestamps from DB
         const orderPlacedTime = formatDateShipday(order.fetched_at || order.created_at || order.updated_at || rawData.created_at || rawData.order_date);
         const requestedDeliveryTime = deliveryTime ? formatDateShipday(deliveryTime) : 'N/A';
-        
+
         // Format timeline dates
         const formatTimelineDate = (dateStr) => {
             if (!dateStr || dateStr === 'N/A') return 'N/A';
             return formatDateShipday(dateStr);
         };
-        
+
         const orderAcceptTime = formatTimelineDate(rawData.accepted_at || rawData.accept_time || rawData.order_accept_time);
         const orderPickupTime = formatTimelineDate(rawData.picked_up_at || rawData.pickup_time || rawData.order_pickup_time);
         const orderDeliveryTime = formatTimelineDate(rawData.delivered_at || rawData.delivery_time || rawData.order_delivery_time);
         const orderCompletionTime = formatTimelineDate(rawData.completed_at || rawData.completion_time || rawData.order_completion_time);
-        
+
         // Get driver information - check DoorDash data too
         // Use parsed doordashData if available, otherwise try to parse
         if (!doordashData) {
             doordashData = rawData.doordash_data || rawData.doordash_response || {};
         }
-        
+
         let driverName = order.driver_name ||  // Check order object first
-                         rawData.driver_name ||
-                         'Not assigned';
-        
+            rawData.driver_name ||
+            'Not assigned';
+
         // Try driver object if still not assigned
         if (driverName === 'Not assigned' && rawData.driver) {
             driverName = rawData.driver.name || 'Not assigned';
         }
-        
+
         // Try DoorDash data if still not assigned
         if (driverName === 'Not assigned' && doordashData) {
             if (doordashData.driver && doordashData.driver.name) {
@@ -7409,19 +7402,19 @@ async function viewOrderDetails(orderId) {
                 driverName = 'Assigned via DoorDash';
             }
         }
-        
+
         // Get status - use same logic as createOrderRow to match table display
         // Check DoorDash status from response data
         let doordashStatus = null;
         if (doordashData) {
-            doordashStatus = doordashData.status || 
-                            doordashData.delivery_status || 
-                            doordashData.state ||
-                            doordashData.delivery?.status ||
-                            doordashData.delivery?.delivery_status ||
-                            null;
+            doordashStatus = doordashData.status ||
+                doordashData.delivery_status ||
+                doordashData.state ||
+                doordashData.delivery?.status ||
+                doordashData.delivery?.delivery_status ||
+                null;
         }
-        
+
         // If order was sent to DoorDash, use DoorDash status
         let status = (order.status || 'UNKNOWN').toUpperCase();
         if (order.sent_to_doordash || order.doordash_order_id || doordashData) {
@@ -7447,10 +7440,10 @@ async function viewOrderDetails(orderId) {
                 status = 'PENDING';
             }
         }
-        
+
         // Check for proof of delivery - check multiple sources
         let hasPOD = false;
-        if (rawData.proof_of_delivery || rawData.proofOfDelivery || rawData.pod || 
+        if (rawData.proof_of_delivery || rawData.proofOfDelivery || rawData.pod ||
             rawData.proof_of_delivery_image || rawData.delivery_proof) {
             hasPOD = true;
         } else if (doordashData && (doordashData.proof_of_delivery || doordashData.pod)) {
@@ -7458,7 +7451,7 @@ async function viewOrderDetails(orderId) {
         } else if (order.status && ['DELIVERED', 'COMPLETED'].includes(String(order.status).toUpperCase())) {
             hasPOD = true;
         }
-        
+
         // Create modal HTML
         const modalHTML = `
             <div id="orderDetailsModal" class="modal">
@@ -7498,24 +7491,24 @@ async function viewOrderDetails(orderId) {
                             <h3 style="font-size: 16px; font-weight: 600; color: #0f172a; margin-bottom: 16px;">Order</h3>
                             <div style="margin-bottom: 16px;">
                                 ${orderItems.length > 0 ? orderItems.map((item, idx) => {
-                                    const itemName = item.name || item.product_name || item.title || item.item_name || 'Unknown Item';
-                                    const quantity = item.quantity || 1;
-                                    const unitPrice = parseFloat(item.price || item.unit_price || item.total_price || 0);
-                                    const totalPrice = quantity * unitPrice;
-                                    const modifiers = item.variations || item.options || item.modifiers || [];
-                                    const modifierText = modifiers.length > 0 ? modifiers.map(m => {
-                                        const modName = m.name || m.title || m.option_name || '';
-                                        const modValue = m.value || m.option_value || '';
-                                        return modValue ? `${modName}: ${modValue}` : modName;
-                                    }).join(', ') : '';
-                                    return `
+            const itemName = item.name || item.product_name || item.title || item.item_name || 'Unknown Item';
+            const quantity = item.quantity || 1;
+            const unitPrice = parseFloat(item.price || item.unit_price || item.total_price || 0);
+            const totalPrice = quantity * unitPrice;
+            const modifiers = item.variations || item.options || item.modifiers || [];
+            const modifierText = modifiers.length > 0 ? modifiers.map(m => {
+                const modName = m.name || m.title || m.option_name || '';
+                const modValue = m.value || m.option_value || '';
+                return modValue ? `${modName}: ${modValue}` : modName;
+            }).join(', ') : '';
+            return `
                                         <div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: ${idx < orderItems.length - 1 ? '1px solid #e2e8f0' : 'none'};">
                                             <div style="font-weight: 500; color: #0f172a; margin-bottom: 4px;">${quantity} x ${escapeHtml(itemName)}</div>
                                             ${modifierText ? `<div style="font-size: 13px; color: #64748b; margin-top: 4px; margin-bottom: 4px;">${escapeHtml(modifierText)}</div>` : ''}
                                             <div style="font-weight: 600; color: #0f172a;">${formatCurrency(totalPrice, currency)}</div>
                                         </div>
                                     `;
-                                }).join('') : '<div style="color: #64748b;">No items found</div>'}
+        }).join('') : '<div style="color: #64748b;">No items found</div>'}
                             </div>
                             <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; margin-top: 16px;">
                                 <div style="display: flex; justify-content: space-between; margin-bottom: 8px; color: #475569;">
@@ -7581,30 +7574,30 @@ async function viewOrderDetails(orderId) {
                 </div>
             </div>
         `;
-        
+
         // Remove existing modal if any
         const existingModal = document.getElementById('orderDetailsModal');
         if (existingModal) {
             existingModal.remove();
         }
-        
+
         // Insert modal into body
         document.body.insertAdjacentHTML('beforeend', modalHTML);
-        
+
         const modal = document.getElementById('orderDetailsModal');
         const closeBtn = document.getElementById('closeOrderDetailsModal');
-        
+
         // Close modal function
         const closeModal = () => {
             modal.remove();
         };
-        
+
         // Close handlers
         closeBtn.addEventListener('click', closeModal);
         modal.addEventListener('click', (e) => {
             if (e.target === modal) closeModal();
         });
-        
+
         // Close on Escape key
         document.addEventListener('keydown', function escapeHandler(e) {
             if (e.key === 'Escape' && modal && document.body.contains(modal)) {
@@ -7612,7 +7605,7 @@ async function viewOrderDetails(orderId) {
                 document.removeEventListener('keydown', escapeHandler);
             }
         });
-        
+
     } catch (error) {
         console.error('Error loading order details:', error);
         showNotification('Error', 'Failed to load order details: ' + error.message, 'error');
@@ -7630,14 +7623,14 @@ async function deleteOrder(orderId) {
     if (!confirm(`Are you sure you want to delete Order #${orderId}?`)) {
         return;
     }
-    
+
     try {
         const response = await authenticatedFetch(`${API_BASE}/orders/${orderId}`, {
             method: 'DELETE'
         });
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
             showNotification('Success', `Order #${orderId} deleted successfully`);
             // Reload orders
@@ -7659,21 +7652,21 @@ async function toggleReadyForPickup(orderId, isReady) {
         // Store in localStorage for persistence
         const readyStatusKey = `order_ready_${orderId}`;
         localStorage.setItem(readyStatusKey, isReady ? 'true' : 'false');
-        
+
         // Update the order in the current display
         const orderRow = document.querySelector(`tr[data-order-id="${orderId}"]`);
         if (orderRow) {
             // Visual feedback
             showNotification('Success', `Order #${orderId} marked as ${isReady ? 'ready' : 'not ready'} for pickup`);
         }
-        
+
         // Try to update via API if endpoint exists
         try {
             const response = await authenticatedFetch(`${API_BASE}/orders/${orderId}`, {
                 method: 'PUT',
                 body: JSON.stringify({ ready_for_pickup: isReady })
             });
-            
+
             const data = await response.json();
             if (data.success) {
                 // Success - reload orders
@@ -7700,32 +7693,32 @@ window.toggleReadyForPickup = toggleReadyForPickup;
 // Delete selected orders
 async function deleteSelectedOrders() {
     const checkboxes = document.querySelectorAll('.order-checkbox:checked');
-    
+
     if (checkboxes.length === 0) {
         showNotification('Info', 'Please select at least one order to delete', 'info');
         return;
     }
-    
+
     const orderIds = Array.from(checkboxes).map(cb => cb.value);
     const count = orderIds.length;
-    
+
     if (!confirm(`Are you sure you want to delete ${count} order(s)? This action cannot be undone.`)) {
         return;
     }
-    
+
     try {
         let successCount = 0;
         let failCount = 0;
-        
+
         // Delete orders one by one
         for (const orderId of orderIds) {
             try {
                 const response = await authenticatedFetch(`${API_BASE}/orders/${orderId}`, {
                     method: 'DELETE'
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.success) {
                     successCount++;
                 } else {
@@ -7737,7 +7730,7 @@ async function deleteSelectedOrders() {
                 console.error(`Error deleting order ${orderId}:`, error);
             }
         }
-        
+
         if (successCount > 0) {
             showNotification('Success', `Successfully deleted ${successCount} order(s)${failCount > 0 ? `. ${failCount} failed.` : ''}`);
             // Reload orders
