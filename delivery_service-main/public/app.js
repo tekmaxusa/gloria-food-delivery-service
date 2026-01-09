@@ -49,6 +49,21 @@ function authenticatedFetch(url, options = {}) {
         ...options,
         headers: headers,
         credentials: 'include'
+    }).then(response => {
+        // Handle 401 (Unauthorized) globally - session expired or invalid
+        if (response.status === 401) {
+            console.warn('Authentication failed (401), session expired. Redirecting to login...');
+            saveSessionId(null);
+            currentUser = null;
+            sessionId = null;
+            showLogin();
+            // Return a rejected promise to prevent further processing
+            return Promise.reject(new Error('Session expired. Please login again.'));
+        }
+        return response;
+    }).catch(error => {
+        // Re-throw the error so callers can handle it if needed
+        throw error;
     });
 }
 
@@ -1509,9 +1524,45 @@ async function fetchSalesReport() {
 
 // Fetch orders report data
 async function fetchOrdersReport() {
-    const response = await authenticatedFetch(`${API_BASE}/orders?limit=1000`);
-    const data = await response.json();
-    return data.orders || data || [];
+    const [ordersResponse, merchantsResponse] = await Promise.all([
+        authenticatedFetch(`${API_BASE}/orders?limit=1000`),
+        authenticatedFetch(`${API_BASE}/merchants`).catch(() => null)
+    ]);
+    
+    const ordersData = await ordersResponse.json();
+    const orders = ordersData.orders || ordersData || [];
+    
+    // Get merchants map for enrichment
+    let merchantsMap = new Map();
+    if (merchantsResponse) {
+        try {
+            const merchantsData = await merchantsResponse.json();
+            if (merchantsData.success && merchantsData.merchants) {
+                merchantsData.merchants.forEach(merchant => {
+                    if (merchant.store_id && merchant.merchant_name) {
+                        merchantsMap.set(merchant.store_id, merchant.merchant_name);
+                    }
+                });
+            }
+        } catch (e) {
+            console.error('Error parsing merchants:', e);
+        }
+    }
+    
+    // Enrich orders with merchant names from merchants table
+    return orders.map(order => {
+        // If order doesn't have valid merchant_name, get from merchants map
+        if (!order.merchant_name || 
+            order.merchant_name === order.store_id || 
+            order.merchant_name.startsWith('Merchant ') ||
+            order.merchant_name === 'Unknown Merchant' ||
+            order.merchant_name === 'N/A') {
+            if (order.store_id && merchantsMap.has(order.store_id)) {
+                order.merchant_name = merchantsMap.get(order.store_id);
+            }
+        }
+        return order;
+    });
 }
 
 // Fetch revenue report data
@@ -1681,10 +1732,15 @@ function renderOrdersReport(orders) {
                 <tbody>
                     ${orders.length === 0 ? '<tr><td colspan="7" class="empty-state-cell"><div class="empty-state"><div class="empty-state-text">No orders available</div></div></td></tr>' :
             orders.slice(0, 100).map(order => {
-                // Backend should provide merchant_name from merchants table
-                // Only use fallback if merchant_name is missing or is a fallback pattern
+                // Use merchant_name from enriched order data
                 let merchantName = order.merchant_name;
-                if (!merchantName || merchantName === order.store_id || merchantName.startsWith('Merchant ')) {
+                
+                // Only show N/A if merchant_name is truly missing or is a fallback
+                if (!merchantName || 
+                    merchantName === order.store_id || 
+                    merchantName.startsWith('Merchant ') ||
+                    merchantName === 'Unknown Merchant' ||
+                    merchantName === 'N/A') {
                     merchantName = 'N/A';
                 }
                 merchantName = escapeHtml(merchantName);
@@ -3064,31 +3120,58 @@ async function getBusinessSettingsContent() {
         console.error('Error fetching merchant:', error);
     }
 
-    // Get business name - use same logic as dashboard
+    // Get business name - prioritize merchant_name from merchants table, then from orders
     let businessName = 'Not set';
     if (merchant) {
-        // Check if merchant_name is valid (not empty, not null, and not the same as store_id)
+        // First, check if merchant_name in merchants table is valid
         if (merchant.merchant_name &&
             merchant.merchant_name.trim() !== '' &&
             merchant.merchant_name !== merchant.store_id &&
-            merchant.merchant_name.toLowerCase() !== merchant.store_id.toLowerCase()) {
-            businessName = merchant.merchant_name;
+            merchant.merchant_name.toLowerCase() !== merchant.store_id.toLowerCase() &&
+            !merchant.merchant_name.startsWith('Merchant ') &&
+            merchant.merchant_name !== 'Unknown Merchant' &&
+            merchant.merchant_name !== 'N/A') {
+            businessName = merchant.merchant_name.trim();
         } else {
-            // If merchant_name is missing or equals store_id, try to get it from orders
+            // If merchant_name is missing or invalid, try to get it from orders
             try {
                 const ordersResponse = await authenticatedFetch(`${API_BASE}/orders?limit=100&store_id=${encodeURIComponent(merchant.store_id)}`);
                 const ordersData = await ordersResponse.json();
                 if (ordersData.success && ordersData.orders && ordersData.orders.length > 0) {
-                    // Find an order with merchant_name that's different from store_id
+                    // Find an order with merchant_name that's different from store_id and not a fallback
                     const orderWithMerchant = ordersData.orders.find(o =>
                         o.store_id === merchant.store_id &&
                         o.merchant_name &&
                         o.merchant_name.trim() !== '' &&
                         o.merchant_name !== merchant.store_id &&
-                        o.merchant_name.toLowerCase() !== merchant.store_id.toLowerCase()
+                        o.merchant_name.toLowerCase() !== merchant.store_id.toLowerCase() &&
+                        !o.merchant_name.startsWith('Merchant ') &&
+                        o.merchant_name !== 'Unknown Merchant' &&
+                        o.merchant_name !== 'N/A'
                     );
                     if (orderWithMerchant && orderWithMerchant.merchant_name) {
-                        businessName = orderWithMerchant.merchant_name;
+                        businessName = orderWithMerchant.merchant_name.trim();
+                    } else {
+                        // Last resort: try to get from raw_data
+                        for (const order of ordersData.orders) {
+                            try {
+                                const rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : (order.raw_data || {});
+                                const merchantNameFromRaw = rawData.merchant_name || 
+                                                          rawData.restaurant?.name || 
+                                                          rawData.store?.name ||
+                                                          rawData.restaurant_name ||
+                                                          rawData.store_name;
+                                if (merchantNameFromRaw && 
+                                    merchantNameFromRaw.trim() !== '' &&
+                                    merchantNameFromRaw !== merchant.store_id &&
+                                    !merchantNameFromRaw.startsWith('Merchant ')) {
+                                    businessName = merchantNameFromRaw.trim();
+                                    break;
+                                }
+                            } catch (e) {
+                                // Ignore parsing errors
+                            }
+                        }
                     }
                 }
             } catch (e) {
