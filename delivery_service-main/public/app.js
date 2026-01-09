@@ -5922,16 +5922,15 @@ function displayOrders(orders) {
     try {
         // Use DocumentFragment for faster DOM updates
         const fragment = document.createDocumentFragment();
-        const tempDiv = document.createElement('div');
+        // Use template element which can hold tr tags without stripping them
+        const template = document.createElement('template');
 
         // Build HTML string
         const rowsHtml = orders.map(order => createOrderRow(order)).join('');
-        tempDiv.innerHTML = rowsHtml;
+        template.innerHTML = rowsHtml;
 
         // Move all rows to fragment
-        while (tempDiv.firstChild) {
-            fragment.appendChild(tempDiv.firstChild);
-        }
+        fragment.appendChild(template.content);
 
         // Clear and append in one operation
         tbody.innerHTML = '';
