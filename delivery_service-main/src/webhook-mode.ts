@@ -286,9 +286,11 @@ class GloriaFoodWebhookServer {
               };
               
               // Update order with enriched raw_data
+              // Ensure merchant_name is preserved from original orderData
               await this.handleAsync(this.database.insertOrUpdateOrder({
                 ...orderData,
-                raw_data: rawData
+                raw_data: rawData,
+                merchant_name: orderData.merchant_name // Preserve merchant_name if it was set earlier
               }));
               console.log(chalk.green(`✅ Saved DoorDash response data to order ${orderId} for accurate distance`));
             }

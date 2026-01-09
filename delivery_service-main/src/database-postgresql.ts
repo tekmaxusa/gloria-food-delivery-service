@@ -542,8 +542,24 @@ export class OrderDatabasePostgreSQL {
       const deliveryAddress = this.extractDeliveryAddress(orderData);
       const scheduledDeliveryTime = this.extractScheduledDeliveryTime(orderData);
 
-      // Extract merchant_name from orderData if provided, otherwise will be set from merchants table
-      const merchantName = orderData.merchant_name || orderData.merchantName || null;
+      // Extract merchant_name from orderData if provided, otherwise look it up from merchants table
+      let merchantName = orderData.merchant_name || orderData.merchantName || null;
+      
+      // If merchant_name is not provided, look it up from merchants table using store_id
+      if (!merchantName) {
+        const storeId = orderData.store_id?.toString() || orderData.restaurant_id?.toString();
+        if (storeId) {
+          try {
+            const merchant = await this.getMerchantByStoreId(storeId);
+            if (merchant && merchant.merchant_name) {
+              merchantName = merchant.merchant_name;
+            }
+          } catch (error) {
+            // If lookup fails, continue without merchant_name
+            console.log(`Could not lookup merchant_name for store_id ${storeId}: ${error}`);
+          }
+        }
+      }
 
       const order: Order = {
         id: '',
@@ -587,7 +603,8 @@ export class OrderDatabasePostgreSQL {
           updated_at = EXCLUDED.updated_at,
           fetched_at = EXCLUDED.fetched_at,
           raw_data = EXCLUDED.raw_data,
-          merchant_name = COALESCE(EXCLUDED.merchant_name, orders.merchant_name)
+          merchant_name = COALESCE(EXCLUDED.merchant_name, orders.merchant_name),
+          store_id = EXCLUDED.store_id
         RETURNING *
       `, [
         order.gloriafood_order_id,
