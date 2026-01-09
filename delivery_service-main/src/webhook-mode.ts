@@ -587,6 +587,7 @@ class GloriaFoodWebhookServer {
         return;
       }
 
+      console.log(chalk.blue(`🔄 Syncing DoorDash status for ${ordersToCheck.length} order(s)...`));
       let updateCount = 0;
 
       for (const order of ordersToCheck) {
@@ -642,6 +643,9 @@ class GloriaFoodWebhookServer {
           }
 
           const normalizedStatus = (ddStatus.status || '').toLowerCase();
+          
+          // Log the status we got from DoorDash for debugging
+          console.log(chalk.gray(`  📊 Order #${order.gloriafood_order_id}: DoorDash status = "${ddStatus.status}" (normalized: "${normalizedStatus}")`));
 
           // Update order status if DoorDash shows cancelled
           if (normalizedStatus === 'cancelled' || normalizedStatus === 'canceled') {
@@ -1404,6 +1408,24 @@ class GloriaFoodWebhookServer {
     });
 
     // Dashboard stats endpoint
+    // Manual DoorDash sync endpoint - trigger sync immediately
+    this.app.post('/api/sync/doordash', async (req: Request, res: Response) => {
+      try {
+        console.log(chalk.cyan('\n🔄 Manual DoorDash sync triggered'));
+        await this.syncDoorDashStatuses();
+        res.json({ 
+          success: true, 
+          message: 'DoorDash sync completed' 
+        });
+      } catch (error: any) {
+        console.error(chalk.red('Error in manual DoorDash sync:'), error);
+        res.status(500).json({ 
+          success: false, 
+          error: error.message 
+        });
+      }
+    });
+
     this.app.get('/api/dashboard/stats', async (req: Request, res: Response) => {
       try {
         const stats = await this.handleAsync(this.database.getDashboardStats());

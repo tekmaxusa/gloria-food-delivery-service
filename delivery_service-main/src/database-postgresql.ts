@@ -1073,9 +1073,15 @@ export class OrderDatabasePostgreSQL {
   async getPendingDoorDashOrders(limit: number = 50): Promise<Order[]> {
     try {
       const client = await this.pool.connect();
+      // Check for orders that have been sent to DoorDash (by any indicator)
+      // Include orders with doordash_order_id, sent_to_doordash flag, or doordash_tracking_url
       const result = await client.query(
         `SELECT * FROM orders 
-         WHERE (doordash_order_id IS NOT NULL OR sent_to_doordash = 1)
+         WHERE (
+           doordash_order_id IS NOT NULL 
+           OR sent_to_doordash = TRUE 
+           OR doordash_tracking_url IS NOT NULL
+         )
            AND status NOT IN ('CANCELLED', 'CANCELED', 'DELIVERED', 'COMPLETED')
          ORDER BY fetched_at DESC
          LIMIT $1`,
