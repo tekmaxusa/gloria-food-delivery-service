@@ -1866,12 +1866,28 @@ class GloriaFoodWebhookServer {
             client.release();
             res.json({ success: true, settings });
           } catch (error: any) {
-            client.release();
-            // If settings table doesn't exist, return empty settings instead of error
+            // If settings table doesn't exist, create it and return empty settings
             if (error.code === '42P01' || error.message?.includes('does not exist')) {
-              console.log(chalk.yellow('   ⚠️  Settings table does not exist, returning empty settings'));
-              return res.json({ success: true, settings: {} });
+              try {
+                await client.query(`
+                  CREATE TABLE IF NOT EXISTS settings (
+                    id SERIAL PRIMARY KEY,
+                    key VARCHAR(255) UNIQUE NOT NULL,
+                    value TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                  )
+                `);
+                await client.query('CREATE INDEX IF NOT EXISTS idx_settings_key ON settings(key)');
+                client.release();
+                return res.json({ success: true, settings: {} });
+              } catch (createError: any) {
+                client.release();
+                // If creation fails, still return empty settings
+                return res.json({ success: true, settings: {} });
+              }
             }
+            client.release();
             throw error;
           }
         } else {
@@ -1880,7 +1896,6 @@ class GloriaFoodWebhookServer {
       } catch (error: any) {
         // If settings table doesn't exist, return empty settings instead of error
         if (error.code === '42P01' || error.message?.includes('does not exist')) {
-          console.log(chalk.yellow('   ⚠️  Settings table does not exist, returning empty settings'));
           return res.json({ success: true, settings: {} });
         }
         console.error('Error fetching settings:', error);
@@ -1958,11 +1973,27 @@ class GloriaFoodWebhookServer {
               res.json({ success: true, value: null });
             }
           } catch (error: any) {
-            client.release();
-            // If settings table doesn't exist, return null instead of error
+            // If settings table doesn't exist, create it and return null
             if (error.code === '42P01' || error.message?.includes('does not exist')) {
-              return res.json({ success: true, value: null });
+              try {
+                await client.query(`
+                  CREATE TABLE IF NOT EXISTS settings (
+                    id SERIAL PRIMARY KEY,
+                    key VARCHAR(255) UNIQUE NOT NULL,
+                    value TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                  )
+                `);
+                await client.query('CREATE INDEX IF NOT EXISTS idx_settings_key ON settings(key)');
+                client.release();
+                return res.json({ success: true, value: null });
+              } catch (createError: any) {
+                client.release();
+                return res.json({ success: true, value: null });
+              }
             }
+            client.release();
             throw error;
           }
         } else {
