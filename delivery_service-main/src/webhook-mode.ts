@@ -1327,30 +1327,93 @@ class GloriaFoodWebhookServer {
 
         // If ready_for_pickup is being set to true and order has DoorDash delivery, notify DoorDash
         if (ready_for_pickup === true && this.doorDashClient) {
-          const doorDashId = (order as any).doordash_order_id;
+          // Try to get DoorDash delivery ID from multiple sources
+          let doorDashId = (order as any).doordash_order_id;
+          
+          // If not found, try to extract from raw_data
+          if (!doorDashId && order.raw_data) {
+            try {
+              const rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+              // Check for delivery_id in doordash_data (this is the actual DoorDash delivery ID)
+              if (rawData.doordash_data) {
+                const doordashData = typeof rawData.doordash_data === 'string' ? JSON.parse(rawData.doordash_data) : rawData.doordash_data;
+                doorDashId = doordashData.delivery_id || doordashData.id || doordashData.deliveryId;
+              }
+              // Fallback to other fields
+              if (!doorDashId) {
+                doorDashId = rawData.doordash_order_id || rawData.doordashOrderId || rawData.delivery_id;
+              }
+            } catch (e) {
+              // Ignore parsing errors
+            }
+          }
+          
+          // Extract from tracking URL if still not found
+          if (!doorDashId && (order as any).doordash_tracking_url) {
+            const trackingUrl = (order as any).doordash_tracking_url;
+            const urlMatch = trackingUrl.match(/deliveries\/([^\/\?]+)/i) || trackingUrl.match(/delivery\/([^\/\?]+)/i);
+            if (urlMatch && urlMatch[1]) {
+              doorDashId = urlMatch[1];
+            }
+          }
+          
           if (doorDashId) {
             try {
               await this.doorDashClient.notifyReadyForPickup(doorDashId);
-              console.log(chalk.green(`✅ Notified DoorDash rider that order #${orderId} is ready for pickup`));
+              console.log(chalk.green(`✅ Notified DoorDash rider that order #${orderId} is ready for pickup (delivery ID: ${doorDashId})`));
             } catch (ddError: any) {
-              console.log(chalk.yellow(`⚠️  Could not notify DoorDash for order #${orderId}: ${ddError.message}`));
+              // Check if it's a 404 (delivery not found) - this is expected if delivery hasn't been created yet
+              if (ddError.message && (ddError.message.includes('404') || ddError.message.includes('unknown_delivery_id'))) {
+                console.log(chalk.yellow(`⚠️  Order #${orderId} not found in DoorDash (delivery may not be created yet). Skipping notification.`));
+              } else {
+                console.log(chalk.yellow(`⚠️  Could not notify DoorDash for order #${orderId}: ${ddError.message}`));
+              }
               // Continue with update even if DoorDash notification fails
             }
+          } else {
+            console.log(chalk.gray(`ℹ️  Order #${orderId} does not have a DoorDash delivery ID. Skipping DoorDash notification.`));
           }
         }
 
-        // Update order in database
-        const updated = await this.handleAsync(
-          this.database.insertOrUpdateOrder({
-            ...order,
-            ready_for_pickup: ready_for_pickup ? new Date().toISOString() : null
-          } as any)
-        );
-
-        if (updated) {
-          res.json({ success: true, order: updated });
-        } else {
-          res.status(500).json({ success: false, error: 'Failed to update order' });
+        // Update order in database - only update ready_for_pickup field, don't recreate the order
+        // Use a direct UPDATE query to avoid recreating the order
+        try {
+          const db = this.database as any;
+          if (db.pool) {
+            // PostgreSQL - use pool directly
+            const client = await db.pool.connect();
+            try {
+              await client.query(
+                `UPDATE orders SET ready_for_pickup = $1, updated_at = NOW() WHERE gloriafood_order_id = $2`,
+                [ready_for_pickup ? new Date().toISOString() : null, orderId]
+              );
+              client.release();
+            } catch (dbError: any) {
+              client.release();
+              throw dbError;
+            }
+          } else if (db.updateOrderReadyForPickup) {
+            // Use database method if available
+            await this.handleAsync(db.updateOrderReadyForPickup(orderId, ready_for_pickup ? new Date().toISOString() : null));
+          } else {
+            // Fallback: update only the ready_for_pickup field in the order object
+            const updatedOrder = {
+              ...order,
+              ready_for_pickup: ready_for_pickup ? new Date().toISOString() : null
+            };
+            await this.handleAsync(this.database.insertOrUpdateOrder(updatedOrder as any));
+          }
+          
+          // Fetch updated order
+          const updated = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId));
+          if (updated) {
+            res.json({ success: true, order: updated });
+          } else {
+            res.status(500).json({ success: false, error: 'Failed to fetch updated order' });
+          }
+        } catch (dbError: any) {
+          console.error('Database update error:', dbError);
+          throw dbError;
         }
       } catch (error: any) {
         console.error('Error updating order:', error);

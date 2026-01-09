@@ -7255,12 +7255,34 @@ async function toggleReadyForPickup(orderId, isReady) {
 
             const data = await response.json();
             if (data.success) {
-                // Success - reload orders
-                loadOrders();
+                // Update the order in the current display without reloading all orders
+                const orderRow = document.querySelector(`tr[data-order-id="${orderId}"]`);
+                if (orderRow) {
+                    // Update the ready for pickup display in the row
+                    const readyCell = orderRow.querySelector('.ready-for-pickup-cell');
+                    if (readyCell) {
+                        // Update the switch state
+                        const switchInput = readyCell.querySelector('input[type="checkbox"]');
+                        if (switchInput) {
+                            switchInput.checked = isReady;
+                        }
+                    }
+                }
+                // Don't reload all orders - just update the display
+                showNotification('Success', `Order #${orderId} marked as ${isReady ? 'ready' : 'not ready'} for pickup`, 'success');
+            } else {
+                showError(data.error || 'Failed to update order');
             }
         } catch (apiError) {
-            // API update failed, but local state is updated
-            console.log('API update not available, using local state only');
+            // Check if it's an authentication error
+            if (apiError.message && apiError.message.includes('Session expired')) {
+                // Already handled by authenticatedFetch - just log
+                console.log('Session expired, user will be redirected to login');
+            } else {
+                // API update failed, but local state is updated
+                console.log('API update not available, using local state only:', apiError.message);
+                // Don't show error for network issues - local state is still updated
+            }
         }
     } catch (error) {
         console.error('Error toggling ready for pickup:', error);
