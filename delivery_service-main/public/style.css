@@ -361,33 +361,17 @@ body.on-profile-page .nav-link:hover {
     border: 1px solid #e2e8f0;
 }
 
-.table-container::-webkit-scrollbar {
-    height: 8px;
-}
-
-.table-container::-webkit-scrollbar-track {
-    background: #f1f5f9;
-    border-radius: 4px;
-}
-
-.table-container::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 4px;
-}
-
-.table-container::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
-}
-
 .orders-table {
     width: 100%;
     border-collapse: collapse;
+    display: table;
     table-layout: auto;
 }
 
 .orders-table thead {
     background: #f8fafc;
     border-bottom: 2px solid #e2e8f0;
+    display: table-header-group;
 }
 
 .orders-table th {
@@ -398,27 +382,8 @@ body.on-profile-page .nav-link:hover {
     color: #475569;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    white-space: nowrap;
+    display: table-cell;
     vertical-align: middle;
-}
-
-/* Column header alignment to match cells */
-.orders-table th:nth-child(1) {
-    text-align: center;
-}
-
-.orders-table th:nth-child(5) {
-    text-align: right;
-}
-
-.orders-table th:nth-child(6),
-.orders-table th:nth-child(9),
-.orders-table th:nth-child(10),
-.orders-table th:nth-child(11),
-.orders-table th:nth-child(12),
-.orders-table th:nth-child(13),
-.orders-table th:nth-child(14) {
-    text-align: center;
 }
 
 .orders-table th.sortable {
@@ -457,9 +422,14 @@ body.on-profile-page .nav-link:hover {
     text-align: center;
 }
 
+.orders-table tbody {
+    display: table-row-group;
+}
+
 .orders-table tbody tr {
     border-bottom: 1px solid #f1f5f9;
     transition: all 0.15s ease;
+    display: table-row;
 }
 
 .orders-table tbody tr:hover {
@@ -475,6 +445,7 @@ body.on-profile-page .nav-link:hover {
     font-size: 14px;
     color: #334155;
     position: relative;
+    display: table-cell;
     vertical-align: middle;
     white-space: nowrap;
 }
@@ -483,75 +454,33 @@ body.on-profile-page .nav-link:hover {
     text-align: center;
 }
 
-/* Column-specific alignment */
-.orders-table td:nth-child(2) {
-    /* Order No. */
-    white-space: nowrap;
-    font-weight: 600;
-}
-
-.orders-table td:nth-child(3) {
-    /* C. Name */
-    white-space: nowrap;
-    max-width: 150px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
+.orders-table td:nth-child(3),
 .orders-table td:nth-child(4) {
-    /* C. Address */
+    white-space: normal;
     max-width: 200px;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
 }
 
+/* Column-specific alignments */
+.orders-table th:nth-child(5),
 .orders-table td:nth-child(5) {
-    /* Amount */
     text-align: right;
-    font-weight: 600;
-    white-space: nowrap;
 }
 
-.orders-table td:nth-child(6) {
-    /* Distance */
-    text-align: center;
-    white-space: nowrap;
-}
-
-.orders-table td:nth-child(7),
-.orders-table td:nth-child(8) {
-    /* Placement Time, Est. Delivery Time */
-    white-space: nowrap;
-}
-
-.orders-table td:nth-child(9) {
-    /* Elapsed Time */
-    text-align: center;
-    white-space: nowrap;
-}
-
+.orders-table th:nth-child(6),
+.orders-table td:nth-child(6),
+.orders-table th:nth-child(9),
+.orders-table td:nth-child(9),
+.orders-table th:nth-child(10),
 .orders-table td:nth-child(10),
-.orders-table td:nth-child(11) {
-    /* Ready for pick-up, Driver */
-    text-align: center;
-}
-
-.orders-table td:nth-child(12) {
-    /* Status */
-    text-align: center;
-}
-
+.orders-table th:nth-child(11),
+.orders-table td:nth-child(11),
+.orders-table th:nth-child(12),
+.orders-table td:nth-child(12),
+.orders-table th:nth-child(13),
 .orders-table td:nth-child(13) {
-    /* Tracking */
     text-align: center;
-    white-space: nowrap;
-}
-
-.orders-table td:nth-child(14) {
-    /* Actions */
-    text-align: center;
-    width: 50px;
 }
 
 .select-all-checkbox,
