@@ -5069,8 +5069,13 @@ function hasScheduledDeliveryTime(order) {
                     // Try alternative format
                     scheduledTime = `${deliveryDate}T${deliveryTimeOnly}`;
                 }
+                // If we have both date and time, it's definitely scheduled
+                order._isScheduled = true;
+                return true;
             } catch (e) {
-                // Use the combined string as is
+                // If we have both date and time, it's likely scheduled
+                order._isScheduled = true;
+                return true;
             }
         } else if (deliveryDate) {
             // If only date is provided, check if it's in the future
@@ -5100,6 +5105,21 @@ function hasScheduledDeliveryTime(order) {
             const now = new Date();
             const today = now.toISOString().split('T')[0];
             scheduledTime = `${today} ${deliveryTimeOnly}`;
+            
+            // Try to parse the combined time
+            try {
+                const combinedDateTime = new Date(scheduledTime);
+                if (!isNaN(combinedDateTime.getTime())) {
+                    // If combined time is in the future, it's scheduled
+                    if (combinedDateTime > now) {
+                        order._isScheduled = true;
+                        return true;
+                    }
+                }
+            } catch (e) {
+                // Ignore parsing errors
+            }
+            
             // If we have a time slot and it's not ASAP, it's likely scheduled
             if (!isAsap) {
                 order._isScheduled = true;
@@ -6095,7 +6115,7 @@ function createOrderRow(order) {
                     <circle cx="12" cy="19" r="1"></circle>
                 </svg>
             </button>
-            <div id="menu-${escapeHtml(String(orderId))}" class="dropdown-menu" style="display: none; position: absolute; right: 0; top: 100%; background: white; border: 1px solid #e5e7eb; border-radius: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 10000; min-width: 150px; margin-top: 4px;">
+            <div id="menu-${escapeHtml(String(orderId))}" class="dropdown-menu" style="display: none; position: absolute; right: 0; bottom: 100%; background: white; border: 1px solid #e5e7eb; border-radius: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 10000; min-width: 150px; margin-bottom: 4px;">
                 <button class="dropdown-item" onclick="viewOrderDetails('${escapeHtml(String(orderId))}')" style="width: 100%; text-align: left; padding: 8px 12px; border: none; background: none; cursor: pointer; font-size: 14px; transition: background 0.2s;">View Details</button>
                 <button class="dropdown-item" onclick="deleteOrder('${escapeHtml(String(orderId))}')" style="width: 100%; text-align: left; padding: 8px 12px; border: none; background: none; cursor: pointer; font-size: 14px; color: #ef4444; transition: background 0.2s;">Delete</button>
             </div>
@@ -6899,7 +6919,28 @@ async function viewOrderDetails(orderId) {
 
         // Extract timeline information - use actual order timestamps from DB
         const orderPlacedTime = formatDateShipday(order.fetched_at || order.created_at || order.updated_at || rawData.created_at || rawData.order_date);
-        const requestedDeliveryTime = deliveryTime ? formatDateShipday(deliveryTime) : 'N/A';
+        
+        // Get requested delivery time - prioritize scheduled_delivery_time, then deliveryTime, then combine date+time
+        let requestedDeliveryTime = 'N/A';
+        if (order.scheduled_delivery_time) {
+            requestedDeliveryTime = formatDateShipday(order.scheduled_delivery_time);
+        } else if (deliveryTime) {
+            requestedDeliveryTime = formatDateShipday(deliveryTime);
+        } else {
+            // Try to combine delivery_date and delivery_time_only if separate
+            const deliveryDate = rawData.delivery_date || rawData.deliveryDate || deliveryObj.delivery_date || scheduleObj.delivery_date || rawData.scheduled_date || scheduleObj.scheduled_date || rawData.requested_delivery_date;
+            const deliveryTimeOnly = rawData.delivery_time_only || rawData.deliveryTimeOnly || deliveryObj.delivery_time_only || scheduleObj.delivery_time_only || rawData.scheduled_time || scheduleObj.scheduled_time || rawData.requested_delivery_time_only;
+            
+            if (deliveryDate && deliveryTimeOnly) {
+                const combinedTime = `${deliveryDate} ${deliveryTimeOnly}`;
+                requestedDeliveryTime = formatDateShipday(combinedTime);
+            } else if (deliveryDate) {
+                requestedDeliveryTime = formatDateShipday(deliveryDate);
+            } else if (deliveryTimeOnly) {
+                const today = new Date().toISOString().split('T')[0];
+                requestedDeliveryTime = formatDateShipday(`${today} ${deliveryTimeOnly}`);
+            }
+        }
 
         // Format timeline dates
         const formatTimelineDate = (dateStr) => {
