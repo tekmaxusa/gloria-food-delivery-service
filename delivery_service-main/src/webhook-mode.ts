@@ -608,7 +608,13 @@ class GloriaFoodWebhookServer {
             }
           }
         } catch (error: any) {
-          // Ignore errors for individual orders (might be invalid ID, etc.)
+          // Handle 404 errors silently (order doesn't exist in DoorDash yet - this is normal)
+          if (error.message?.includes('404') || error.message?.includes('not found')) {
+            // Only log at debug level - this is expected for orders that haven't been created in DoorDash yet
+            // Skip logging to reduce noise
+            continue;
+          }
+          // Log other errors (network issues, auth problems, etc.)
           console.log(chalk.gray(`  ⚠️  Could not sync order #${order.gloriafood_order_id}: ${error.message}`));
         }
       }
@@ -1861,12 +1867,22 @@ class GloriaFoodWebhookServer {
             res.json({ success: true, settings });
           } catch (error: any) {
             client.release();
+            // If settings table doesn't exist, return empty settings instead of error
+            if (error.code === '42P01' || error.message?.includes('does not exist')) {
+              console.log(chalk.yellow('   ⚠️  Settings table does not exist, returning empty settings'));
+              return res.json({ success: true, settings: {} });
+            }
             throw error;
           }
         } else {
           res.json({ success: true, settings: {} });
         }
       } catch (error: any) {
+        // If settings table doesn't exist, return empty settings instead of error
+        if (error.code === '42P01' || error.message?.includes('does not exist')) {
+          console.log(chalk.yellow('   ⚠️  Settings table does not exist, returning empty settings'));
+          return res.json({ success: true, settings: {} });
+        }
         console.error('Error fetching settings:', error);
         res.status(500).json({ success: false, error: error.message });
       }
@@ -1884,6 +1900,18 @@ class GloriaFoodWebhookServer {
         if (db.pool) {
           const client = await db.pool.connect();
           try {
+            // First, ensure settings table exists
+            await client.query(`
+              CREATE TABLE IF NOT EXISTS settings (
+                id SERIAL PRIMARY KEY,
+                key VARCHAR(255) UNIQUE NOT NULL,
+                value TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+              )
+            `);
+            await client.query('CREATE INDEX IF NOT EXISTS idx_settings_key ON settings(key)');
+
             for (const [key, value] of Object.entries(settings)) {
               const valueStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
               await client.query(
@@ -1931,12 +1959,20 @@ class GloriaFoodWebhookServer {
             }
           } catch (error: any) {
             client.release();
+            // If settings table doesn't exist, return null instead of error
+            if (error.code === '42P01' || error.message?.includes('does not exist')) {
+              return res.json({ success: true, value: null });
+            }
             throw error;
           }
         } else {
           res.json({ success: true, value: null });
         }
       } catch (error: any) {
+        // If settings table doesn't exist, return null instead of error
+        if (error.code === '42P01' || error.message?.includes('does not exist')) {
+          return res.json({ success: true, value: null });
+        }
         console.error('Error fetching setting:', error);
         res.status(500).json({ success: false, error: error.message });
       }
