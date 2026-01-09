@@ -43,41 +43,41 @@ export class OrderDatabasePostgreSQL {
   constructor(config?: Partial<PostgreSQLConfig>) {
     // Check if DATABASE_URL is provided (common in cloud platforms like Render)
     const databaseUrl = process.env.DATABASE_URL;
-    
+
     if (databaseUrl) {
       // Use connection string (common in Render, Heroku, etc.)
       console.log('   Using DATABASE_URL connection string');
-      
+
       // Fix incomplete Render PostgreSQL URLs
       // Render sometimes provides URLs without port or domain
       let fixedUrl = databaseUrl;
-      
+
       // Check if it's a Render database (contains dpg-)
       const isRenderDb = databaseUrl.includes('dpg-');
-      
+
       if (isRenderDb) {
         // Use Render Internal Database URL exactly as provided
         // Only add missing port and SSL parameter if needed
         const hostnameMatch = databaseUrl.match(/@(dpg-[^\/:]+)/);
-        
+
         if (hostnameMatch) {
           const hostname = hostnameMatch[1];
-          
+
           // Add port if missing (before database name)
           if (!databaseUrl.includes(':5432') && !databaseUrl.match(/@[^:]+:\d+\//)) {
             fixedUrl = databaseUrl.replace(`@${hostname}/`, `@${hostname}:5432/`);
             console.log(chalk.blue(`   🔧 Added port :5432 to connection string`));
           }
-          
+
           // Log hostname format
           if (!hostname.includes('.')) {
             console.log(chalk.yellow(`   ⚠️  Hostname without domain: ${hostname}`));
             console.log(chalk.blue(`   💡 Trying as-is first (Render internal network format)`));
             console.log(chalk.gray(`   💡 If this fails, will try with .render.com domain`));
-            
+
             // Store original URL for fallback
             const urlWithPort = fixedUrl;
-            
+
             // If connection fails later, we'll try with domain
             // For now, use as-is (Render internal network should resolve it)
           } else if (hostname.includes('.render.com') && !hostname.includes('pooler')) {
@@ -86,39 +86,39 @@ export class OrderDatabasePostgreSQL {
             console.log(chalk.blue(`   ✅ Using connection pooler: ${hostname}`));
           }
         }
-        
+
         // For Render databases, DO NOT add sslmode=require to connection string
         // Instead, we'll use the ssl option in Pool config with rejectUnauthorized: false
         // This is critical because sslmode=require in the URL forces certificate validation
         // which will fail with Render's self-signed certificates
-        
+
         // Remove any existing sslmode parameters that might force validation
         fixedUrl = fixedUrl.replace(/[?&]sslmode=[^&]*/g, '');
         fixedUrl = fixedUrl.replace(/[?&]ssl=[^&]*/g, '');
-        
+
         console.log(chalk.blue('   🔒 Removed sslmode from URL (will use Pool ssl option instead)'));
         console.log(chalk.blue('   🔒 Will use rejectUnauthorized: false for SSL (Render self-signed certs)'));
       }
-      
+
       // For Render PostgreSQL, always enable SSL with rejectUnauthorized: false
       // Render uses self-signed certificates, so we need to disable certificate validation
       // Note: We removed sslmode from URL, so we check isRenderDb directly
       const needsSSL = isRenderDb;
-      
+
       console.log(chalk.gray(`   Final connection string: ${fixedUrl.replace(/:[^:@]+@/, ':****@')}`));
-      
+
       // Always use rejectUnauthorized: false for Render databases to handle self-signed certificates
       // This is critical - Render PostgreSQL uses self-signed certs that will fail validation
-      const sslConfig = needsSSL ? { 
-        rejectUnauthorized: false 
+      const sslConfig = needsSSL ? {
+        rejectUnauthorized: false
       } : false;
-      
+
       if (isRenderDb) {
         console.log(chalk.blue('   🔒 SSL enabled with rejectUnauthorized: false (for Render self-signed certificates)'));
       } else if (needsSSL) {
         console.log(chalk.blue('   🔒 SSL enabled with rejectUnauthorized: false'));
       }
-      
+
       this.pool = new Pool({
         connectionString: fixedUrl,
         ssl: sslConfig,
@@ -126,7 +126,7 @@ export class OrderDatabasePostgreSQL {
         idleTimeoutMillis: 30000,
         connectionTimeoutMillis: 30000, // Increased timeout for cloud databases
       });
-      
+
       // Set dummy config for logging
       this.config = {
         host: 'from-url',
@@ -144,10 +144,10 @@ export class OrderDatabasePostgreSQL {
         console.log(chalk.yellow(`   📝 Get it from: Render Dashboard → PostgreSQL → "Internal Database URL"`));
         console.log(chalk.gray(`   ⏳ Attempting connection with individual variables (may fail)...`));
       }
-      
+
       // Get config from environment or use defaults
       let host = config?.host || process.env.DB_HOST || 'localhost';
-      
+
       // Fix Render PostgreSQL hostname if incomplete (missing domain)
       // Render hostnames like "dpg-xxxxx-a" need connection pooler format
       if (host && host.startsWith('dpg-') && !host.includes('.')) {
@@ -164,7 +164,7 @@ export class OrderDatabasePostgreSQL {
         console.log(chalk.blue(`   🔄 Switching to pooler: ${poolerHost}`));
         host = poolerHost;
       }
-      
+
       this.config = {
         host: host,
         port: config?.port || parseInt(process.env.DB_PORT || '5432'),
@@ -200,11 +200,11 @@ export class OrderDatabasePostgreSQL {
   private async initializeTables(): Promise<void> {
     const maxRetries = 3;
     let attempt = 0;
-    
+
     while (attempt < maxRetries) {
       try {
         console.log('🔌 Connecting to PostgreSQL database...');
-        
+
         // If using DATABASE_URL, show that we're using it (don't show credentials)
         if (this.config.host === 'from-url') {
           console.log('   Using DATABASE_URL connection string');
@@ -225,10 +225,10 @@ export class OrderDatabasePostgreSQL {
           console.log(`   Database: ${this.config.database}`);
           console.log(`   User: ${this.config.user}`);
         }
-        
+
         const client = await this.pool.connect();
         console.log('✅ PostgreSQL connection successful!');
-        
+
         // Create orders table if not exists
         await client.query(`
           CREATE TABLE IF NOT EXISTS orders (
@@ -255,7 +255,7 @@ export class OrderDatabasePostgreSQL {
             doordash_tracking_url TEXT
           )
         `);
-        
+
         // Add scheduled_delivery_time column if it doesn't exist (for existing databases)
         try {
           await client.query(`
@@ -324,7 +324,7 @@ export class OrderDatabasePostgreSQL {
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
           )
         `);
-        
+
         // Add phone and address columns if they don't exist (for existing databases)
         try {
           await client.query(`
@@ -381,18 +381,18 @@ export class OrderDatabasePostgreSQL {
       } catch (error: any) {
         attempt++;
         const isLastAttempt = attempt >= maxRetries;
-        
+
         // If ENOTFOUND and using DATABASE_URL without domain, try adding domain
-        if ((error.code === 'ENOTFOUND' || error.message.includes('getaddrinfo ENOTFOUND')) && 
-            this.config.host === 'from-url' && 
-            !isLastAttempt) {
+        if ((error.code === 'ENOTFOUND' || error.message.includes('getaddrinfo ENOTFOUND')) &&
+          this.config.host === 'from-url' &&
+          !isLastAttempt) {
           const dbUrl = process.env.DATABASE_URL || '';
           if (dbUrl && dbUrl.includes('dpg-')) {
             const hostnameMatch = dbUrl.match(/@(dpg-[^\/:]+)/);
             if (hostnameMatch && !hostnameMatch[1].includes('.')) {
               const hostname = hostnameMatch[1];
               console.error(`   ⚠️  Attempt ${attempt} failed: Hostname without domain`);
-              
+
               // Try with .render.com domain
               if (attempt === 1) {
                 console.log(chalk.blue(`   🔄 Retrying with .render.com domain...`));
@@ -400,9 +400,9 @@ export class OrderDatabasePostgreSQL {
                 // Remove any sslmode parameters - we'll use Pool ssl option instead
                 newUrl = newUrl.replace(/[?&]sslmode=[^&]*/g, '');
                 newUrl = newUrl.replace(/[?&]ssl=[^&]*/g, '');
-                
+
                 // Recreate pool with new URL (no sslmode in URL, use Pool ssl option)
-                this.pool.end().catch(() => {});
+                this.pool.end().catch(() => { });
                 this.pool = new Pool({
                   connectionString: newUrl,
                   ssl: { rejectUnauthorized: false },
@@ -419,9 +419,9 @@ export class OrderDatabasePostgreSQL {
                 // Remove any sslmode parameters - we'll use Pool ssl option instead
                 newUrl = newUrl.replace(/[?&]sslmode=[^&]*/g, '');
                 newUrl = newUrl.replace(/[?&]ssl=[^&]*/g, '');
-                
+
                 // Recreate pool with new URL (no sslmode in URL, use Pool ssl option)
-                this.pool.end().catch(() => {});
+                this.pool.end().catch(() => { });
                 this.pool = new Pool({
                   connectionString: newUrl,
                   ssl: { rejectUnauthorized: false },
@@ -434,12 +434,12 @@ export class OrderDatabasePostgreSQL {
             }
           }
         }
-        
+
         // If last attempt or not retryable error, show full error message
         if (isLastAttempt || !(error.code === 'ENOTFOUND' || error.message.includes('getaddrinfo ENOTFOUND'))) {
           console.error('❌ Error initializing database tables:', error);
           console.error(`   Error message: ${error.message}`);
-          
+
           // Check if DATABASE_URL is set
           const dbUrl = process.env.DATABASE_URL;
           if (dbUrl) {
@@ -458,7 +458,7 @@ export class OrderDatabasePostgreSQL {
             console.error('');
             console.error('   ⚠️  DATABASE_URL is NOT SET!');
           }
-          
+
           if (error.code === 'ENOTFOUND' || error.message.includes('getaddrinfo ENOTFOUND')) {
             console.error('');
             console.error('   🚨 CRITICAL: Database hostname cannot be resolved!');
@@ -525,7 +525,7 @@ export class OrderDatabasePostgreSQL {
             console.error('   ⚠️  Access denied. Check your PostgreSQL username and password!');
           }
         }
-        
+
         // If last attempt, throw error; otherwise continue retry loop
         if (isLastAttempt) {
           throw error;
@@ -541,10 +541,10 @@ export class OrderDatabasePostgreSQL {
       const customerEmail = this.extractCustomerEmail(orderData);
       const deliveryAddress = this.extractDeliveryAddress(orderData);
       const scheduledDeliveryTime = this.extractScheduledDeliveryTime(orderData);
-      
+
       // Extract merchant_name from orderData if provided, otherwise will be set from merchants table
       const merchantName = orderData.merchant_name || orderData.merchantName || null;
-      
+
       const order: Order = {
         id: '',
         gloriafood_order_id: orderData.id?.toString() || orderData.order_id?.toString() || '',
@@ -567,7 +567,7 @@ export class OrderDatabasePostgreSQL {
       };
 
       const client = await this.pool.connect();
-      
+
       const result = await client.query(`
         INSERT INTO orders (
           gloriafood_order_id, store_id, merchant_name, customer_name, customer_phone,
@@ -610,7 +610,7 @@ export class OrderDatabasePostgreSQL {
       ]);
 
       client.release();
-      
+
       const savedOrder = await this.getOrderByGloriaFoodId(order.gloriafood_order_id);
       return savedOrder;
     } catch (error: any) {
@@ -653,7 +653,7 @@ export class OrderDatabasePostgreSQL {
         [newStatus, gloriafoodOrderId]
       );
       client.release();
-      return result.rowCount > 0;
+      return (result.rowCount || 0) > 0;
     } catch (error) {
       console.error('Error updating order status in PostgreSQL:', error);
       return false;
@@ -681,7 +681,7 @@ export class OrderDatabasePostgreSQL {
       if (name) return name;
     }
     if (orderData.client_name && String(orderData.client_name).trim()) return String(orderData.client_name).trim();
-    
+
     if (orderData.client) {
       if (orderData.client.first_name || orderData.client.last_name) {
         const name = `${orderData.client.first_name || ''} ${orderData.client.last_name || ''}`.trim();
@@ -689,7 +689,7 @@ export class OrderDatabasePostgreSQL {
       }
       if (orderData.client.name) return String(orderData.client.name);
     }
-    
+
     if (orderData.customer) {
       if (orderData.customer.name) return String(orderData.customer.name);
       if (orderData.customer.first_name || orderData.customer.last_name) {
@@ -697,10 +697,10 @@ export class OrderDatabasePostgreSQL {
         if (name) return name;
       }
     }
-    
+
     if (orderData.customer_name && String(orderData.customer_name).trim()) return String(orderData.customer_name).trim();
     if (orderData.name && String(orderData.name).trim()) return String(orderData.name).trim();
-    
+
     return 'Unknown';
   }
 
@@ -710,7 +710,7 @@ export class OrderDatabasePostgreSQL {
     if (orderData.customer?.phone && String(orderData.customer.phone).trim()) return String(orderData.customer.phone).trim();
     if (orderData.customer_phone && String(orderData.customer_phone).trim()) return String(orderData.customer_phone).trim();
     if (orderData.phone && String(orderData.phone).trim()) return String(orderData.phone).trim();
-    
+
     return '';
   }
 
@@ -720,7 +720,7 @@ export class OrderDatabasePostgreSQL {
     if (orderData.customer?.email && String(orderData.customer.email).trim()) return String(orderData.customer.email).trim();
     if (orderData.customer_email && String(orderData.customer_email).trim()) return String(orderData.customer_email).trim();
     if (orderData.email && String(orderData.email).trim()) return String(orderData.email).trim();
-    
+
     return '';
   }
 
@@ -728,7 +728,7 @@ export class OrderDatabasePostgreSQL {
     if (orderData.client_address && String(orderData.client_address).trim()) {
       return String(orderData.client_address).trim();
     }
-    
+
     if (orderData.delivery?.address) {
       const addr = orderData.delivery.address;
       const addressParts = [
@@ -743,10 +743,10 @@ export class OrderDatabasePostgreSQL {
         return addressParts.join(', ');
       }
     }
-    
+
     if (orderData.delivery_address && String(orderData.delivery_address).trim()) return String(orderData.delivery_address).trim();
     if (orderData.address && String(orderData.address).trim()) return String(orderData.address).trim();
-    
+
     return '';
   }
 
@@ -755,110 +755,110 @@ export class OrderDatabasePostgreSQL {
     const deliveryObj = orderData.delivery || {};
     const scheduleObj = orderData.schedule || {};
     const timeObj = orderData.time || {};
-    
+
     // Check if "Later" option is selected (not ASAP)
-    const isAsap = orderData.asap === true || 
-                   orderData.is_asap === true ||
-                   orderData.isAsap === true ||
-                   String(orderData.asap || '').toLowerCase() === 'true' ||
-                   String(orderData.asap || '').toLowerCase() === '1' ||
-                   String(orderData.asap || '').toLowerCase() === 'yes';
-    
+    const isAsap = orderData.asap === true ||
+      orderData.is_asap === true ||
+      orderData.isAsap === true ||
+      String(orderData.asap || '').toLowerCase() === 'true' ||
+      String(orderData.asap || '').toLowerCase() === '1' ||
+      String(orderData.asap || '').toLowerCase() === 'yes';
+
     const deliveryType = String(orderData.delivery_type || orderData.delivery_option || orderData.deliveryOption || orderData.deliveryType || orderData.delivery_time_type || orderData.time_type || orderData.delivery_method || '').toLowerCase();
     const deliveryOption = String(orderData.delivery_option || orderData.deliveryOption || orderData.available_time || orderData.availableTime || orderData.time_option || orderData.timeOption || orderData.selected_time_option || '').toLowerCase();
-    
-    const isLaterSelected = deliveryType === 'later' || 
-                           deliveryType === 'scheduled' ||
-                           deliveryOption === 'later' ||
-                           deliveryOption === 'scheduled' ||
-                           deliveryOption === 'schedule' ||
-                           orderData.is_scheduled === true ||
-                           orderData.isScheduled === true ||
-                           orderData.scheduled === true ||
-                           orderData.is_later === true ||
-                           orderData.isLater === true;
-    
+
+    const isLaterSelected = deliveryType === 'later' ||
+      deliveryType === 'scheduled' ||
+      deliveryOption === 'later' ||
+      deliveryOption === 'scheduled' ||
+      deliveryOption === 'schedule' ||
+      orderData.is_scheduled === true ||
+      orderData.isScheduled === true ||
+      orderData.scheduled === true ||
+      orderData.is_later === true ||
+      orderData.isLater === true;
+
     // If explicitly ASAP (and not "Later"), it's not scheduled
     if (isAsap && !isLaterSelected) {
       return null; // It's ASAP, not scheduled
     }
-    
+
     // If "Later" is explicitly selected, we should extract the scheduled time even if no date/time found yet
     // (Gloria Food might send it in a different format)
-    
+
     // Try to get scheduled time from various fields (check more comprehensively)
     let scheduledTime = orderData.scheduled_delivery_time ||
-                       orderData.scheduledDeliveryTime ||
-                       orderData.delivery_time ||
-                       orderData.deliveryTime ||
-                       orderData.delivery_datetime ||
-                       orderData.deliveryDateTime ||
-                       orderData.requested_delivery_time ||
-                       orderData.requestedDeliveryTime ||
-                       orderData.preferred_delivery_time ||
-                       orderData.preferredDeliveryTime ||
-                       orderData.selected_delivery_time ||
-                       orderData.selectedDeliveryTime ||
-                       orderData.chosen_delivery_time ||
-                       orderData.chosenDeliveryTime ||
-                       orderData.scheduled_at ||
-                       orderData.scheduledAt ||
-                       orderData.schedule_time ||
-                       orderData.scheduleTime ||
-                       deliveryObj.scheduled_delivery_time ||
-                       deliveryObj.scheduledDeliveryTime ||
-                       deliveryObj.delivery_time ||
-                       deliveryObj.deliveryTime ||
-                       deliveryObj.requested_delivery_time ||
-                       deliveryObj.requestedDeliveryTime ||
-                       scheduleObj.delivery_time ||
-                       scheduleObj.scheduled_delivery_time ||
-                       scheduleObj.requested_delivery_time ||
-                       scheduleObj.scheduled_time ||
-                       timeObj.delivery_time ||
-                       timeObj.scheduled_delivery_time ||
-                       timeObj.delivery ||
-                       null;
-    
+      orderData.scheduledDeliveryTime ||
+      orderData.delivery_time ||
+      orderData.deliveryTime ||
+      orderData.delivery_datetime ||
+      orderData.deliveryDateTime ||
+      orderData.requested_delivery_time ||
+      orderData.requestedDeliveryTime ||
+      orderData.preferred_delivery_time ||
+      orderData.preferredDeliveryTime ||
+      orderData.selected_delivery_time ||
+      orderData.selectedDeliveryTime ||
+      orderData.chosen_delivery_time ||
+      orderData.chosenDeliveryTime ||
+      orderData.scheduled_at ||
+      orderData.scheduledAt ||
+      orderData.schedule_time ||
+      orderData.scheduleTime ||
+      deliveryObj.scheduled_delivery_time ||
+      deliveryObj.scheduledDeliveryTime ||
+      deliveryObj.delivery_time ||
+      deliveryObj.deliveryTime ||
+      deliveryObj.requested_delivery_time ||
+      deliveryObj.requestedDeliveryTime ||
+      scheduleObj.delivery_time ||
+      scheduleObj.scheduled_delivery_time ||
+      scheduleObj.requested_delivery_time ||
+      scheduleObj.scheduled_time ||
+      timeObj.delivery_time ||
+      timeObj.scheduled_delivery_time ||
+      timeObj.delivery ||
+      null;
+
     // If date and time are separate, combine them
     if (!scheduledTime) {
-      const deliveryDate = orderData.delivery_date || 
-                          orderData.deliveryDate || 
-                          orderData.scheduled_date ||
-                          orderData.scheduledDate ||
-                          orderData.selected_delivery_date ||
-                          orderData.selectedDeliveryDate ||
-                          orderData.chosen_delivery_date ||
-                          orderData.chosenDeliveryDate ||
-                          orderData.preferred_delivery_date ||
-                          orderData.preferredDeliveryDate ||
-                          deliveryObj.delivery_date ||
-                          deliveryObj.deliveryDate ||
-                          scheduleObj.delivery_date ||
-                          scheduleObj.scheduled_date ||
-                          (orderData.schedule && orderData.schedule.date) ||
-                          (orderData.schedule && orderData.schedule.delivery_date);
-                          
-      const deliveryTimeOnly = orderData.delivery_time_only || 
-                              orderData.deliveryTimeOnly || 
-                              orderData.scheduled_time ||
-                              orderData.scheduledTime ||
-                              orderData.selected_delivery_time ||
-                              orderData.selectedDeliveryTime ||
-                              orderData.chosen_delivery_time ||
-                              orderData.chosenDeliveryTime ||
-                              orderData.preferred_delivery_time ||
-                              orderData.preferredDeliveryTime ||
-                              orderData.time_slot ||
-                              orderData.delivery_time_slot ||
-                              deliveryObj.delivery_time_only ||
-                              deliveryObj.deliveryTimeOnly ||
-                              scheduleObj.delivery_time_only ||
-                              scheduleObj.deliveryTimeOnly ||
-                              scheduleObj.scheduled_time ||
-                              (orderData.schedule && orderData.schedule.time) ||
-                              (orderData.schedule && orderData.schedule.delivery_time);
-      
+      const deliveryDate = orderData.delivery_date ||
+        orderData.deliveryDate ||
+        orderData.scheduled_date ||
+        orderData.scheduledDate ||
+        orderData.selected_delivery_date ||
+        orderData.selectedDeliveryDate ||
+        orderData.chosen_delivery_date ||
+        orderData.chosenDeliveryDate ||
+        orderData.preferred_delivery_date ||
+        orderData.preferredDeliveryDate ||
+        deliveryObj.delivery_date ||
+        deliveryObj.deliveryDate ||
+        scheduleObj.delivery_date ||
+        scheduleObj.scheduled_date ||
+        (orderData.schedule && orderData.schedule.date) ||
+        (orderData.schedule && orderData.schedule.delivery_date);
+
+      const deliveryTimeOnly = orderData.delivery_time_only ||
+        orderData.deliveryTimeOnly ||
+        orderData.scheduled_time ||
+        orderData.scheduledTime ||
+        orderData.selected_delivery_time ||
+        orderData.selectedDeliveryTime ||
+        orderData.chosen_delivery_time ||
+        orderData.chosenDeliveryTime ||
+        orderData.preferred_delivery_time ||
+        orderData.preferredDeliveryTime ||
+        orderData.time_slot ||
+        orderData.delivery_time_slot ||
+        deliveryObj.delivery_time_only ||
+        deliveryObj.deliveryTimeOnly ||
+        scheduleObj.delivery_time_only ||
+        scheduleObj.deliveryTimeOnly ||
+        scheduleObj.scheduled_time ||
+        (orderData.schedule && orderData.schedule.time) ||
+        (orderData.schedule && orderData.schedule.delivery_time);
+
       if (deliveryDate && deliveryTimeOnly) {
         // Combine date and time
         scheduledTime = `${deliveryDate} ${deliveryTimeOnly}`;
@@ -880,7 +880,7 @@ export class OrderDatabasePostgreSQL {
         scheduledTime = `${today} ${deliveryTimeOnly}`;
       }
     }
-    
+
     // Validate and format the scheduled time
     if (scheduledTime) {
       try {
@@ -903,25 +903,25 @@ export class OrderDatabasePostgreSQL {
         return null;
       }
     }
-    
+
     // If "Later" is explicitly selected but no time found, check if we have date/time separately
     // This is important for Gloria Food "in later" orders
     if (isLaterSelected && !scheduledTime) {
       // Try one more time with date/time combination
-      const deliveryDate = orderData.delivery_date || 
-                          orderData.deliveryDate || 
-                          orderData.scheduled_date ||
-                          orderData.scheduledDate ||
-                          deliveryObj.delivery_date ||
-                          scheduleObj.delivery_date ||
-                          scheduleObj.scheduled_date;
-                          
-      const deliveryTimeOnly = orderData.delivery_time_only || 
-                              orderData.deliveryTimeOnly || 
-                              orderData.scheduled_time ||
-                              deliveryObj.delivery_time_only ||
-                              scheduleObj.scheduled_time;
-      
+      const deliveryDate = orderData.delivery_date ||
+        orderData.deliveryDate ||
+        orderData.scheduled_date ||
+        orderData.scheduledDate ||
+        deliveryObj.delivery_date ||
+        scheduleObj.delivery_date ||
+        scheduleObj.scheduled_date;
+
+      const deliveryTimeOnly = orderData.delivery_time_only ||
+        orderData.deliveryTimeOnly ||
+        orderData.scheduled_time ||
+        deliveryObj.delivery_time_only ||
+        scheduleObj.scheduled_time;
+
       if (deliveryDate || deliveryTimeOnly) {
         // If we have at least date or time, and "Later" is selected, consider it scheduled
         // Return a combined value or just the date
@@ -935,7 +935,7 @@ export class OrderDatabasePostgreSQL {
         }
       }
     }
-    
+
     return null;
   }
 
@@ -946,7 +946,7 @@ export class OrderDatabasePostgreSQL {
         'SELECT * FROM orders WHERE gloriafood_order_id = $1',
         [orderId]
       );
-      
+
       client.release();
       return result.rows.length > 0 ? this.mapRowToOrder(result.rows[0]) : null;
     } catch (error) {
@@ -962,7 +962,7 @@ export class OrderDatabasePostgreSQL {
         'SELECT * FROM orders ORDER BY fetched_at DESC LIMIT $1',
         [limit]
       );
-      
+
       client.release();
       return result.rows.map(row => this.mapRowToOrder(row));
     } catch (error) {
@@ -979,7 +979,7 @@ export class OrderDatabasePostgreSQL {
          WHERE fetched_at > NOW() - INTERVAL '${minutes} minutes'
          ORDER BY fetched_at DESC`
       );
-      
+
       client.release();
       return result.rows.map(row => this.mapRowToOrder(row));
     } catch (error) {
@@ -995,7 +995,7 @@ export class OrderDatabasePostgreSQL {
         'SELECT * FROM orders WHERE status = $1 ORDER BY fetched_at DESC',
         [status]
       );
-      
+
       client.release();
       return result.rows.map(row => this.mapRowToOrder(row));
     } catch (error) {
@@ -1008,7 +1008,7 @@ export class OrderDatabasePostgreSQL {
     try {
       const client = await this.pool.connect();
       const result = await client.query('SELECT COUNT(*) as count FROM orders');
-      
+
       client.release();
       return parseInt(result.rows[0]?.count || '0', 10);
     } catch (error) {
@@ -1049,9 +1049,9 @@ export class OrderDatabasePostgreSQL {
     try {
       const crypto = require('crypto');
       const hashedPassword = crypto.createHash('sha256').update(password).digest('hex');
-      
+
       const client = await this.pool.connect();
-      
+
       // Create users table if not exists
       await client.query(`
         CREATE TABLE IF NOT EXISTS users (
@@ -1064,7 +1064,7 @@ export class OrderDatabasePostgreSQL {
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
       `);
-      
+
       await client.query(`
         CREATE INDEX IF NOT EXISTS idx_email ON users(email)
       `);
@@ -1073,9 +1073,9 @@ export class OrderDatabasePostgreSQL {
         INSERT INTO users (email, password, full_name) VALUES ($1, $2, $3)
         RETURNING id, email, full_name, role, created_at
       `, [email, hashedPassword, fullName]);
-      
+
       client.release();
-      
+
       return {
         id: result.rows[0].id,
         email: result.rows[0].email,
@@ -1099,7 +1099,7 @@ export class OrderDatabasePostgreSQL {
         'SELECT * FROM users WHERE email = $1',
         [email]
       );
-      
+
       client.release();
       return result.rows.length > 0 ? {
         id: result.rows[0].id,
@@ -1118,19 +1118,19 @@ export class OrderDatabasePostgreSQL {
     try {
       const crypto = require('crypto');
       const hashedPassword = crypto.createHash('sha256').update(password).digest('hex');
-      
+
       const user = await this.getUserByEmail(email);
       if (!user) {
         return null;
       }
-      
+
       const client = await this.pool.connect();
       const result = await client.query(
         'SELECT password FROM users WHERE email = $1',
         [email]
       );
       client.release();
-      
+
       if (result.rows[0]?.password === hashedPassword) {
         return {
           id: user.id,
@@ -1140,7 +1140,7 @@ export class OrderDatabasePostgreSQL {
           created_at: user.created_at
         };
       }
-      
+
       return null;
     } catch (error) {
       console.error('Error verifying password:', error);
@@ -1152,7 +1152,7 @@ export class OrderDatabasePostgreSQL {
   async getAllDrivers(): Promise<any[]> {
     try {
       const client = await this.pool.connect();
-      
+
       // Create drivers table if not exists
       await client.query(`
         CREATE TABLE IF NOT EXISTS drivers (
@@ -1170,11 +1170,11 @@ export class OrderDatabasePostgreSQL {
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
       `);
-      
+
       await client.query(`
         CREATE INDEX IF NOT EXISTS idx_drivers_status ON drivers(status)
       `);
-      
+
       const result = await client.query('SELECT * FROM drivers ORDER BY name');
       client.release();
       return result.rows || [];
@@ -1191,7 +1191,7 @@ export class OrderDatabasePostgreSQL {
         'SELECT * FROM drivers WHERE id = $1',
         [id]
       );
-      
+
       client.release();
       return result.rows.length > 0 ? result.rows[0] : null;
     } catch (error) {
@@ -1203,7 +1203,7 @@ export class OrderDatabasePostgreSQL {
   async createDriver(driverData: { name: string; phone?: string; email?: string; vehicle_type?: string; vehicle_plate?: string }): Promise<any | null> {
     try {
       const client = await this.pool.connect();
-      
+
       // Create drivers table if not exists
       await client.query(`
         CREATE TABLE IF NOT EXISTS drivers (
@@ -1221,7 +1221,7 @@ export class OrderDatabasePostgreSQL {
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
       `);
-      
+
       const result = await client.query(
         `INSERT INTO drivers (name, phone, email, vehicle_type, vehicle_plate, status) 
          VALUES ($1, $2, $3, $4, $5, 'active') 
@@ -1234,7 +1234,7 @@ export class OrderDatabasePostgreSQL {
           driverData.vehicle_plate || null
         ]
       );
-      
+
       client.release();
       return result.rows[0] || null;
     } catch (error) {
@@ -1262,7 +1262,7 @@ export class OrderDatabasePostgreSQL {
   async getAllReviews(): Promise<any[]> {
     try {
       const client = await this.pool.connect();
-      
+
       // Create reviews table if not exists
       await client.query(`
         CREATE TABLE IF NOT EXISTS reviews (
@@ -1275,21 +1275,21 @@ export class OrderDatabasePostgreSQL {
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
       `);
-      
+
       await client.query(`
         CREATE INDEX IF NOT EXISTS idx_reviews_order_id ON reviews(order_id)
       `);
       await client.query(`
         CREATE INDEX IF NOT EXISTS idx_reviews_driver_id ON reviews(driver_id)
       `);
-      
+
       const result = await client.query(`
         SELECT r.*, o.gloriafood_order_id as order_number 
         FROM reviews r 
         LEFT JOIN orders o ON r.order_id = o.id 
         ORDER BY r.created_at DESC
       `);
-      
+
       client.release();
       return result.rows || [];
     } catch (error) {
@@ -1305,7 +1305,7 @@ export class OrderDatabasePostgreSQL {
         'SELECT * FROM reviews WHERE order_id = $1 ORDER BY created_at DESC',
         [orderId]
       );
-      
+
       client.release();
       return result.rows || [];
     } catch (error) {
@@ -1318,7 +1318,7 @@ export class OrderDatabasePostgreSQL {
   async getDashboardStats(): Promise<any> {
     try {
       const client = await this.pool.connect();
-      
+
       const orderStats = await client.query(`
         SELECT 
           COUNT(*) as total_orders,
@@ -1328,21 +1328,21 @@ export class OrderDatabasePostgreSQL {
           SUM(total_price) as total_revenue
         FROM orders
       `);
-      
+
       const recentOrders = await client.query(`
         SELECT COUNT(*) as count FROM orders 
         WHERE fetched_at >= NOW() - INTERVAL '24 hours'
       `);
-      
+
       const driverStats = await client.query(`
         SELECT 
           COUNT(*) as total_drivers,
           SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_drivers
         FROM drivers
       `);
-      
+
       client.release();
-      
+
       return {
         orders: {
           total: parseInt(orderStats.rows[0]?.total_orders || '0', 10),
@@ -1377,7 +1377,7 @@ export class OrderDatabasePostgreSQL {
         SELECT * FROM merchants WHERE is_active = TRUE ORDER BY merchant_name
       `);
       client.release();
-      
+
       return result.rows.map(m => ({
         id: m.id,
         store_id: m.store_id,
@@ -1405,9 +1405,9 @@ export class OrderDatabasePostgreSQL {
         [storeId]
       );
       client.release();
-      
+
       if (!result.rows || result.rows.length === 0) return null;
-      
+
       const merchant = result.rows[0];
       return {
         id: merchant.id,
@@ -1442,7 +1442,7 @@ export class OrderDatabasePostgreSQL {
       }
 
       const client = await this.pool.connect();
-      
+
       if (existing) {
         // Update existing merchant - only update fields that are provided
         const updates: string[] = [];
@@ -1505,7 +1505,7 @@ export class OrderDatabasePostgreSQL {
           merchant.is_active !== undefined ? merchant.is_active : true
         ]);
       }
-      
+
       client.release();
       const updated = await this.getMerchantByStoreId(merchant.store_id);
       if (updated) {
@@ -1526,7 +1526,7 @@ export class OrderDatabasePostgreSQL {
         [storeId]
       );
       client.release();
-      
+
       return (result.rowCount || 0) > 0;
     } catch (error) {
       console.error('Error deleting merchant:', error);
@@ -1543,7 +1543,7 @@ export class OrderDatabasePostgreSQL {
         [orderId]
       );
       client.release();
-      
+
       return (result.rowCount || 0) > 0;
     } catch (error) {
       console.error('Error deleting order:', error);
