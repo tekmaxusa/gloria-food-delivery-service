@@ -538,21 +538,21 @@ class GloriaFoodWebhookServer {
       return;
     }
 
-    // Sync every 1 minute for faster cancellation detection
+    // Sync every 2 minutes - balanced between responsiveness and performance
     this.doorDashSyncInterval = setInterval(async () => {
       try {
         await this.syncDoorDashStatuses();
       } catch (error: any) {
         console.error(chalk.red('Error in DoorDash status sync:'), error.message);
       }
-    }, 1 * 60 * 1000); // 1 minute
+    }, 2 * 60 * 1000); // 2 minutes
 
-    // Run initial sync after 10 seconds
+    // Run initial sync after 30 seconds
     setTimeout(() => {
       this.syncDoorDashStatuses().catch(err => {
         console.error(chalk.red('Error in initial DoorDash status sync:'), err.message);
       });
-    }, 10000);
+    }, 30000);
   }
 
   /**
@@ -564,15 +564,24 @@ class GloriaFoodWebhookServer {
     }
 
     try {
-      // Get all orders that are sent to DoorDash - check all statuses to catch cancellations
-      const allOrders = await this.handleAsync(this.database.getAllOrders(1000));
-      const ordersToCheck = allOrders.filter(order => {
-        const status = (order.status || '').toUpperCase();
-        // Check orders that are not already cancelled or delivered, and have DoorDash ID
-        const isNotFinal = !['CANCELLED', 'CANCELED', 'DELIVERED', 'COMPLETED'].includes(status);
-        const hasDoorDashId = (order as any).doordash_order_id || (order as any).sent_to_doordash;
-        return isNotFinal && hasDoorDashId;
-      });
+      // Use efficient query to get only pending DoorDash orders
+      // This is much faster than fetching all orders and filtering
+      const ordersToCheck = await this.handleAsync(
+        (this.database as any).getPendingDoorDashOrders?.(50) || 
+        Promise.resolve([])
+      );
+
+      // Fallback to old method if new method doesn't exist
+      if (ordersToCheck.length === 0 && !(this.database as any).getPendingDoorDashOrders) {
+        const allOrders = await this.handleAsync(this.database.getAllOrders(100));
+        const filtered = allOrders.filter(order => {
+          const status = (order.status || '').toUpperCase();
+          const isNotFinal = !['CANCELLED', 'CANCELED', 'DELIVERED', 'COMPLETED'].includes(status);
+          const hasDoorDashId = (order as any).doordash_order_id || (order as any).sent_to_doordash;
+          return isNotFinal && hasDoorDashId;
+        });
+        ordersToCheck.push(...filtered.slice(0, 50));
+      }
 
       if (ordersToCheck.length === 0) {
         return;

@@ -1067,6 +1067,29 @@ export class OrderDatabasePostgreSQL {
     }
   }
 
+  /**
+   * Get pending DoorDash orders efficiently - only orders that need status sync
+   */
+  async getPendingDoorDashOrders(limit: number = 50): Promise<Order[]> {
+    try {
+      const client = await this.pool.connect();
+      const result = await client.query(
+        `SELECT * FROM orders 
+         WHERE (doordash_order_id IS NOT NULL OR sent_to_doordash = 1)
+           AND status NOT IN ('CANCELLED', 'CANCELED', 'DELIVERED', 'COMPLETED')
+         ORDER BY fetched_at DESC
+         LIMIT $1`,
+        [limit]
+      );
+
+      client.release();
+      return result.rows.map(row => this.mapRowToOrder(row));
+    } catch (error) {
+      console.error('Error getting pending DoorDash orders:', error);
+      return [];
+    }
+  }
+
   async getOrderCount(): Promise<number> {
     try {
       const client = await this.pool.connect();
