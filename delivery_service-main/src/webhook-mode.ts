@@ -1314,6 +1314,50 @@ class GloriaFoodWebhookServer {
       }
     });
 
+    // Update order endpoint (for ready for pickup, etc.)
+    this.app.put('/orders/:orderId', async (req: Request, res: Response) => {
+      try {
+        const orderId = req.params.orderId;
+        const { ready_for_pickup } = req.body;
+        
+        const order = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId));
+        if (!order) {
+          return res.status(404).json({ success: false, error: 'Order not found' });
+        }
+
+        // If ready_for_pickup is being set to true and order has DoorDash delivery, notify DoorDash
+        if (ready_for_pickup === true && this.doorDashClient) {
+          const doorDashId = (order as any).doordash_order_id;
+          if (doorDashId) {
+            try {
+              await this.doorDashClient.notifyReadyForPickup(doorDashId);
+              console.log(chalk.green(`✅ Notified DoorDash rider that order #${orderId} is ready for pickup`));
+            } catch (ddError: any) {
+              console.log(chalk.yellow(`⚠️  Could not notify DoorDash for order #${orderId}: ${ddError.message}`));
+              // Continue with update even if DoorDash notification fails
+            }
+          }
+        }
+
+        // Update order in database
+        const updated = await this.handleAsync(
+          this.database.insertOrUpdateOrder({
+            ...order,
+            ready_for_pickup: ready_for_pickup ? new Date().toISOString() : null
+          } as any)
+        );
+
+        if (updated) {
+          res.json({ success: true, order: updated });
+        } else {
+          res.status(500).json({ success: false, error: 'Failed to update order' });
+        }
+      } catch (error: any) {
+        console.error('Error updating order:', error);
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
     // Delete order endpoint
     this.app.delete('/orders/:orderId', async (req: Request, res: Response) => {
       try {
@@ -1825,11 +1869,15 @@ class GloriaFoodWebhookServer {
         
         allOrders.forEach(order => {
           statusCounts[order.status] = (statusCounts[order.status] || 0) + 1;
-          // Convert total_price to number (MySQL returns DECIMAL as string)
-          const orderPrice = typeof order.total_price === 'string' 
-            ? parseFloat(order.total_price) 
-            : (order.total_price || 0);
-          totalRevenue += orderPrice;
+          // Exclude cancelled orders from revenue calculation
+          const status = (order.status || '').toUpperCase();
+          if (status !== 'CANCELLED' && status !== 'CANCELED') {
+            // Convert total_price to number (MySQL returns DECIMAL as string)
+            const orderPrice = typeof order.total_price === 'string' 
+              ? parseFloat(order.total_price) 
+              : (order.total_price || 0);
+            totalRevenue += orderPrice;
+          }
         });
         
         res.json({

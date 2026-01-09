@@ -1590,7 +1590,12 @@ async function fetchCustomersReport() {
 
 // Render sales report
 function renderSalesReport(orders) {
-    const totalSales = orders.reduce((sum, o) => sum + (parseFloat(o.total_price) || 0), 0);
+    // Exclude cancelled orders from total sales
+    const validOrders = orders.filter(o => {
+        const status = (o.status || '').toUpperCase();
+        return status !== 'CANCELLED' && status !== 'CANCELED';
+    });
+    const totalSales = validOrders.reduce((sum, o) => sum + (parseFloat(o.total_price) || 0), 0);
     const completedOrders = orders.filter(o => o.status === 'DELIVERED' || o.status === 'COMPLETED').length;
     const pendingOrders = orders.filter(o => o.status !== 'DELIVERED' && o.status !== 'COMPLETED' && o.status !== 'CANCELLED').length;
 
@@ -1773,11 +1778,16 @@ function renderOrdersReport(orders) {
 // Render revenue report
 function renderRevenueReport(data) {
     const { orders, stats } = data;
-    const totalRevenue = stats.revenue?.total || orders.reduce((sum, o) => sum + (parseFloat(o.total_price) || 0), 0);
+    // Exclude cancelled orders from revenue calculation
+    const validOrders = orders.filter(o => {
+        const status = (o.status || '').toUpperCase();
+        return status !== 'CANCELLED' && status !== 'CANCELED';
+    });
+    const totalRevenue = stats.revenue?.total || validOrders.reduce((sum, o) => sum + (parseFloat(o.total_price) || 0), 0);
 
-    // Group by date
+    // Group by date (excluding cancelled orders)
     const revenueByDate = {};
-    orders.forEach(order => {
+    validOrders.forEach(order => {
         const date = new Date(order.created_at || order.fetched_at).toLocaleDateString();
         revenueByDate[date] = (revenueByDate[date] || 0) + (parseFloat(order.total_price) || 0);
     });

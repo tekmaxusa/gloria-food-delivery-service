@@ -443,6 +443,34 @@ export class DoorDashClient {
   }
 
   /**
+   * Notify DoorDash that order is ready for pickup
+   * This will notify the assigned rider
+   */
+  async notifyReadyForPickup(deliveryId: string): Promise<DoorDashResponse> {
+    try {
+      // DoorDash API endpoint to update delivery status to ready for pickup
+      // Using PATCH to update the delivery status
+      const response = await this.axiosInstance.patch(`/deliveries/${deliveryId}`, {
+        pickup_ready: true,
+        pickup_time: new Date().toISOString(),
+      });
+
+      return {
+        id: response.data.delivery_id || response.data.id || deliveryId,
+        status: response.data.status || 'ready_for_pickup',
+        raw: response.data,
+      };
+    } catch (error: any) {
+      if (error.response) {
+        throw new Error(
+          `DoorDash API Error: ${error.response.status} - ${JSON.stringify(error.response.data)}`
+        );
+      }
+      throw new Error(`DoorDash API Error: ${error.message}`);
+    }
+  }
+
+  /**
    * Test connection to DoorDash API by making a lightweight request
    */
   async testConnection(): Promise<boolean> {

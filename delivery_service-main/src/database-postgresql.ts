@@ -1423,9 +1423,9 @@ export class OrderDatabasePostgreSQL {
         SELECT 
           COUNT(*) as total_orders,
           SUM(CASE WHEN status = 'DELIVERED' THEN 1 ELSE 0 END) as completed_orders,
-          SUM(CASE WHEN status NOT IN ('DELIVERED', 'CANCELLED') THEN 1 ELSE 0 END) as active_orders,
-          SUM(CASE WHEN status = 'CANCELLED' THEN 1 ELSE 0 END) as cancelled_orders,
-          SUM(total_price) as total_revenue
+          SUM(CASE WHEN status NOT IN ('DELIVERED', 'CANCELLED', 'CANCELED') THEN 1 ELSE 0 END) as active_orders,
+          SUM(CASE WHEN status IN ('CANCELLED', 'CANCELED') THEN 1 ELSE 0 END) as cancelled_orders,
+          SUM(CASE WHEN status NOT IN ('CANCELLED', 'CANCELED') THEN total_price ELSE 0 END) as total_revenue
         FROM orders
       `);
 
