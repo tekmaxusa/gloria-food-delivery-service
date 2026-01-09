@@ -1015,22 +1015,24 @@ class GloriaFoodWebhookServer {
           orders = orders.filter(order => order.store_id === storeId);
         }
         
-        // Enrich orders with merchant information (use stored merchant_name if available, otherwise get from merchants table)
+        // Enrich orders with merchant information
+        // Always get merchant_name from merchants table to ensure it's up-to-date
         const enrichedOrders = orders.map(order => {
-          // If order already has merchant_name stored, use it (for historical accuracy)
-          if (order.merchant_name) {
-            return order;
-          }
-          
-          // Otherwise, get from merchants table
           const merchant = order.store_id 
             ? this.merchantManager.getMerchantByStoreId(order.store_id)
             : null;
           
+          // Always use merchant_name from merchants table if available (most up-to-date)
+          // Only use stored merchant_name if merchant is not found in merchants table (for historical accuracy)
+          const merchantName = merchant?.merchant_name 
+            ? merchant.merchant_name 
+            : (order.merchant_name && order.merchant_name !== `Merchant ${order.store_id}` && !order.merchant_name.startsWith('Merchant '))
+              ? order.merchant_name 
+              : (order.store_id ? `Merchant ${order.store_id}` : 'Unknown Merchant');
+          
           return {
             ...order,
-            // Use merchant_name from merchants table if order doesn't have it stored
-            merchant_name: merchant?.merchant_name || (order.store_id ? `Merchant ${order.store_id}` : 'Unknown Merchant')
+            merchant_name: merchantName
           };
         });
         

@@ -1551,16 +1551,26 @@ function renderSalesReport(orders) {
                 </thead>
                 <tbody>
                     ${orders.length === 0 ? '<tr><td colspan="6" class="empty-state-cell"><div class="empty-state"><div class="empty-state-text">No sales data available</div></div></td></tr>' :
-            orders.slice(0, 100).map(order => `
+            orders.slice(0, 100).map(order => {
+                // Backend should provide merchant_name from merchants table
+                // Only use fallback if merchant_name is missing or is a fallback pattern
+                let merchantName = order.merchant_name;
+                if (!merchantName || merchantName === order.store_id || merchantName.startsWith('Merchant ')) {
+                    merchantName = 'N/A';
+                }
+                merchantName = escapeHtml(merchantName);
+                
+                return `
                         <tr>
                             <td>#${order.gloriafood_order_id || order.id}</td>
-                            <td>${order.customer_name || 'N/A'}</td>
-                            <td>${order.merchant_name || 'N/A'}</td>
+                            <td>${escapeHtml(order.customer_name || 'N/A')}</td>
+                            <td>${merchantName}</td>
                             <td>${formatCurrency(order.total_price || 0, order.currency || 'USD')}</td>
-                            <td><span class="status-badge status-${(order.status || '').toLowerCase()}">${order.status || 'N/A'}</span></td>
+                            <td><span class="status-badge status-${(order.status || '').toLowerCase()}">${escapeHtml(order.status || 'N/A')}</span></td>
                             <td>${formatDate(order.created_at || order.fetched_at)}</td>
                         </tr>
-                    `).join('')}
+                    `;
+            }).join('')}
                 </tbody>
             </table>
         </div>
@@ -1603,17 +1613,27 @@ function renderOrdersReport(orders) {
                 </thead>
                 <tbody>
                     ${orders.length === 0 ? '<tr><td colspan="7" class="empty-state-cell"><div class="empty-state"><div class="empty-state-text">No orders available</div></div></td></tr>' :
-            orders.slice(0, 100).map(order => `
+            orders.slice(0, 100).map(order => {
+                // Backend should provide merchant_name from merchants table
+                // Only use fallback if merchant_name is missing or is a fallback pattern
+                let merchantName = order.merchant_name;
+                if (!merchantName || merchantName === order.store_id || merchantName.startsWith('Merchant ')) {
+                    merchantName = 'N/A';
+                }
+                merchantName = escapeHtml(merchantName);
+                
+                return `
                         <tr>
                             <td>#${order.gloriafood_order_id || order.id}</td>
-                            <td>${order.customer_name || 'N/A'}</td>
-                            <td>${order.merchant_name || 'N/A'}</td>
-                            <td>${(order.delivery_address || order.customer_address || 'N/A').substring(0, 50)}${(order.delivery_address || order.customer_address || '').length > 50 ? '...' : ''}</td>
+                            <td>${escapeHtml(order.customer_name || 'N/A')}</td>
+                            <td>${merchantName}</td>
+                            <td>${escapeHtml((order.delivery_address || order.customer_address || 'N/A').substring(0, 50))}${(order.delivery_address || order.customer_address || '').length > 50 ? '...' : ''}</td>
                             <td>${formatCurrency(order.total_price || 0, order.currency || 'USD')}</td>
-                            <td><span class="status-badge status-${(order.status || '').toLowerCase()}">${order.status || 'N/A'}</span></td>
+                            <td><span class="status-badge status-${(order.status || '').toLowerCase()}">${escapeHtml(order.status || 'N/A')}</span></td>
                             <td>${formatDate(order.created_at || order.fetched_at)}</td>
                         </tr>
-                    `).join('')}
+                    `;
+            }).join('')}
                 </tbody>
             </table>
         </div>
