@@ -6,6 +6,7 @@ export interface Order {
   id: string;
   gloriafood_order_id: string;
   store_id: string;
+  merchant_name?: string; // Store merchant name with order for historical accuracy
   customer_name: string;
   customer_phone: string;
   customer_email?: string;
@@ -268,6 +269,20 @@ export class OrderDatabasePostgreSQL {
           }
         }
 
+        // Add merchant_name column if it doesn't exist (for existing databases)
+        try {
+          await client.query(`
+            ALTER TABLE orders 
+            ADD COLUMN IF NOT EXISTS merchant_name VARCHAR(255)
+          `);
+          console.log('✅ Added merchant_name column to orders table');
+        } catch (e: any) {
+          // Column might already exist, ignore error
+          if (e.code !== '42701') {
+            console.log('   Note: merchant_name column may already exist');
+          }
+        }
+
         // Create indexes
         await client.query(`
           CREATE INDEX IF NOT EXISTS idx_gloriafood_order_id ON orders(gloriafood_order_id)
@@ -527,10 +542,14 @@ export class OrderDatabasePostgreSQL {
       const deliveryAddress = this.extractDeliveryAddress(orderData);
       const scheduledDeliveryTime = this.extractScheduledDeliveryTime(orderData);
       
+      // Extract merchant_name from orderData if provided, otherwise will be set from merchants table
+      const merchantName = orderData.merchant_name || orderData.merchantName || null;
+      
       const order: Order = {
         id: '',
         gloriafood_order_id: orderData.id?.toString() || orderData.order_id?.toString() || '',
         store_id: orderData.store_id?.toString() || orderData.restaurant_id?.toString() || '',
+        merchant_name: merchantName || undefined,
         customer_name: customerName,
         customer_phone: customerPhone,
         customer_email: customerEmail,
@@ -551,10 +570,10 @@ export class OrderDatabasePostgreSQL {
       
       const result = await client.query(`
         INSERT INTO orders (
-          gloriafood_order_id, store_id, customer_name, customer_phone,
+          gloriafood_order_id, store_id, merchant_name, customer_name, customer_phone,
           customer_email, delivery_address, total_price, currency,
           status, order_type, items, raw_data, scheduled_delivery_time, created_at, updated_at, fetched_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
         ON CONFLICT (gloriafood_order_id) DO UPDATE SET
           customer_name = EXCLUDED.customer_name,
           customer_phone = EXCLUDED.customer_phone,
@@ -567,11 +586,13 @@ export class OrderDatabasePostgreSQL {
           scheduled_delivery_time = EXCLUDED.scheduled_delivery_time,
           updated_at = EXCLUDED.updated_at,
           fetched_at = EXCLUDED.fetched_at,
-          raw_data = EXCLUDED.raw_data
+          raw_data = EXCLUDED.raw_data,
+          merchant_name = COALESCE(EXCLUDED.merchant_name, orders.merchant_name)
         RETURNING *
       `, [
         order.gloriafood_order_id,
         order.store_id,
+        order.merchant_name || null,
         order.customer_name,
         order.customer_phone || null,
         order.customer_email || null,
@@ -618,6 +639,39 @@ export class OrderDatabasePostgreSQL {
       client.release();
     } catch (error) {
       console.error('Error updating sent_to_doordash in PostgreSQL:', error);
+    }
+  }
+
+  async updateOrderStatus(gloriafoodOrderId: string, newStatus: string): Promise<boolean> {
+    try {
+      const client = await this.pool.connect();
+      const result = await client.query(
+        `UPDATE orders
+         SET status = $1,
+             updated_at = NOW()
+         WHERE gloriafood_order_id = $2`,
+        [newStatus, gloriafoodOrderId]
+      );
+      client.release();
+      return result.rowCount > 0;
+    } catch (error) {
+      console.error('Error updating order status in PostgreSQL:', error);
+      return false;
+    }
+  }
+
+  async getOrderByDoorDashId(doordashOrderId: string): Promise<Order | null> {
+    try {
+      const client = await this.pool.connect();
+      const result = await client.query(
+        'SELECT * FROM orders WHERE doordash_order_id = $1',
+        [doordashOrderId]
+      );
+      client.release();
+      return result.rows.length > 0 ? this.mapRowToOrder(result.rows[0]) : null;
+    } catch (error) {
+      console.error('Error getting order by DoorDash ID:', error);
+      return null;
     }
   }
 
@@ -968,6 +1022,7 @@ export class OrderDatabasePostgreSQL {
       id: row.id?.toString() || '',
       gloriafood_order_id: row.gloriafood_order_id || '',
       store_id: row.store_id || '',
+      merchant_name: row.merchant_name || undefined,
       customer_name: row.customer_name || '',
       customer_phone: row.customer_phone || '',
       customer_email: row.customer_email,

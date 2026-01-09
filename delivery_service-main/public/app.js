@@ -610,6 +610,12 @@ function showOrdersPage() {
                             </svg>
                         </th>
                         <th class="sortable">
+                            <span>Merchant</span>
+                            <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 5v14M5 12l7-7 7 7"/>
+                            </svg>
+                        </th>
+                        <th class="sortable">
                             <span>C. Name</span>
                             <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M12 5v14M5 12l7-7 7 7"/>
@@ -2205,19 +2211,31 @@ function exportOrdersToExcel() {
             }
             
             // Get merchant name (same logic as createOrderRow)
+            // Use merchant_name from backend (already enriched by backend)
             let merchantName = order.merchant_name;
-            if (!merchantName && rawData) {
-                merchantName = rawData.merchant_name || 
-                              rawData.merchantName ||
-                              rawData.restaurant_name ||
-                              rawData.restaurantName ||
-                              (rawData.restaurant && rawData.restaurant.name) ||
-                              (rawData.restaurant && rawData.restaurant.restaurant_name) ||
-                              (rawData.merchant && rawData.merchant.name) ||
-                              null;
+            
+            // Only check raw_data if backend didn't provide merchant_name
+            if (!merchantName || merchantName === order.store_id || merchantName === 'Unknown Merchant') {
+                if (rawData) {
+                    merchantName = rawData.merchant_name || 
+                                  rawData.merchantName ||
+                                  rawData.restaurant_name ||
+                                  rawData.restaurantName ||
+                                  (rawData.restaurant && rawData.restaurant.name) ||
+                                  (rawData.restaurant && rawData.restaurant.restaurant_name) ||
+                                  (rawData.merchant && rawData.merchant.name) ||
+                                  null;
+                }
+                
+                // Final fallback - only show store_id if absolutely no merchant name found
+                if (!merchantName || merchantName === order.store_id) {
+                    merchantName = order.store_id ? `Merchant ${order.store_id}` : 'N/A';
+                }
             }
-            if (!merchantName) {
-                merchantName = order.store_id ? `Store ${order.store_id}` : 'N/A';
+            
+            // Ensure we don't show store_id as merchant name
+            if (merchantName === order.store_id) {
+                merchantName = `Merchant ${order.store_id}`;
             }
             
             // Get distance (same logic as createOrderRow)
@@ -5268,6 +5286,19 @@ async function loadOrders() {
             allOrders = data.orders || data || [];
             console.log('Loaded orders:', allOrders.length);
             
+            // Pre-process orders: cache parsed raw_data to avoid repeated parsing
+            allOrders.forEach(order => {
+                if (order.raw_data && typeof order.raw_data === 'string' && !order._parsedRawData) {
+                    try {
+                        order._parsedRawData = JSON.parse(order.raw_data);
+                    } catch (e) {
+                        order._parsedRawData = {};
+                    }
+                } else if (order.raw_data && typeof order.raw_data === 'object') {
+                    order._parsedRawData = order.raw_data;
+                }
+            });
+            
             // Check for new orders
             checkForNewOrders(allOrders);
             
@@ -5288,7 +5319,13 @@ async function loadOrders() {
 }
 
 // Helper function to check if order has scheduled delivery time
+// Cached result to avoid repeated calculations
 function hasScheduledDeliveryTime(order) {
+    // Use cached result if available
+    if (order._isScheduled !== undefined) {
+        return order._isScheduled;
+    }
+    
     // First check if scheduled_delivery_time is already extracted and stored in the order object
     // This is the most reliable source since it's extracted by the backend
     if (order.scheduled_delivery_time) {
@@ -5301,67 +5338,32 @@ function hasScheduledDeliveryTime(order) {
             const minutesDiff = timeDiff / (1000 * 60);
             
             if (scheduledDate > now || (minutesDiff > -1 && minutesDiff < 60)) {
-                const orderId = order.gloriafood_order_id || order.id;
-                console.log(`[DEBUG] Order ${orderId || 'unknown'} is scheduled - using order.scheduled_delivery_time: ${order.scheduled_delivery_time} (${minutesDiff.toFixed(1)} min)`);
+                order._isScheduled = true;
                 return true;
             }
         } catch (e) {
             // If parsing fails but field exists, still consider it scheduled (might be a format issue)
-            const orderId = order.gloriafood_order_id || order.id;
-            console.log(`[DEBUG] Order ${orderId || 'unknown'} has scheduled_delivery_time field but parsing failed: ${order.scheduled_delivery_time}`);
             // Continue to check other fields, but if "Later" is selected, return true
         }
     }
     
-    let rawData = {};
-    try {
-        if (order.raw_data) {
-            rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+    // Use cached parsed raw_data if available
+    let rawData = order._parsedRawData;
+    if (!rawData) {
+        try {
+            if (order.raw_data) {
+                rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+                order._parsedRawData = rawData; // Cache it
+            } else {
+                rawData = {};
+            }
+        } catch (e) {
+            rawData = {};
         }
-    } catch (e) {
-        // Ignore parsing errors
     }
     
-    // Debug: Log order data to help diagnose scheduled detection (only first time)
+    // Reduced debug logging for performance
     const orderId = order.gloriafood_order_id || order.id;
-        if (orderId && Object.keys(rawData).length > 0) {
-        if (!window._scheduledCheckLogged) {
-            window._scheduledCheckLogged = new Set();
-        }
-        if (!window._scheduledCheckLogged.has(orderId)) {
-            // Log all possible scheduled-related fields for debugging
-            const scheduledFields = {
-                delivery_type: rawData.delivery_type,
-                delivery_option: rawData.delivery_option,
-                available_time: rawData.available_time,
-                delivery_time: rawData.delivery_time,
-                requested_delivery_time: rawData.requested_delivery_time,
-                scheduled_delivery_time: rawData.scheduled_delivery_time,
-                preferred_delivery_time: rawData.preferred_delivery_time,
-                selected_delivery_time: rawData.selected_delivery_time,
-                chosen_delivery_time: rawData.chosen_delivery_time,
-                delivery_date: rawData.delivery_date,
-                scheduled_date: rawData.scheduled_date,
-                selected_delivery_date: rawData.selected_delivery_date,
-                preferred_delivery_date: rawData.preferred_delivery_date,
-                delivery_time_only: rawData.delivery_time_only,
-                time_slot: rawData.time_slot,
-                delivery_time_slot: rawData.delivery_time_slot,
-                asap: rawData.asap,
-                is_asap: rawData.is_asap,
-                is_scheduled: rawData.is_scheduled,
-                scheduled: rawData.scheduled,
-                is_later: rawData.is_later,
-                // Check nested objects
-                delivery: rawData.delivery,
-                schedule: rawData.schedule,
-                time: rawData.time,
-                all_keys: Object.keys(rawData).slice(0, 30) // First 30 keys
-            };
-            console.log(`[DEBUG] Checking scheduled for order ${orderId}:`, scheduledFields);
-            window._scheduledCheckLogged.add(orderId);
-        }
-    }
     
     // Check if "Later" option is selected (GloriaFood sends delivery_type or delivery_option)
     // Also check for "asap" vs "later" indicators
@@ -5384,7 +5386,7 @@ function hasScheduledDeliveryTime(order) {
     // If "Later" is explicitly selected, it's scheduled (even if no time found yet)
     // This is important for Gloria Food "in later" orders
     if (isLaterSelected) {
-        console.log(`[DEBUG] Order ${orderId || 'unknown'} is scheduled - Later option selected (delivery_type: ${deliveryType}, delivery_option: ${deliveryOption})`);
+        order._isScheduled = true;
         return true;
     }
     
@@ -5428,7 +5430,7 @@ function hasScheduledDeliveryTime(order) {
                 try {
                     const checkDate = new Date(checkTime);
                     if (checkDate > new Date()) {
-                        console.log(`[DEBUG] Order ${orderId || 'unknown'} is scheduled - future delivery time found: ${checkTime}`);
+                        order._isScheduled = true;
                         return true;
                     }
                 } catch (e) {
@@ -5577,7 +5579,7 @@ function hasScheduledDeliveryTime(order) {
                     // Check if there's a time component in other fields
                     if (deliveryTimeOnly || rawData.delivery_time || rawData.requested_delivery_time || rawData.scheduled_delivery_time || rawData.preferred_delivery_time || rawData.selected_delivery_time) {
                         // Has date + time somewhere = scheduled
-                        console.log(`[DEBUG] Order ${orderId || 'unknown'} is scheduled - has date and time: ${deliveryDate}`);
+                        order._isScheduled = true;
                         return true;
                     }
                 }
@@ -5591,7 +5593,7 @@ function hasScheduledDeliveryTime(order) {
             scheduledTime = `${today} ${deliveryTimeOnly}`;
             // If we have a time slot and it's not ASAP, it's likely scheduled
             if (!isAsap) {
-                console.log(`[DEBUG] Order ${orderId || 'unknown'} is scheduled - has time slot and not ASAP: ${deliveryTimeOnly}`);
+                order._isScheduled = true;
                 return true;
             }
         }
@@ -5612,7 +5614,7 @@ function hasScheduledDeliveryTime(order) {
             if (scheduledDate > now || (minutesDiff > -5 && minutesDiff < 1440)) {
                 // More than 1 minute in future, or within last 5 minutes (recently scheduled)
                 if (minutesDiff > 1 || (minutesDiff > -5 && minutesDiff < 1440)) {
-                    console.log(`[DEBUG] Order ${orderId || 'unknown'} is scheduled - scheduledTime found: ${scheduledTime}, date: ${scheduledDate}, ${minutesDiff.toFixed(1)} min`);
+                    order._isScheduled = true;
                     return true;
                 }
             }
@@ -5621,7 +5623,7 @@ function hasScheduledDeliveryTime(order) {
             const scheduledDay = scheduledDate.toDateString();
             const today = now.toDateString();
             if (scheduledDay !== today && scheduledDate >= new Date(now.getTime() - 5 * 60 * 1000)) {
-                console.log(`[DEBUG] Order ${orderId || 'unknown'} is scheduled - different day (${scheduledDay} vs ${today})`);
+                order._isScheduled = true;
                 return true;
             }
         } catch (e) {
@@ -5630,9 +5632,9 @@ function hasScheduledDeliveryTime(order) {
             const hasDate = rawData.delivery_date || rawData.deliveryDate || rawData.scheduled_date;
             const hasTime = rawData.delivery_time_only || rawData.deliveryTimeOnly || rawData.scheduled_time;
             if (hasDate || hasTime) {
-                console.log(`[DEBUG] Order ${orderId || 'unknown'} has date/time (scheduled): date=${hasDate}, time=${hasTime}`);
                 // If we have date or time and it's not ASAP, it's likely scheduled
                 if (!isAsap) {
+                    order._isScheduled = true;
                     return true;
                 }
             }
@@ -5693,7 +5695,7 @@ function hasScheduledDeliveryTime(order) {
         
                 // If more than 1 minute in the future, it's scheduled
                 if (minutesDiff > 1) {
-                    console.log(`[DEBUG] Order ${orderId || 'unknown'} is SCHEDULED (${minutesDiff} min in future)`);
+                    order._isScheduled = true;
                     return true;
                 }
                 
@@ -5701,27 +5703,17 @@ function hasScheduledDeliveryTime(order) {
                 const deliveryDay = deliveryDate.toDateString();
                 const today = now.toDateString();
                 if (deliveryDay !== today) {
-                    console.log(`[DEBUG] Order ${orderId || 'unknown'} is SCHEDULED (different day)`);
+                    order._isScheduled = true;
                     return true; // Different day = scheduled
                 }
-            } else {
-                console.log(`[DEBUG] Order ${orderId || 'unknown'} delivery time is NOT in future: ${deliveryTime} -> ${deliveryDate}, now: ${now}`);
             }
     } catch (e) {
             // Ignore parsing errors
         }
     }
     
-    // Debug: Log if order is NOT scheduled (only log once per order to avoid spam)
-    // orderId is already declared at the top of this function
-    if (orderId && !window._scheduledDebugLogged) {
-        window._scheduledDebugLogged = new Set();
-    }
-    if (orderId && window._scheduledDebugLogged && !window._scheduledDebugLogged.has(orderId)) {
-        console.log(`[DEBUG] Order ${orderId} is NOT scheduled - checking raw_data keys:`, Object.keys(rawData || {}));
-        window._scheduledDebugLogged.add(orderId);
-    }
-    
+    // Cache result
+    order._isScheduled = false;
     return false;
 }
 
@@ -5742,41 +5734,42 @@ function getOrderCategory(order) {
         // For scheduled orders, check if scheduled delivery time has passed
         let scheduledTime = null;
         
-        // Try to get scheduled delivery time
+        // Try to get scheduled delivery time (use cached parsed data if available)
         try {
-            let rawData = {};
-            if (order.raw_data) {
-                rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
-            }
+            // Use cached parsed raw_data if available
+            const rawData = order._parsedRawData || (order.raw_data ? (typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data) : {});
             
             scheduledTime = order.scheduled_delivery_time || 
                           rawData.scheduled_delivery_time ||
                           rawData.delivery_time ||
-                          rawData.requested_delivery_time;
+                          rawData.requested_delivery_time ||
+                          rawData.preferred_delivery_time ||
+                          rawData.selected_delivery_time;
             
             if (scheduledTime) {
                 const scheduledDate = new Date(scheduledTime);
                 const now = new Date();
                 
-                // If scheduled time has already passed, move to incomplete
-                // (unless it's already completed/delivered)
-                if (scheduledDate < now) {
+                // If scheduled time has already passed significantly (more than 1 hour), move to incomplete
+                // But keep in scheduled if it's very recent (within last hour) - might be running late
+                const timeDiff = now.getTime() - scheduledDate.getTime();
+                const hoursDiff = timeDiff / (1000 * 60 * 60);
+                
+                if (hoursDiff > 1) {
                     // If order is delivered/completed, it should be in completed
                     if (isCompleted) {
                         return 'completed';
                     }
-                    // Otherwise, scheduled time has passed - move to incomplete
+                    // Otherwise, scheduled time has passed more than 1 hour - move to incomplete
                     return 'incomplete';
                 }
             }
         } catch (e) {
-            // If can't parse scheduled time, check order age instead
-            console.error('Error parsing scheduled time:', e);
+            // If can't parse scheduled time, still consider it scheduled if hasScheduledDeliveryTime returned true
+            // This handles edge cases where time format might be different
         }
         
-        // Scheduled order with future time - stay in scheduled
-        const orderId = order.gloriafood_order_id || order.id;
-        console.log(`[DEBUG] Order ${orderId} categorized as SCHEDULED`);
+        // Scheduled order with future time or recent past time - stay in scheduled
         return 'scheduled';
     }
     
@@ -5806,8 +5799,6 @@ function getOrderCategory(order) {
 function filterAndDisplayOrders() {
     let filtered = [...allOrders];
     
-    console.log(`[DEBUG] Filtering orders with status filter: "${currentStatusFilter}", total orders: ${allOrders.length}`);
-    
     // Apply status filter
     if (currentStatusFilter && currentStatusFilter !== 'current') {
         if (currentStatusFilter === 'scheduled') {
@@ -5816,39 +5807,70 @@ function filterAndDisplayOrders() {
                 const category = getOrderCategory(order);
                 return category === 'scheduled';
             });
-            console.log(`[DEBUG] Scheduled filter: ${filtered.length} orders found`);
         } else if (currentStatusFilter === 'completed') {
             // Completed = delivered, completed, fulfilled orders
             filtered = filtered.filter(order => {
                 const status = (order.status || '').toUpperCase();
                 return ['DELIVERED', 'COMPLETED', 'FULFILLED'].includes(status);
             });
-            console.log(`[DEBUG] Completed filter: ${filtered.length} orders found`);
         } else if (currentStatusFilter === 'incomplete') {
             // Incomplete = cancelled, failed, rejected orders
             filtered = filtered.filter(order => {
                 const status = (order.status || '').toUpperCase();
                 return ['CANCELLED', 'FAILED', 'REJECTED', 'CANCELED'].includes(status);
             });
-            console.log(`[DEBUG] Incomplete filter: ${filtered.length} orders found`);
-        } else if (currentStatusFilter === 'history') {
-            // History = ALL orders (current, scheduled, completed, incomplete)
-            // Show everything - no filtering
-            console.log(`[DEBUG] History filter: showing all ${filtered.length} orders`);
         }
+        // History = ALL orders - no filtering needed
     } else if (currentStatusFilter === 'current') {
-        // Current = all active orders (not delivered, completed, or cancelled)
-        // INCLUDING scheduled orders (scheduled orders appear in both Current and Scheduled)
+        // Current = all active orders, BUT respect dispatch time window for scheduled orders
+        const dispatchTimeWindow = parseFloat(localStorage.getItem('dispatchTimeWindow') || '1');
+        
         filtered = filtered.filter(order => {
             const status = (order.status || '').toUpperCase();
             const isActive = status && !['DELIVERED', 'COMPLETED', 'CANCELLED', 'CANCELED', 'FAILED', 'REJECTED'].includes(status);
-            // Current = all active orders (including scheduled ones)
-            return isActive;
+            
+            if (!isActive) return false;
+            
+            // If it's a scheduled order, check if it's within the dispatch window
+            if (getOrderCategory(order) === 'scheduled') {
+                try {
+                    // Check if ready for pickup - if so, always show in current
+                    const readyStatusKey = `order_ready_${order.id}`;
+                    if (localStorage.getItem(readyStatusKey) === 'true' || order.ready_for_pickup) {
+                        return true;
+                    }
+
+                    // Get scheduled time (try to match logic from other helpers)
+                    const rawData = order._parsedRawData || (order.raw_data ? (typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data) : {});
+                    
+                    const scheduledTime = order.scheduled_delivery_time || 
+                                        rawData.scheduled_delivery_time ||
+                                        rawData.delivery_time ||
+                                        rawData.requested_delivery_time ||
+                                        rawData.preferred_delivery_time ||
+                                        rawData.selected_delivery_time ||
+                                        (rawData.delivery && rawData.delivery.expected_delivery_time) ||
+                                        (rawData.delivery && rawData.delivery.expectedDeliveryTime);
+                    
+                    if (scheduledTime) {
+                         const scheduledDate = new Date(scheduledTime);
+                         const now = new Date();
+                         // Difference in hours
+                         const hoursDiff = (scheduledDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+                         
+                         // If scheduled time is more than dispatchTimeWindow hours in future, hide from Current
+                         // (Allow a 15 min buffer where we might show it slightly early or if time is very close)
+                         if (hoursDiff > dispatchTimeWindow) {
+                             return false; 
+                         }
+                    }
+                } catch (e) {
+                    console.error('Error checking scheduled time for current filter:', e);
+                }
+            }
+            
+            return true;
         });
-        console.log(`[DEBUG] Current filter: ${filtered.length} orders found`);
-    } else {
-        // No filter - show all orders
-        console.log(`[DEBUG] No filter applied: showing all ${filtered.length} orders`);
     }
     
     // Apply search filter
@@ -5871,7 +5893,7 @@ function filterAndDisplayOrders() {
     displayOrders(filtered);
 }
 
-// Display orders in table
+// Display orders in table (optimized with DocumentFragment for faster rendering)
 function displayOrders(orders) {
     const tbody = document.getElementById('ordersTableBody');
     
@@ -5904,8 +5926,22 @@ function displayOrders(orders) {
     }
     
     try {
-        const rows = orders.map(order => createOrderRow(order)).join('');
-        tbody.innerHTML = rows;
+        // Use DocumentFragment for faster DOM updates
+        const fragment = document.createDocumentFragment();
+        const tempDiv = document.createElement('div');
+        
+        // Build HTML string
+        const rowsHtml = orders.map(order => createOrderRow(order)).join('');
+        tempDiv.innerHTML = rowsHtml;
+        
+        // Move all rows to fragment
+        while (tempDiv.firstChild) {
+            fragment.appendChild(tempDiv.firstChild);
+        }
+        
+        // Clear and append in one operation
+        tbody.innerHTML = '';
+        tbody.appendChild(fragment);
     } catch (error) {
         console.error('Error displaying orders:', error);
         tbody.innerHTML = `
@@ -5936,33 +5972,47 @@ function createOrderRow(order) {
     const customerName = escapeHtml(order.customer_name || 'N/A');
     const customerAddress = escapeHtml(order.delivery_address || order.customer_address || 'N/A');
     
-    // Extract fields from raw_data if available (MUST be done before using rawData)
-    let rawData = {};
-    try {
-        if (order.raw_data) {
+    // Use cached parsed raw_data if available (pre-processed in loadOrders)
+    let rawData = order._parsedRawData || {};
+    if (!rawData && order.raw_data) {
+        try {
             rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+            order._parsedRawData = rawData; // Cache it
+        } catch (e) {
+            rawData = {};
         }
-    } catch (e) {
-        console.error('Error parsing raw_data:', e);
     }
     
-    // Use merchant_name from backend (already enriched), fallback to store_id only if not available
-    // Also check raw_data for merchant/restaurant name
+    // Use merchant_name from backend (already enriched by backend)
+    // Backend enriches orders with merchant_name from merchants table
     let merchantName = order.merchant_name;
-    if (!merchantName && rawData) {
-        merchantName = rawData.merchant_name || 
-                      rawData.merchantName ||
-                      rawData.restaurant_name ||
-                      rawData.restaurantName ||
-                      (rawData.restaurant && rawData.restaurant.name) ||
-                      (rawData.restaurant && rawData.restaurant.restaurant_name) ||
-                      (rawData.merchant && rawData.merchant.name) ||
-                      null;
+    
+    // Only check raw_data if backend didn't provide merchant_name
+    if (!merchantName || merchantName === order.store_id || merchantName === 'Unknown Merchant') {
+        if (rawData) {
+            merchantName = rawData.merchant_name || 
+                          rawData.merchantName ||
+                          rawData.restaurant_name ||
+                          rawData.restaurantName ||
+                          (rawData.restaurant && rawData.restaurant.name) ||
+                          (rawData.restaurant && rawData.restaurant.restaurant_name) ||
+                          (rawData.merchant && rawData.merchant.name) ||
+                          null;
+        }
+        
+        // Final fallback - only show store_id if absolutely no merchant name found
+        if (!merchantName || merchantName === order.store_id) {
+            // Try to get from merchants API if available
+            // For now, show a more user-friendly message
+            merchantName = order.store_id ? `Merchant ${order.store_id}` : 'N/A';
+        }
     }
-    // Final fallback - only show store_id number if no merchant name found
-    if (!merchantName) {
-        merchantName = order.store_id ? `Store ${order.store_id}` : 'N/A';
+    
+    // Ensure we don't show store_id as merchant name
+    if (merchantName === order.store_id) {
+        merchantName = `Merchant ${order.store_id}`;
     }
+    
     merchantName = escapeHtml(merchantName);
     const amount = formatCurrency(order.total_price || 0, order.currency || 'USD');
     const orderPlaced = formatDateShipday(order.fetched_at || order.created_at || order.updated_at);
@@ -6532,6 +6582,7 @@ function createOrderRow(order) {
                 ${clockIcon}
                 <strong>#${escapeHtml(String(orderId))}</strong>
             </td>
+            <td>${merchantName}</td>
             <td>${customerName}</td>
             <td>${customerAddress}</td>
             <td>${amount}</td>

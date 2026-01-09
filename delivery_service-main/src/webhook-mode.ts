@@ -40,6 +40,7 @@ class GloriaFoodWebhookServer {
   private emailService?: EmailService;
   private merchantManager: MerchantManager;
   private sessions: Map<string, { userId: number; email: string; expires: number }> = new Map();
+  private doorDashSyncInterval?: NodeJS.Timeout;
 
   constructor(config: WebhookConfig) {
     console.log(chalk.blue.bold('\n🔵 Starting GloriaFood Webhook Server...'));
@@ -526,6 +527,96 @@ class GloriaFoodWebhookServer {
     return ['cancelled', 'canceled', 'rejected', 'voided'].includes(normalized);
   }
 
+  /**
+   * Start periodic sync of DoorDash status for pending orders
+   * This helps catch cancellations even if webhook wasn't received
+   */
+  private startDoorDashStatusSync(): void {
+    if (!this.doorDashClient) {
+      return;
+    }
+
+    // Sync every 2 minutes
+    this.doorDashSyncInterval = setInterval(async () => {
+      try {
+        await this.syncDoorDashStatuses();
+      } catch (error: any) {
+        console.error(chalk.red('Error in DoorDash status sync:'), error.message);
+      }
+    }, 2 * 60 * 1000); // 2 minutes
+
+    // Run initial sync after 30 seconds
+    setTimeout(() => {
+      this.syncDoorDashStatuses().catch(err => {
+        console.error(chalk.red('Error in initial DoorDash status sync:'), err.message);
+      });
+    }, 30000);
+  }
+
+  /**
+   * Sync DoorDash status for orders that are pending but sent to DoorDash
+   */
+  private async syncDoorDashStatuses(): Promise<void> {
+    if (!this.doorDashClient) {
+      return;
+    }
+
+    try {
+      // Get all orders that are sent to DoorDash but still pending
+      const allOrders = await this.handleAsync(this.database.getAllOrders(100));
+      const pendingOrders = allOrders.filter(order => {
+        const status = (order.status || '').toUpperCase();
+        const isPending = ['PENDING', 'ACCEPTED', 'CONFIRMED'].includes(status);
+        const hasDoorDashId = (order as any).doordash_order_id || (order as any).sent_to_doordash;
+        return isPending && hasDoorDashId;
+      });
+
+      if (pendingOrders.length === 0) {
+        return;
+      }
+
+      console.log(chalk.blue(`\n🔄 Syncing DoorDash status for ${pendingOrders.length} pending order(s)...`));
+
+      for (const order of pendingOrders) {
+        try {
+          const doorDashId = (order as any).doordash_order_id;
+          if (!doorDashId) {
+            continue;
+          }
+
+          const ddStatus = await this.doorDashClient.getOrderStatus(doorDashId);
+          const normalizedStatus = (ddStatus.status || '').toLowerCase();
+
+          // Update order status if DoorDash shows cancelled
+          if (normalizedStatus === 'cancelled' || normalizedStatus === 'canceled') {
+            if ((this.database as any).updateOrderStatus) {
+              const updated = await this.handleAsync(
+                (this.database as any).updateOrderStatus(order.gloriafood_order_id, 'CANCELLED')
+              );
+              if (updated) {
+                console.log(chalk.yellow(`  ⚠️  Updated order #${order.gloriafood_order_id} to CANCELLED (DoorDash cancelled)`));
+              }
+            }
+          } else if (normalizedStatus === 'delivered' || normalizedStatus === 'completed') {
+            if ((this.database as any).updateOrderStatus) {
+              const updated = await this.handleAsync(
+                (this.database as any).updateOrderStatus(order.gloriafood_order_id, 'DELIVERED')
+              );
+              if (updated) {
+                console.log(chalk.green(`  ✅ Updated order #${order.gloriafood_order_id} to DELIVERED`));
+              }
+            }
+          }
+        } catch (error: any) {
+          // Ignore errors for individual orders (might be invalid ID, etc.)
+          console.log(chalk.gray(`  ⚠️  Could not sync order #${order.gloriafood_order_id}: ${error.message}`));
+        }
+      }
+    } catch (error: any) {
+      console.error(chalk.red('Error syncing DoorDash statuses:'), error.message);
+    }
+  }
+
   private async restorePendingSchedules(): Promise<void> {
     if (!this.deliveryScheduler) {
       return;
@@ -800,6 +891,15 @@ class GloriaFoodWebhookServer {
         // Determine if this is a new order BEFORE saving
         const existingBefore = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId.toString()));
 
+        // Get merchant name from merchant manager and add to orderData
+        const storeId = orderData.store_id || orderData.restaurant_id;
+        if (storeId) {
+          const merchant = this.merchantManager.getMerchantByStoreId(storeId.toString());
+          if (merchant && merchant.merchant_name) {
+            orderData.merchant_name = merchant.merchant_name;
+          }
+        }
+
         // Store order in database (handle both sync SQLite and async MySQL)
         console.log(chalk.blue(`💾 Saving order to database...`));
         const savedOrder = await this.handleAsync(this.database.insertOrUpdateOrder(orderData));
@@ -900,15 +1000,22 @@ class GloriaFoodWebhookServer {
           orders = orders.filter(order => order.store_id === storeId);
         }
         
-        // Enrich orders with merchant information
+        // Enrich orders with merchant information (use stored merchant_name if available, otherwise get from merchants table)
         const enrichedOrders = orders.map(order => {
+          // If order already has merchant_name stored, use it (for historical accuracy)
+          if (order.merchant_name) {
+            return order;
+          }
+          
+          // Otherwise, get from merchants table
           const merchant = order.store_id 
             ? this.merchantManager.getMerchantByStoreId(order.store_id)
             : null;
           
           return {
             ...order,
-            merchant_name: merchant?.merchant_name || order.store_id || 'Unknown Merchant'
+            // Use merchant_name from merchants table if order doesn't have it stored
+            merchant_name: merchant?.merchant_name || (order.store_id ? `Merchant ${order.store_id}` : 'Unknown Merchant')
           };
         });
         
@@ -1264,6 +1371,98 @@ class GloriaFoodWebhookServer {
       }
     });
 
+    // DoorDash webhook endpoint for status updates
+    this.app.post('/webhook/doordash', async (req: Request, res: Response) => {
+      try {
+        if (!this.doorDashClient) {
+          return res.status(400).json({ 
+            error: 'DoorDash not configured',
+            message: 'DoorDash credentials not provided'
+          });
+        }
+
+        const webhookData = req.body;
+        const eventType = webhookData.event_type || webhookData.type || webhookData.event;
+        const deliveryId = webhookData.delivery_id || webhookData.id || webhookData.deliveryId;
+        const externalDeliveryId = webhookData.external_delivery_id || webhookData.externalDeliveryId;
+        const status = webhookData.status || webhookData.delivery_status || webhookData.state;
+
+        console.log(chalk.cyan(`\n📥 Received DoorDash webhook: ${eventType}`));
+        console.log(chalk.gray(`  Delivery ID: ${deliveryId}`));
+        console.log(chalk.gray(`  External ID: ${externalDeliveryId}`));
+        console.log(chalk.gray(`  Status: ${status}`));
+
+        if (!deliveryId && !externalDeliveryId) {
+          console.log(chalk.yellow('⚠️  No delivery ID found in webhook'));
+          return res.status(400).json({ 
+            success: false,
+            error: 'Missing delivery_id or external_delivery_id' 
+          });
+        }
+
+        // Find order by DoorDash ID or external delivery ID
+        let order = null;
+        if (deliveryId) {
+          order = await this.handleAsync((this.database as any).getOrderByDoorDashId?.(deliveryId));
+        }
+        
+        if (!order && externalDeliveryId) {
+          // Try to find by external delivery ID (GloriaFood order ID)
+          order = await this.handleAsync(this.database.getOrderByGloriaFoodId(externalDeliveryId));
+        }
+
+        if (!order) {
+          console.log(chalk.yellow(`⚠️  Order not found for DoorDash delivery: ${deliveryId || externalDeliveryId}`));
+          // Still return 200 to prevent DoorDash from retrying
+          return res.status(200).json({ 
+            success: false,
+            message: 'Order not found',
+            delivery_id: deliveryId || externalDeliveryId
+          });
+        }
+
+        // Update order status based on DoorDash status
+        let newStatus = order.status;
+        const normalizedStatus = (status || '').toLowerCase();
+
+        if (normalizedStatus === 'cancelled' || normalizedStatus === 'canceled') {
+          newStatus = 'CANCELLED';
+          console.log(chalk.red(`  ❌ DoorDash cancelled delivery for order #${order.gloriafood_order_id}`));
+        } else if (normalizedStatus === 'delivered' || normalizedStatus === 'completed') {
+          newStatus = 'DELIVERED';
+          console.log(chalk.green(`  ✅ DoorDash delivered order #${order.gloriafood_order_id}`));
+        } else if (normalizedStatus === 'accepted' || normalizedStatus === 'assigned') {
+          newStatus = 'ACCEPTED';
+          console.log(chalk.blue(`  📦 DoorDash accepted order #${order.gloriafood_order_id}`));
+        } else if (normalizedStatus === 'picked_up' || normalizedStatus === 'pickedup') {
+          newStatus = 'PICKED UP';
+          console.log(chalk.cyan(`  🚗 DoorDash picked up order #${order.gloriafood_order_id}`));
+        }
+
+        // Update order status in database if changed
+        if (newStatus !== order.status && (this.database as any).updateOrderStatus) {
+          const updated = await this.handleAsync((this.database as any).updateOrderStatus(order.gloriafood_order_id, newStatus));
+          if (updated) {
+            console.log(chalk.green(`  ✅ Updated order #${order.gloriafood_order_id} status: ${order.status} → ${newStatus}`));
+          }
+        }
+
+        res.status(200).json({ 
+          success: true, 
+          message: 'DoorDash webhook processed',
+          order_id: order.gloriafood_order_id,
+          status: newStatus
+        });
+      } catch (error: any) {
+        console.error(chalk.red('❌ Error processing DoorDash webhook:'), error.message);
+        // Still return 200 to prevent DoorDash from retrying
+        res.status(200).json({ 
+          success: false, 
+          error: error.message 
+        });
+      }
+    });
+
     // Get DoorDash delivery status
     this.app.get('/doordash/status/:orderId', async (req: Request, res: Response) => {
       try {
@@ -1573,9 +1772,20 @@ class GloriaFoodWebhookServer {
         });
         
         if (doorDashResult && doorDashResult.id) {
+          // Get merchant name before updating
+          const storeId = order.store_id;
+          let merchantName = order.merchant_name;
+          if (storeId && !merchantName) {
+            const merchant = this.merchantManager.getMerchantByStoreId(storeId);
+            if (merchant && merchant.merchant_name) {
+              merchantName = merchant.merchant_name;
+            }
+          }
+
           // Update order with DoorDash info
           const updatedOrder = await this.handleAsync(this.database.insertOrUpdateOrder({
             ...order,
+            merchant_name: merchantName,
             doordash_order_id: doorDashResult.id,
             sent_to_doordash: true
           }));
@@ -2087,6 +2297,11 @@ class GloriaFoodWebhookServer {
     await this.merchantManager.initialize();
     try {
       // Bind to 0.0.0.0 to allow external connections (required for Render)
+      // Start periodic DoorDash status sync (every 2 minutes)
+      if (this.doorDashClient) {
+        this.startDoorDashStatusSync();
+      }
+
       const server = this.app.listen(this.config.port, '0.0.0.0', () => {
         console.log(chalk.blue.bold('\n🚀 GloriaFood Webhook Server Started\n'));
         console.log(chalk.gray('Configuration:'));
