@@ -5616,7 +5616,28 @@ function createOrderRow(order) {
     // If order was sent to DoorDash, use DoorDash status
     // PENDING if no rider accepted yet, ACCEPTED when rider accepts
     let status = (order.status || 'UNKNOWN').toUpperCase();
-    if (order.sent_to_doordash || order.doordash_order_id || doordashData) {
+    
+    // Check if order is in incomplete category - if so, ensure status reflects that
+    const orderCategory = getOrderCategory(order);
+    if (orderCategory === 'incomplete') {
+        // If order is categorized as incomplete but status is still PENDING, update it
+        if (status === 'PENDING' || status === 'UNKNOWN') {
+            // Check if order has DoorDash indicators that suggest it was cancelled
+            const hasDoorDash = order.doordash_order_id || 
+                               order.doordash_tracking_url || 
+                               order.sent_to_doordash ||
+                               (rawData && (rawData.doordash_order_id || rawData.doordash_tracking_url));
+            
+            if (hasDoorDash) {
+                // Likely cancelled in DoorDash but status not updated yet - show as CANCELLED
+                status = 'CANCELLED';
+            } else {
+                // Other incomplete reasons (failed, rejected, etc.)
+                status = 'INCOMPLETE';
+            }
+        }
+        // If status is already CANCELLED, FAILED, REJECTED, etc., keep it
+    } else if (order.sent_to_doordash || order.doordash_order_id || doordashData) {
         if (doordashStatus) {
             // Map DoorDash status to our status
             const ddStatusLower = String(doordashStatus).toLowerCase();
