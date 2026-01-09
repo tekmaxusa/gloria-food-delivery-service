@@ -3002,7 +3002,8 @@ async function showMyAccountPage() {
         link.classList.remove('active');
     });
 
-    // Add class to body to indicate we're on profile page
+    // Remove settings page class and add profile page class
+    document.body.classList.remove('on-settings-page');
     document.body.classList.add('on-profile-page');
 
     const userName = currentUser?.full_name || currentUser?.email || 'User';
@@ -3203,7 +3204,8 @@ function showSettingsPage() {
         link.classList.remove('active');
     });
 
-    // Add class to body to indicate we're on settings page
+    // Remove profile page class and add settings page class
+    document.body.classList.remove('on-profile-page');
     document.body.classList.add('on-settings-page');
 
     // Default selected item
