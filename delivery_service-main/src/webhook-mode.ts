@@ -593,48 +593,62 @@ class GloriaFoodWebhookServer {
       for (const order of ordersToCheck) {
         try {
           const doorDashId = (order as any).doordash_order_id;
+          const trackingUrl = (order as any).doordash_tracking_url;
           const externalDeliveryId = order.gloriafood_order_id; // Use GloriaFood order ID as external_delivery_id
           
-          // Try to get status by doordash_order_id first, then by external_delivery_id
+          // Try to extract DoorDash ID from tracking URL if available
+          let extractedDoorDashId = null;
+          if (trackingUrl && trackingUrl.includes('doordash')) {
+            // Try to extract delivery ID from tracking URL
+            const urlMatch = trackingUrl.match(/deliveries\/([^\/\?]+)/i) || trackingUrl.match(/delivery\/([^\/\?]+)/i);
+            if (urlMatch && urlMatch[1]) {
+              extractedDoorDashId = urlMatch[1];
+            }
+          }
+          
+          // Try to get status by doordash_order_id first, then by extracted ID, then by external_delivery_id
           let ddStatus = null;
           let statusError = null;
+          let triedIds = [];
 
+          // Try 1: Use doordash_order_id if available
           if (doorDashId) {
+            triedIds.push(`doordash_order_id: ${doorDashId}`);
             try {
               ddStatus = await this.doorDashClient.getOrderStatus(doorDashId);
             } catch (error: any) {
               statusError = error;
-              // If 404, try with external_delivery_id
-              if (error.message?.includes('404') || error.message?.includes('not found')) {
-                if (externalDeliveryId) {
-                  try {
-                    ddStatus = await this.doorDashClient.getOrderStatus(externalDeliveryId);
-                  } catch (error2: any) {
-                    // Both failed, skip this order
-                    continue;
-                  }
-                } else {
-                  continue;
-                }
-              } else {
-                // Other error, log and continue
-                console.log(chalk.gray(`  ⚠️  Could not sync order #${order.gloriafood_order_id}: ${error.message}`));
-                continue;
-              }
             }
-          } else if (externalDeliveryId) {
-            // No doordash_order_id, try with external_delivery_id
+          }
+          
+          // Try 2: Use extracted ID from tracking URL if available and first try failed
+          if (!ddStatus && extractedDoorDashId && extractedDoorDashId !== doorDashId) {
+            triedIds.push(`extracted from URL: ${extractedDoorDashId}`);
+            try {
+              ddStatus = await this.doorDashClient.getOrderStatus(extractedDoorDashId);
+            } catch (error: any) {
+              statusError = error;
+            }
+          }
+          
+          // Try 3: Use external_delivery_id (GloriaFood order ID) if previous tries failed
+          if (!ddStatus && externalDeliveryId) {
+            triedIds.push(`external_delivery_id: ${externalDeliveryId}`);
             try {
               ddStatus = await this.doorDashClient.getOrderStatus(externalDeliveryId);
             } catch (error: any) {
-              // If 404, order might not exist in DoorDash yet - this is normal
-              if (error.message?.includes('404') || error.message?.includes('not found')) {
-                continue;
-              }
-              console.log(chalk.gray(`  ⚠️  Could not sync order #${order.gloriafood_order_id}: ${error.message}`));
-              continue;
+              statusError = error;
             }
-          } else {
+          }
+
+          // If all tries failed, log and continue
+          if (!ddStatus) {
+            if (statusError && (statusError.message?.includes('404') || statusError.message?.includes('not found'))) {
+              // 404 is expected for orders not in DoorDash - skip silently
+              continue;
+            } else if (statusError) {
+              console.log(chalk.gray(`  ⚠️  Order #${order.gloriafood_order_id}: Could not get DoorDash status (tried: ${triedIds.join(', ')}): ${statusError.message}`));
+            }
             continue;
           }
 
@@ -1419,6 +1433,123 @@ class GloriaFoodWebhookServer {
         });
       } catch (error: any) {
         console.error(chalk.red('Error in manual DoorDash sync:'), error);
+        res.status(500).json({ 
+          success: false, 
+          error: error.message 
+        });
+      }
+    });
+
+    // Sync specific order by GloriaFood order ID
+    this.app.post('/api/sync/doordash/:orderId', async (req: Request, res: Response) => {
+      try {
+        const orderId = req.params.orderId;
+        console.log(chalk.cyan(`\n🔄 Manual DoorDash sync for order #${orderId}`));
+        
+        const order = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId));
+        if (!order) {
+          return res.status(404).json({ 
+            success: false, 
+            error: 'Order not found' 
+          });
+        }
+
+        // Check if order has DoorDash indicators
+        const hasDoorDash = (order as any).doordash_order_id || 
+                           (order as any).sent_to_doordash || 
+                           (order as any).doordash_tracking_url;
+        
+        if (!hasDoorDash) {
+          return res.status(400).json({ 
+            success: false, 
+            error: 'Order does not appear to be sent to DoorDash' 
+          });
+        }
+
+        // Manually sync this order
+        const doorDashId = (order as any).doordash_order_id;
+        const trackingUrl = (order as any).doordash_tracking_url;
+        const externalDeliveryId = order.gloriafood_order_id;
+
+        let ddStatus = null;
+        let triedIds = [];
+
+        // Try multiple methods to get status
+        if (doorDashId) {
+          triedIds.push(`doordash_order_id: ${doorDashId}`);
+          try {
+            ddStatus = await this.doorDashClient!.getOrderStatus(doorDashId);
+          } catch (error: any) {
+            console.log(chalk.gray(`  ⚠️  Failed with doordash_order_id: ${error.message}`));
+          }
+        }
+
+        if (!ddStatus && trackingUrl && trackingUrl.includes('doordash')) {
+          const urlMatch = trackingUrl.match(/deliveries\/([^\/\?]+)/i) || trackingUrl.match(/delivery\/([^\/\?]+)/i);
+          if (urlMatch && urlMatch[1]) {
+            triedIds.push(`extracted from URL: ${urlMatch[1]}`);
+            try {
+              ddStatus = await this.doorDashClient!.getOrderStatus(urlMatch[1]);
+            } catch (error: any) {
+              console.log(chalk.gray(`  ⚠️  Failed with extracted ID: ${error.message}`));
+            }
+          }
+        }
+
+        if (!ddStatus && externalDeliveryId) {
+          triedIds.push(`external_delivery_id: ${externalDeliveryId}`);
+          try {
+            ddStatus = await this.doorDashClient!.getOrderStatus(externalDeliveryId);
+          } catch (error: any) {
+            console.log(chalk.gray(`  ⚠️  Failed with external_delivery_id: ${error.message}`));
+          }
+        }
+
+        if (!ddStatus) {
+          return res.status(404).json({ 
+            success: false, 
+            error: `Could not find order in DoorDash (tried: ${triedIds.join(', ')})` 
+          });
+        }
+
+        const normalizedStatus = (ddStatus.status || '').toLowerCase();
+        let newStatus = order.status;
+
+        if (normalizedStatus === 'cancelled' || normalizedStatus === 'canceled') {
+          newStatus = 'CANCELLED';
+        } else if (normalizedStatus === 'delivered' || normalizedStatus === 'completed') {
+          newStatus = 'DELIVERED';
+        }
+
+        if (newStatus !== order.status && (this.database as any).updateOrderStatus) {
+          const updated = await this.handleAsync(
+            (this.database as any).updateOrderStatus(order.gloriafood_order_id, newStatus)
+          );
+          if (updated) {
+            console.log(chalk.green(`  ✅ Updated order #${order.gloriafood_order_id} status: ${order.status} → ${newStatus}`));
+            return res.json({ 
+              success: true, 
+              message: `Order status updated to ${newStatus}`,
+              oldStatus: order.status,
+              newStatus: newStatus,
+              doordashStatus: ddStatus.status
+            });
+          } else {
+            return res.status(500).json({ 
+              success: false, 
+              error: 'Failed to update order status' 
+            });
+          }
+        } else {
+          return res.json({ 
+            success: true, 
+            message: 'Order status is already up to date',
+            status: order.status,
+            doordashStatus: ddStatus.status
+          });
+        }
+      } catch (error: any) {
+        console.error(chalk.red('Error syncing specific order:'), error);
         res.status(500).json({ 
           success: false, 
           error: error.message 

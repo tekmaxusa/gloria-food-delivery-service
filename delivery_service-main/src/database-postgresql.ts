@@ -1069,18 +1069,21 @@ export class OrderDatabasePostgreSQL {
 
   /**
    * Get pending DoorDash orders efficiently - only orders that need status sync
+   * Also checks orders with tracking URLs that might be DoorDash orders
    */
-  async getPendingDoorDashOrders(limit: number = 50): Promise<Order[]> {
+  async getPendingDoorDashOrders(limit: number = 100): Promise<Order[]> {
     try {
       const client = await this.pool.connect();
       // Check for orders that have been sent to DoorDash (by any indicator)
       // Include orders with doordash_order_id, sent_to_doordash flag, or doordash_tracking_url
+      // Also check for tracking URLs in raw_data that might indicate DoorDash orders
       const result = await client.query(
         `SELECT * FROM orders 
          WHERE (
            doordash_order_id IS NOT NULL 
            OR sent_to_doordash = TRUE 
            OR doordash_tracking_url IS NOT NULL
+           OR (raw_data::text LIKE '%doordash%' OR raw_data::text LIKE '%tracking%')
          )
            AND status NOT IN ('CANCELLED', 'CANCELED', 'DELIVERED', 'COMPLETED')
          ORDER BY fetched_at DESC
