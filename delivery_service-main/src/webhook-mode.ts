@@ -566,21 +566,46 @@ class GloriaFoodWebhookServer {
     try {
       // Use efficient query to get only pending DoorDash orders
       // This is much faster than fetching all orders and filtering
-      const ordersToCheck = await this.handleAsync(
-        (this.database as any).getPendingDoorDashOrders?.(50) || 
+      let ordersToCheck = await this.handleAsync(
+        (this.database as any).getPendingDoorDashOrders?.(100) || 
         Promise.resolve([])
       );
 
       // Fallback to old method if new method doesn't exist
       if (ordersToCheck.length === 0 && !(this.database as any).getPendingDoorDashOrders) {
-        const allOrders = await this.handleAsync(this.database.getAllOrders(100));
+        const allOrders = await this.handleAsync(this.database.getAllOrders(200));
         const filtered = allOrders.filter(order => {
           const status = (order.status || '').toUpperCase();
           const isNotFinal = !['CANCELLED', 'CANCELED', 'DELIVERED', 'COMPLETED'].includes(status);
-          const hasDoorDashId = (order as any).doordash_order_id || (order as any).sent_to_doordash;
+          const hasDoorDashId = (order as any).doordash_order_id || 
+                                (order as any).sent_to_doordash || 
+                                (order as any).doordash_tracking_url;
           return isNotFinal && hasDoorDashId;
         });
-        ordersToCheck.push(...filtered.slice(0, 50));
+        ordersToCheck = filtered.slice(0, 100);
+      }
+
+      // Also check ALL pending orders that might have been sent to DoorDash but not marked
+      // This catches orders that have tracking URLs but weren't properly marked
+      if (ordersToCheck.length < 50) {
+        const allPendingOrders = await this.handleAsync(this.database.getAllOrders(200));
+        const additionalOrders = allPendingOrders.filter(order => {
+          const status = (order.status || '').toUpperCase();
+          const isPending = ['PENDING', 'ACCEPTED', 'CONFIRMED'].includes(status);
+          // Check if order has any indication it was sent to DoorDash
+          const hasTrackingUrl = (order as any).doordash_tracking_url;
+          const hasRawDataTracking = order.raw_data && (
+            order.raw_data.includes('doordash') || 
+            order.raw_data.includes('tracking') ||
+            order.raw_data.includes('delivery')
+          );
+          return isPending && (hasTrackingUrl || hasRawDataTracking);
+        });
+        
+        // Add orders that aren't already in the list
+        const existingIds = new Set(ordersToCheck.map(o => o.gloriafood_order_id));
+        const newOrders = additionalOrders.filter(o => !existingIds.has(o.gloriafood_order_id));
+        ordersToCheck.push(...newOrders.slice(0, 50 - ordersToCheck.length));
       }
 
       if (ordersToCheck.length === 0) {
@@ -662,16 +687,27 @@ class GloriaFoodWebhookServer {
           console.log(chalk.gray(`  📊 Order #${order.gloriafood_order_id}: DoorDash status = "${ddStatus.status}" (normalized: "${normalizedStatus}")`));
 
           // Update order status if DoorDash shows cancelled
-          if (normalizedStatus === 'cancelled' || normalizedStatus === 'canceled') {
+          // Check for various cancelled status variations
+          if (normalizedStatus === 'cancelled' || 
+              normalizedStatus === 'canceled' || 
+              normalizedStatus === 'cancellation' ||
+              normalizedStatus.includes('cancel')) {
             if ((this.database as any).updateOrderStatus) {
               const updated = await this.handleAsync(
                 (this.database as any).updateOrderStatus(order.gloriafood_order_id, 'CANCELLED')
               );
               if (updated) {
                 updateCount++;
-                console.log(chalk.yellow(`  ⚠️  Updated order #${order.gloriafood_order_id} to CANCELLED (DoorDash cancelled)`));
+                console.log(chalk.yellow(`  ⚠️  Updated order #${order.gloriafood_order_id} to CANCELLED (DoorDash status: "${ddStatus.status}")`));
               } else {
-                console.log(chalk.red(`  ❌ Failed to update order #${order.gloriafood_order_id} to CANCELLED`));
+                console.log(chalk.red(`  ❌ Failed to update order #${order.gloriafood_order_id} to CANCELLED - updateOrderStatus returned false`));
+                // Try to check if order exists and what its current status is
+                const currentOrder = await this.handleAsync(this.database.getOrderByGloriaFoodId(order.gloriafood_order_id));
+                if (currentOrder) {
+                  console.log(chalk.gray(`    Current order status: ${currentOrder.status}`));
+                } else {
+                  console.log(chalk.red(`    Order not found in database!`));
+                }
               }
             } else {
               console.log(chalk.red(`  ❌ updateOrderStatus method not available for order #${order.gloriafood_order_id}`));
