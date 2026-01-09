@@ -252,7 +252,8 @@ export class OrderDatabasePostgreSQL {
             sent_to_doordash BOOLEAN DEFAULT FALSE,
             doordash_order_id VARCHAR(255),
             doordash_sent_at TIMESTAMP,
-            doordash_tracking_url TEXT
+            doordash_tracking_url TEXT,
+            ready_for_pickup TIMESTAMP
           )
         `);
 
@@ -305,6 +306,20 @@ export class OrderDatabasePostgreSQL {
           // Column already exists or other error - ignore
           if (e.code !== '42701') {
             console.log('   Note: doordash_tracking_url column may already exist');
+          }
+        }
+
+        // Add ready_for_pickup column if it doesn't exist (for existing databases)
+        try {
+          await client.query(`
+            ALTER TABLE orders 
+            ADD COLUMN IF NOT EXISTS ready_for_pickup TIMESTAMP
+          `);
+          console.log('✅ Added ready_for_pickup column to orders table');
+        } catch (e: any) {
+          // Column might already exist, ignore error
+          if (e.code !== '42701') {
+            console.log('   Note: ready_for_pickup column may already exist');
           }
         }
 

@@ -27,7 +27,8 @@ CREATE TABLE IF NOT EXISTS orders (
   sent_to_doordash BOOLEAN DEFAULT FALSE,
   doordash_order_id VARCHAR(255),
   doordash_sent_at TIMESTAMP,
-  doordash_tracking_url TEXT
+  doordash_tracking_url TEXT,
+  ready_for_pickup TIMESTAMP
 );
 
 -- Create indexes
