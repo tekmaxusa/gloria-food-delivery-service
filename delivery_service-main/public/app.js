@@ -537,9 +537,6 @@ function navigateToPage(page) {
         case 'dispatch':
             showDispatchPage();
             break;
-        case 'drivers':
-            showDriversPage();
-            break;
         case 'reports':
             showReportsPage();
             break;
@@ -778,316 +775,6 @@ function showDispatchPage() {
         </div>
     `;
 }
-
-// Show Drivers page
-function showDriversPage() {
-    const mainContainer = document.querySelector('.main-container');
-    mainContainer.innerHTML = `
-        <div class="orders-header">
-            <h1 class="page-title">Drivers</h1>
-            <div class="orders-controls">
-                <div class="order-status-tabs">
-                    <button class="status-tab active">Driver List</button>
-                    <button class="status-tab">Daily Payment</button>
-        </div>
-                <div class="action-bar">
-                    <div class="search-box">
-                        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="11" cy="11" r="8"></circle>
-                            <path d="m21 21-4.35-4.35"></path>
-                    </svg>
-                        <input type="text" placeholder="Search" class="search-input">
-                </div>
-                    <button class="btn-primary" id="newDriverBtn">+ New Driver</button>
-                </div>
-            </div>
-                </div>
-        <div class="table-container">
-            <table class="orders-table" style="table-layout: fixed; width: 100%;">
-                    <thead>
-                        <tr>
-                        <th style="width: 18%;">Name</th>
-                        <th style="width: 12%;">Rating</th>
-                        <th class="sortable" style="width: 15%;">
-                            <span>Phone</span>
-                            <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M12 5v14M5 12l7-7 7 7"/>
-                            </svg>
-                        </th>
-                        <th style="width: 20%;">Email</th>
-                        <th class="sortable" style="width: 15%;">
-                            <span>Vehicle</span>
-                            <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M12 5v14M5 12l7-7 7 7"/>
-                            </svg>
-                        </th>
-                        <th class="sortable" style="width: 12%;">
-                            <span>Status</span>
-                            <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M12 5v14M5 12l7-7 7 7"/>
-                            </svg>
-                        </th>
-                        <th style="width: 8%;"></th>
-                        </tr>
-                    </thead>
-                    <tbody id="driversTableBody">
-                    <tr>
-                        <td colspan="7" class="empty-state-cell">
-                            <div class="empty-state">
-                                    <div class="empty-state-text">Loading drivers...</div>
-                </div>
-            </td>
-        </tr>
-                    </tbody>
-                </table>
-        </div>
-        
-        <!-- Driver Modal -->
-        <div id="driverModal" class="modal hidden">
-            <div class="modal-content merchant-modal-content">
-                <div class="modal-header">
-                    <h2 id="driverModalTitle">Add New Driver</h2>
-                    <button class="modal-close" id="closeDriverModal">&times;</button>
-                </div>
-                <form id="driverForm" class="modal-body">
-                    <div class="form-group">
-                        <label>Driver Name <span style="color: red;">*</span></label>
-                        <input type="text" id="driverName" required placeholder="Enter Driver Name">
-                    </div>
-                    <div class="form-group">
-                        <label>Phone</label>
-                        <input type="tel" id="driverPhone" placeholder="Enter Phone Number">
-                    </div>
-                    <div class="form-group">
-                        <label>Email</label>
-                        <input type="email" id="driverEmail" placeholder="Enter Email Address">
-                    </div>
-                    <div class="form-group">
-                        <label>Vehicle Type</label>
-                        <input type="text" id="driverVehicleType" placeholder="e.g., Car, Motorcycle, Bike">
-                    </div>
-                    <div class="form-group">
-                        <label>Vehicle Plate</label>
-                        <input type="text" id="driverVehiclePlate" placeholder="Enter Vehicle Plate Number">
-                    </div>
-                    <div id="driverError" class="error-message" style="display: none; color: #ef4444; margin-top: 12px; padding: 8px; background: #fee2e2; border-radius: 4px; font-size: 14px;"></div>
-                    <div class="modal-actions">
-                        <button type="button" class="btn-secondary" id="cancelDriverBtn">Cancel</button>
-                        <button type="submit" class="btn-primary">Add Driver</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    `;
-
-    // Initialize drivers page
-    initializeDriversPage();
-    loadDrivers();
-}
-
-// Initialize Drivers page
-function initializeDriversPage() {
-    // Setup new driver button
-    const newDriverBtn = document.getElementById('newDriverBtn');
-    if (newDriverBtn) {
-        newDriverBtn.addEventListener('click', () => {
-            openDriverModal();
-        });
-    }
-
-    // Modal close buttons
-    const closeModal = document.getElementById('closeDriverModal');
-    const cancelBtn = document.getElementById('cancelDriverBtn');
-    if (closeModal) closeModal.addEventListener('click', closeDriverModal);
-    if (cancelBtn) cancelBtn.addEventListener('click', closeDriverModal);
-
-    // Form submission
-    const driverForm = document.getElementById('driverForm');
-    if (driverForm) {
-        driverForm.addEventListener('submit', handleDriverSubmit);
-    }
-
-    // Close modal on outside click
-    const modal = document.getElementById('driverModal');
-    if (modal) {
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                closeDriverModal();
-            }
-        });
-    }
-}
-
-// Open driver modal
-function openDriverModal() {
-    const modal = document.getElementById('driverModal');
-    const form = document.getElementById('driverForm');
-    const title = document.getElementById('driverModalTitle');
-    const errorDiv = document.getElementById('driverError');
-
-    if (!modal || !form || !title) return;
-
-    title.textContent = 'Add New Driver';
-    form.reset();
-    form.dataset.editingDriverId = '';
-
-    if (errorDiv) {
-        errorDiv.style.display = 'none';
-        errorDiv.textContent = '';
-    }
-
-    modal.classList.remove('hidden');
-}
-
-// Close driver modal
-function closeDriverModal() {
-    const modal = document.getElementById('driverModal');
-    if (modal) {
-        modal.classList.add('hidden');
-    }
-}
-
-// Handle driver form submission
-async function handleDriverSubmit(e) {
-    e.preventDefault();
-
-    const form = e.target;
-    const name = document.getElementById('driverName').value.trim();
-    const phone = document.getElementById('driverPhone').value.trim();
-    const email = document.getElementById('driverEmail').value.trim();
-    const vehicleType = document.getElementById('driverVehicleType').value.trim();
-    const vehiclePlate = document.getElementById('driverVehiclePlate').value.trim();
-    const errorDiv = document.getElementById('driverError');
-
-    if (!name) {
-        if (errorDiv) {
-            errorDiv.textContent = 'Driver name is required';
-            errorDiv.style.display = 'block';
-        }
-        return;
-    }
-
-    try {
-        const response = await authenticatedFetch(`${API_BASE}/api/drivers`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                name,
-                phone: phone || undefined,
-                email: email || undefined,
-                vehicle_type: vehicleType || undefined,
-                vehicle_plate: vehiclePlate || undefined
-            })
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-            showNotification('Success', 'Driver added successfully!');
-            closeDriverModal();
-            loadDrivers();
-        } else {
-            const errorMsg = data.error || 'Failed to add driver';
-            if (errorDiv) {
-                errorDiv.textContent = errorMsg;
-                errorDiv.style.display = 'block';
-            }
-            showError(errorMsg);
-        }
-    } catch (error) {
-        console.error('Error adding driver:', error);
-        const errorMsg = 'Error connecting to server: ' + (error.message || 'Please check if the server is running');
-        if (errorDiv) {
-            errorDiv.textContent = errorMsg;
-            errorDiv.style.display = 'block';
-        }
-        showError(errorMsg);
-    }
-}
-
-// Load drivers
-async function loadDrivers() {
-    try {
-        const response = await authenticatedFetch(`${API_BASE}/api/drivers`);
-        const data = await response.json();
-
-        if (data.success && data.drivers) {
-            displayDrivers(data.drivers);
-        } else {
-            displayDrivers([]);
-        }
-    } catch (error) {
-        console.error('Error loading drivers:', error);
-        displayDrivers([]);
-    }
-}
-
-// Display drivers in table
-function displayDrivers(drivers) {
-    const tbody = document.getElementById('driversTableBody');
-
-    if (!tbody) return;
-
-    if (drivers.length === 0) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="7" class="empty-state-cell">
-                    <div class="empty-state">
-                        <div class="empty-state-text">No drivers found</div>
-                    </div>
-                </td>
-            </tr>
-        `;
-        return;
-    }
-
-    tbody.innerHTML = drivers.map(driver => `
-        <tr>
-            <td>${escapeHtml(driver.name || 'N/A')}</td>
-            <td>${driver.rating ? parseFloat(driver.rating).toFixed(1) : '0.0'}</td>
-            <td>${escapeHtml(driver.phone || 'N/A')}</td>
-            <td>${escapeHtml(driver.email || 'N/A')}</td>
-            <td>${escapeHtml((driver.vehicle_type || 'N/A') + (driver.vehicle_plate ? ' - ' + driver.vehicle_plate : ''))}</td>
-            <td><span class="status-badge status-${(driver.status || 'active').toLowerCase()}">${escapeHtml((driver.status || 'active').toUpperCase())}</span></td>
-            <td>
-                <button class="btn-icon" onclick="deleteDriver(${driver.id})" title="Delete" style="color: #ef4444;">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="3 6 5 6 21 6"></polyline>
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                    </svg>
-                </button>
-            </td>
-        </tr>
-    `).join('');
-}
-
-// Delete driver
-async function deleteDriver(driverId) {
-    if (!confirm(`Are you sure you want to delete this driver?`)) {
-        return;
-    }
-
-    try {
-        const response = await authenticatedFetch(`${API_BASE}/api/drivers/${driverId}`, {
-            method: 'DELETE'
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-            showNotification('Success', 'Driver deleted successfully!');
-            loadDrivers();
-        } else {
-            showError(data.error || 'Failed to delete driver');
-        }
-    } catch (error) {
-        console.error('Error deleting driver:', error);
-        showError('Error deleting driver: ' + error.message);
-    }
-}
-
-// Make deleteDriver available globally
-window.deleteDriver = deleteDriver;
 
 // Show Merchants page
 function showMerchantsPage() {
@@ -1651,19 +1338,6 @@ function showReportsPage() {
                 <p>Track revenue trends, daily/weekly/monthly breakdowns, and revenue by merchant or driver.</p>
             </div>
             
-            <div class="report-card" onclick="generateReport('drivers')">
-                <div class="report-icon">
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M5 17H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v1"></path>
-                        <path d="M12 12h.01M17 12h.01M7 12h.01"></path>
-                        <path d="M19 17h1a2 2 0 0 0 2-2v-1"></path>
-                        <path d="M2 22h20"></path>
-                    </svg>
-                </div>
-                <h3>Driver Performance</h3>
-                <p>Analyze driver performance metrics including delivery times, ratings, and completion rates.</p>
-            </div>
-            
             <div class="report-card" onclick="generateReport('customers')">
                 <div class="report-icon">
                     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1730,11 +1404,6 @@ async function showReportView(reportType) {
                 currentReportData = reportData;
                 reportHTML = renderRevenueReport(reportData);
                 break;
-            case 'drivers':
-                reportData = await fetchDriversReport();
-                currentReportData = reportData;
-                reportHTML = renderDriversReport(reportData);
-                break;
             case 'customers':
                 reportData = await fetchCustomersReport();
                 currentReportData = reportData;
@@ -1790,7 +1459,6 @@ function getReportTitle(type) {
         'sales': 'Sales Report',
         'orders': 'Orders Report',
         'revenue': 'Revenue Report',
-        'drivers': 'Driver Performance Report',
         'customers': 'Customer Analytics Report'
     };
     return titles[type] || 'Report';
@@ -1822,13 +1490,6 @@ async function fetchRevenueReport() {
         orders: ordersData.orders || ordersData || [],
         stats: statsData.stats || {}
     };
-}
-
-// Fetch drivers report data
-async function fetchDriversReport() {
-    const response = await authenticatedFetch(`${API_BASE}/api/drivers`);
-    const data = await response.json();
-    return data.drivers || [];
 }
 
 // Fetch customers report data
@@ -2017,56 +1678,6 @@ function renderRevenueReport(data) {
                             </tr>
                         `;
             }).join('')}
-                </tbody>
-            </table>
-        </div>
-    `;
-}
-
-// Render drivers report
-function renderDriversReport(drivers) {
-    return `
-        <div class="dashboard-grid" style="margin-bottom: 24px;">
-            <div class="dashboard-card">
-                <div class="dashboard-card-header">
-                    <h3>Total Drivers</h3>
-                </div>
-                <div class="dashboard-card-value">${drivers.length}</div>
-                <div class="dashboard-card-change">All drivers</div>
-            </div>
-            <div class="dashboard-card">
-                <div class="dashboard-card-header">
-                    <h3>Active Drivers</h3>
-                </div>
-                <div class="dashboard-card-value">${drivers.filter(d => d.status === 'active').length}</div>
-                <div class="dashboard-card-change">Active</div>
-            </div>
-        </div>
-        <div class="table-container">
-            <h2 style="margin-bottom: 16px; font-size: 20px; font-weight: 600; color: #0f172a;">Driver Performance</h2>
-            <table class="orders-table">
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>Phone</th>
-                        <th>Email</th>
-                        <th>Vehicle</th>
-                        <th>Status</th>
-                        <th>Rating</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${drivers.length === 0 ? '<tr><td colspan="6" class="empty-state-cell"><div class="empty-state"><div class="empty-state-text">No drivers available</div></div></td></tr>' :
-            drivers.map(driver => `
-                        <tr>
-                            <td>${driver.name || driver.full_name || 'N/A'}</td>
-                            <td>${driver.phone || 'N/A'}</td>
-                            <td>${driver.email || 'N/A'}</td>
-                            <td>${driver.vehicle || 'N/A'}</td>
-                            <td><span class="status-badge status-${(driver.status || 'inactive').toLowerCase()}">${driver.status || 'Inactive'}</span></td>
-                            <td>${driver.rating ? '⭐'.repeat(Math.round(driver.rating)) : 'N/A'}</td>
-                        </tr>
-                    `).join('')}
                 </tbody>
             </table>
         </div>
@@ -2664,27 +2275,6 @@ window.exportReport = function (type) {
                 break;
 
             case 'drivers':
-                headers = ['Name', 'Phone', 'Email', 'Vehicle', 'Status', 'Rating'];
-                rows = currentReportData.map(driver => {
-                    const escapeCSV = (val) => {
-                        const str = String(val || 'N/A');
-                        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-                            return '"' + str.replace(/"/g, '""') + '"';
-                        }
-                        return str;
-                    };
-                    return [
-                        escapeCSV(driver.name || driver.full_name),
-                        escapeCSV(driver.phone),
-                        escapeCSV(driver.email),
-                        escapeCSV(driver.vehicle),
-                        escapeCSV(driver.status || 'inactive'),
-                        escapeCSV(driver.rating ? driver.rating.toFixed(1) : 'N/A')
-                    ];
-                });
-                filename = `drivers_report_${new Date().toISOString().split('T')[0]}.csv`;
-                break;
-
             case 'customers':
                 // Group by customer (same logic as renderCustomersReport)
                 const customerData = {};
@@ -3235,14 +2825,6 @@ function showSettingsPage() {
                         <span>Dispatch settings</span>
                     </div>
                     
-                    <div class="settings-menu-item ${selectedItem === 'driver-settings' ? 'active' : ''}" onclick="selectSettingsItem('driver-settings')">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M5 17H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-1"></path>
-                            <polygon points="12 15 17 21 7 21 12 15"></polygon>
-                        </svg>
-                        <span>Driver settings</span>
-                    </div>
-                    
                     <div class="settings-menu-item ${selectedItem === 'third-party-delivery' ? 'active' : ''}" onclick="selectSettingsItem('third-party-delivery')">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
@@ -3300,8 +2882,6 @@ async function loadSettingsContent(itemId) {
         let content = '';
         if (itemId === 'business-settings') {
             content = await getBusinessSettingsContent();
-        } else if (itemId === 'driver-settings') {
-            content = await getDriverSettingsContent();
         } else if (itemId === 'third-party-delivery') {
             content = await getThirdPartyDeliveryContent();
         } else if (itemId === 'customer-notification') {
@@ -3654,259 +3234,6 @@ async function getDispatchSettingsContent() {
         <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 32px; padding-top: 24px; border-top: 1px solid #e2e8f0;">
             <button class="btn-secondary" onclick="cancelDispatchSettings()">Cancel</button>
             <button class="btn-primary" onclick="saveDispatchSettings()">Save</button>
-        </div>
-    `;
-}
-
-// Get Driver Settings content
-async function getDriverSettingsContent() {
-    const dispatchOnlineOnly = localStorage.getItem('dispatchOnlineOnly') === 'true';
-    const autoAccept = localStorage.getItem('autoAccept') === 'true';
-    const showItemPrice = localStorage.getItem('showItemPrice') === 'true';
-    const showEarningInfo = localStorage.getItem('showEarningInfo') === 'true';
-    const showDriverPhone = localStorage.getItem('showDriverPhone') === 'true';
-    const showCustomerDetails = localStorage.getItem('showCustomerDetails') === 'true';
-    const itemCheckPickup = localStorage.getItem('itemCheckPickup') === 'true';
-    const requirePOD = localStorage.getItem('requirePOD') === 'true';
-    const requireIDScanning = localStorage.getItem('requireIDScanning') === 'true';
-    const reoptimizeRoute = localStorage.getItem('reoptimizeRoute') === 'true';
-    const geofencing = localStorage.getItem('geofencing') === 'true';
-    const driverResponseTime = localStorage.getItem('driverResponseTime') || '10';
-    const fixPayPerDelivery = localStorage.getItem('fixPayPerDelivery') === 'true';
-    const fixPayAmount = localStorage.getItem('fixPayAmount') || '5';
-    const percentageOrderTotal = localStorage.getItem('percentageOrderTotal') === 'true';
-    const perDistance = localStorage.getItem('perDistance') === 'true';
-    const percentageDeliveryFee = localStorage.getItem('percentageDeliveryFee') === 'true';
-    const percentageDeliveryFeeValue = localStorage.getItem('percentageDeliveryFeeValue') || '100';
-    const percentageTips = localStorage.getItem('percentageTips') === 'true';
-    const percentageTipsValue = localStorage.getItem('percentageTipsValue') || '100';
-    const payPerHoursOnline = localStorage.getItem('payPerHoursOnline') === 'true';
-
-    return `
-        <h1 class="settings-content-title">Driver settings</h1>
-        
-        <!-- Driver App Section -->
-        <div class="driver-settings-section">
-            <h3 class="settings-section-subtitle">Driver app</h3>
-            <p class="settings-instruction-text">Custom settings to manage drivers</p>
-            
-            <div class="driver-setting-item">
-                <div class="driver-setting-content">
-                    <div class="driver-setting-label">Dispatch to online drivers only</div>
-                    <p class="driver-setting-description">This is only show drivers active now on the driver page</p>
-                </div>
-                <label class="switch">
-                    <input type="checkbox" ${dispatchOnlineOnly ? 'checked' : ''} onchange="toggleDriverSetting('dispatchOnlineOnly', this.checked)">
-                    <span class="slider"></span>
-                </label>
-            </div>
-            
-            <div class="driver-setting-item">
-                <div class="driver-setting-content">
-                    <div class="driver-setting-label">Drivers will always accept assigned orders (auto-accept)</div>
-                    <p class="driver-setting-description">No accept/reject option for the driver</p>
-                </div>
-                <label class="switch">
-                    <input type="checkbox" ${autoAccept ? 'checked' : ''} onchange="toggleDriverSetting('autoAccept', this.checked)">
-                    <span class="slider"></span>
-                </label>
-            </div>
-            
-            <div class="driver-setting-item">
-                <div class="driver-setting-content">
-                    <div class="driver-setting-label">Show order item price to driver/customer</div>
-                </div>
-                <label class="switch">
-                    <input type="checkbox" ${showItemPrice ? 'checked' : ''} onchange="toggleDriverSetting('showItemPrice', this.checked)">
-                    <span class="slider"></span>
-                </label>
-            </div>
-            
-            <div class="driver-setting-item">
-                <div class="driver-setting-content">
-                    <div class="driver-setting-label">Show earning info to drivers before they accept the order</div>
-                </div>
-                <label class="switch">
-                    <input type="checkbox" ${showEarningInfo ? 'checked' : ''} onchange="toggleDriverSetting('showEarningInfo', this.checked)">
-                    <span class="slider"></span>
-                </label>
-            </div>
-            
-            <div class="driver-setting-item">
-                <div class="driver-setting-content">
-                    <div class="driver-setting-label">Show driver phone number to customers</div>
-                    <p class="driver-setting-description">Customers will be able to call drivers directly</p>
-                </div>
-                <label class="switch">
-                    <input type="checkbox" ${showDriverPhone ? 'checked' : ''} onchange="toggleDriverSetting('showDriverPhone', this.checked)">
-                    <span class="slider"></span>
-                </label>
-            </div>
-            
-            <div class="driver-setting-item">
-                <div class="driver-setting-content">
-                    <div class="driver-setting-label">Show sensitive customer details (Customer name & phone number) to the driver</div>
-                </div>
-                <label class="switch">
-                    <input type="checkbox" ${showCustomerDetails ? 'checked' : ''} onchange="toggleDriverSetting('showCustomerDetails', this.checked)">
-                    <span class="slider"></span>
-                </label>
-            </div>
-            
-            <div class="driver-setting-item">
-                <div class="driver-setting-content">
-                    <div class="driver-setting-label">Item check on pick-up</div>
-                    <p class="driver-setting-description">Drivers have to confirm items on pick-up</p>
-                </div>
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <label class="switch">
-                        <input type="checkbox" ${itemCheckPickup ? 'checked' : ''} onchange="toggleDriverSetting('itemCheckPickup', this.checked)">
-                        <span class="slider"></span>
-                    </label>
-                </div>
-            </div>
-            
-            <div class="driver-setting-item">
-                <div class="driver-setting-content">
-                    <div class="driver-setting-label">Require Proof of Delivery</div>
-                    <p class="driver-setting-description">Drivers must take proof of delivery (Only Picture) to complete an order</p>
-                </div>
-                <label class="switch">
-                    <input type="checkbox" ${requirePOD ? 'checked' : ''} onchange="toggleDriverSetting('requirePOD', this.checked)">
-                    <span class="slider"></span>
-                </label>
-            </div>
-            
-            <div class="driver-setting-item">
-                <div class="driver-setting-content">
-                    <div class="driver-setting-label">Requires ID scanning</div>
-                    <p class="driver-setting-description">Drivers must do id scanning</p>
-                </div>
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <label class="switch">
-                        <input type="checkbox" ${requireIDScanning ? 'checked' : ''} onchange="toggleDriverSetting('requireIDScanning', this.checked)">
-                        <span class="slider"></span>
-                    </label>
-                </div>
-            </div>
-            
-            <div class="driver-setting-item">
-                <div class="driver-setting-content">
-                    <div class="driver-setting-label">Drivers can re-optimize the route from their App</div>
-                </div>
-                <label class="switch">
-                    <input type="checkbox" ${reoptimizeRoute ? 'checked' : ''} onchange="toggleDriverSetting('reoptimizeRoute', this.checked)">
-                    <span class="slider"></span>
-                </label>
-            </div>
-            
-            <div class="driver-setting-item">
-                <div class="driver-setting-content">
-                    <div class="driver-setting-label">Geofencing for pick-up & drop-off</div>
-                    <p class="driver-setting-description">Set geofencing for pick-up and drop-off</p>
-                </div>
-                <label class="switch">
-                    <input type="checkbox" ${geofencing ? 'checked' : ''} onchange="toggleDriverSetting('geofencing', this.checked)">
-                    <span class="slider"></span>
-                </label>
-            </div>
-        </div>
-        
-        <!-- Driver Response Time Section -->
-        <div class="driver-settings-section">
-            <h3 class="settings-section-subtitle">Driver response time</h3>
-            <p class="settings-instruction-text">This is the maximum time allowed for a driver to send her feedback for an assigned order with 'Accept' or 'Reject'. If the driver does not respond within the time specified here, it comes back to dispatch dashboard for dispatching to others</p>
-            
-            <div class="driver-time-input">
-                <input type="number" class="business-input" id="driverResponseTimeInput" value="${driverResponseTime}" min="1" max="60" style="width: 100px; display: inline-block;">
-                <span style="margin-left: 8px; color: #475569;">mins</span>
-                <button class="btn-primary" onclick="saveDriverResponseTime()" style="margin-left: 16px; padding: 8px 16px;">Save</button>
-            </div>
-        </div>
-        
-        <!-- Driver Payment Section -->
-        <div class="driver-settings-section">
-            <h3 class="settings-section-subtitle">Driver payment ($)</h3>
-            <p class="settings-instruction-text">This is to show how much money driver will be paid per delivery for calculating the end of the day due.</p>
-            
-            <div class="driver-payment-item">
-                <div class="driver-payment-content">
-                    <div class="driver-setting-label">Fix pay per delivery</div>
-                </div>
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <label class="switch">
-                        <input type="checkbox" ${fixPayPerDelivery ? 'checked' : ''} onchange="toggleDriverPayment('fixPayPerDelivery', this.checked)">
-                        <span class="slider"></span>
-                    </label>
-                    ${fixPayPerDelivery ? `<input type="number" class="business-input" id="fixPayAmount" value="${fixPayAmount}" style="width: 80px; display: inline-block;" onchange="updateDriverPayment('fixPayAmount', this.value)"> <span style="color: #475569;">/Order</span>` : ''}
-                </div>
-            </div>
-            
-            <div class="driver-payment-item">
-                <div class="driver-payment-content">
-                    <div class="driver-setting-label">Percentage of order total</div>
-                </div>
-                <label class="switch">
-                    <input type="checkbox" ${percentageOrderTotal ? 'checked' : ''} onchange="toggleDriverPayment('percentageOrderTotal', this.checked)">
-                    <span class="slider"></span>
-                </label>
-            </div>
-            
-            <div class="driver-payment-item">
-                <div class="driver-payment-content">
-                    <div class="driver-setting-label">Per distance</div>
-                </div>
-                <label class="switch">
-                    <input type="checkbox" ${perDistance ? 'checked' : ''} onchange="toggleDriverPayment('perDistance', this.checked)">
-                    <span class="slider"></span>
-                </label>
-            </div>
-            
-            <div class="driver-payment-item">
-                <div class="driver-payment-content">
-                    <div class="driver-setting-label">% of delivery fee charged to the end customer</div>
-                </div>
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <label class="switch">
-                        <input type="checkbox" ${percentageDeliveryFee ? 'checked' : ''} onchange="toggleDriverPayment('percentageDeliveryFee', this.checked)">
-                        <span class="slider"></span>
-                    </label>
-                    ${percentageDeliveryFee ? `<input type="number" class="business-input" id="percentageDeliveryFeeValue" value="${percentageDeliveryFeeValue}" style="width: 80px; display: inline-block;" onchange="updateDriverPayment('percentageDeliveryFeeValue', this.value)"> <span style="color: #475569;">%</span>` : ''}
-                </div>
-            </div>
-            
-            <div class="driver-payment-item">
-                <div class="driver-payment-content">
-                    <div class="driver-setting-label">% of Tips given by the end customer</div>
-                </div>
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <label class="switch">
-                        <input type="checkbox" ${percentageTips ? 'checked' : ''} onchange="toggleDriverPayment('percentageTips', this.checked)">
-                        <span class="slider"></span>
-                    </label>
-                    ${percentageTips ? `<input type="number" class="business-input" id="percentageTipsValue" value="${percentageTipsValue}" style="width: 80px; display: inline-block;" onchange="updateDriverPayment('percentageTipsValue', this.value)"> <span style="color: #475569;">%</span>` : ''}
-                </div>
-            </div>
-            
-            <div class="driver-payment-item">
-                <div class="driver-payment-content">
-                    <div class="driver-setting-label">Pay per hours online</div>
-                </div>
-                <label class="switch">
-                    <input type="checkbox" ${payPerHoursOnline ? 'checked' : ''} onchange="toggleDriverPayment('payPerHoursOnline', this.checked)">
-                    <span class="slider"></span>
-                </label>
-            </div>
-            
-            <div class="driver-payment-summary" id="paymentSummary">
-                ${calculatePaymentSummary()}
-            </div>
-        </div>
-        
-        <!-- Action Buttons -->
-        <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 32px; padding-top: 24px; border-top: 1px solid #e2e8f0;">
-            <button class="btn-secondary" onclick="cancelDriverSettings()">Cancel</button>
-            <button class="btn-primary" onclick="saveDriverSettings()">Save</button>
         </div>
     `;
 }
