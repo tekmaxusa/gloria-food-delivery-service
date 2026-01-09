@@ -604,19 +604,24 @@ export class OrderDatabasePostgreSQL {
           fetched_at = EXCLUDED.fetched_at,
           raw_data = EXCLUDED.raw_data,
           merchant_name = CASE 
-            WHEN EXCLUDED.merchant_name IS NOT NULL 
-                 AND EXCLUDED.merchant_name != ''
-                 AND EXCLUDED.merchant_name != EXCLUDED.store_id
-                 AND EXCLUDED.merchant_name NOT LIKE 'Merchant %'
-                 AND EXCLUDED.merchant_name != 'Unknown Merchant'
-            THEN EXCLUDED.merchant_name
+            -- Priority 1: Keep existing valid merchant_name if it's not a fallback
             WHEN orders.merchant_name IS NOT NULL 
                  AND orders.merchant_name != ''
                  AND orders.merchant_name != orders.store_id
                  AND orders.merchant_name NOT LIKE 'Merchant %'
                  AND orders.merchant_name != 'Unknown Merchant'
+                 AND orders.merchant_name != 'N/A'
             THEN orders.merchant_name
-            ELSE COALESCE(EXCLUDED.merchant_name, orders.merchant_name)
+            -- Priority 2: Use new merchant_name if it's valid
+            WHEN EXCLUDED.merchant_name IS NOT NULL 
+                 AND EXCLUDED.merchant_name != ''
+                 AND EXCLUDED.merchant_name != EXCLUDED.store_id
+                 AND EXCLUDED.merchant_name NOT LIKE 'Merchant %'
+                 AND EXCLUDED.merchant_name != 'Unknown Merchant'
+                 AND EXCLUDED.merchant_name != 'N/A'
+            THEN EXCLUDED.merchant_name
+            -- Priority 3: Fallback to existing or new (but prefer existing)
+            ELSE COALESCE(orders.merchant_name, EXCLUDED.merchant_name)
           END,
           store_id = EXCLUDED.store_id
         RETURNING *

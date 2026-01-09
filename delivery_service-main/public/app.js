@@ -1134,34 +1134,14 @@ async function showDashboardPage() {
             if (merchant.merchant_name &&
                 merchant.merchant_name.trim() !== '' &&
                 merchant.merchant_name !== merchant.store_id &&
-                merchant.merchant_name.toLowerCase() !== merchant.store_id.toLowerCase()) {
-                merchantName = merchant.merchant_name;
+                merchant.merchant_name.toLowerCase() !== merchant.store_id.toLowerCase() &&
+                !merchant.merchant_name.startsWith('Merchant ') &&
+                merchant.merchant_name !== 'Unknown Merchant' &&
+                merchant.merchant_name !== 'N/A') {
+                merchantName = merchant.merchant_name.trim();
             } else {
-                // If merchant_name is missing or equals store_id, try to get it from orders
-                try {
-                    const ordersResponse = await authenticatedFetch(`${API_BASE}/orders?limit=100&store_id=${encodeURIComponent(merchant.store_id)}`);
-                    const ordersData = await ordersResponse.json();
-                    if (ordersData.success && ordersData.orders && ordersData.orders.length > 0) {
-                        // Find an order with merchant_name that's different from store_id
-                        const orderWithMerchant = ordersData.orders.find(o =>
-                            o.store_id === merchant.store_id &&
-                            o.merchant_name &&
-                            o.merchant_name.trim() !== '' &&
-                            o.merchant_name !== merchant.store_id &&
-                            o.merchant_name.toLowerCase() !== merchant.store_id.toLowerCase()
-                        );
-                        if (orderWithMerchant && orderWithMerchant.merchant_name) {
-                            merchantName = orderWithMerchant.merchant_name;
-                        } else {
-                            merchantName = 'Dashboard';
-                        }
-                    } else {
-                        merchantName = 'Dashboard';
-                    }
-                } catch (e) {
-                    console.error('Error fetching orders for merchant name:', e);
-                    merchantName = 'Dashboard';
-                }
+                // If merchant_name is missing or invalid, use store_id as fallback (don't check orders)
+                merchantName = merchant.store_id ? `Merchant ${merchant.store_id}` : 'Dashboard';
             }
         }
     } catch (error) {
@@ -4486,54 +4466,6 @@ window.toggleThirdPartySetting = toggleThirdPartySetting;
 window.toggleNotificationSetting = toggleNotificationSetting;
 window.updateTrackingNotification = updateTrackingNotification;
 
-// Sync order status from DoorDash
-async function syncOrderStatus(orderId) {
-    if (!orderId) {
-        showError('Order ID is required');
-        return;
-    }
-
-    try {
-        // Show loading state
-        const button = event?.target || document.querySelector(`button[onclick*="syncOrderStatus('${orderId}')"]`);
-        if (button) {
-            button.disabled = true;
-            button.textContent = '⏳ Syncing...';
-        }
-
-        const response = await authenticatedFetch(`${API_BASE}/api/sync/doordash/${orderId}`, {
-            method: 'POST'
-        });
-
-        const data = await response.json();
-        
-        if (data.success) {
-            if (data.newStatus && data.newStatus !== data.oldStatus) {
-                showNotification('Success', `Order #${orderId} status updated: ${data.oldStatus} → ${data.newStatus}`, 'success');
-            } else {
-                showNotification('Info', `Order #${orderId} status is up to date (${data.status || data.newStatus})`, 'info');
-            }
-            // Reload orders to show updated status
-            setTimeout(() => {
-                loadOrders();
-            }, 500);
-        } else {
-            showError(data.error || 'Failed to sync order status');
-        }
-    } catch (error) {
-        console.error('Error syncing order status:', error);
-        showError('Error syncing order status: ' + (error.message || 'Unknown error'));
-    } finally {
-        // Restore button state
-        const button = event?.target || document.querySelector(`button[onclick*="syncOrderStatus('${orderId}')"]`);
-        if (button) {
-            button.disabled = false;
-            button.textContent = '🔄 Sync';
-        }
-    }
-}
-
-window.syncOrderStatus = syncOrderStatus;
 window.inviteUser = inviteUser;
 window.filterUsers = filterUsers;
 window.editUser = editUser;
@@ -6116,23 +6048,10 @@ function createOrderRow(order) {
         (rawData.delivery && rawData.delivery.trackingUrl) ||
         null;
 
-    // Check if order has DoorDash indicators
-    const hasDoorDash = order.doordash_order_id || 
-                       order.doordash_tracking_url || 
-                       order.sent_to_doordash ||
-                       rawData.doordash_order_id || 
-                       rawData.doordashOrderId ||
-                       rawData.doordash_tracking_url ||
-                       tracking;
-
     if (tracking) {
         tracking = `<a href="${escapeHtml(tracking)}" target="_blank" style="color: #22c55e; text-decoration: underline;">Track</a>`;
-        // Add sync button if order has DoorDash indicators
-        if (hasDoorDash) {
-            tracking += ` <button onclick="syncOrderStatus('${escapeHtml(String(orderId))}')" style="margin-left: 8px; padding: 2px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500;" title="Sync status from DoorDash">🔄 Sync</button>`;
-        }
-    } else if (hasDoorDash) {
-        tracking = `Pending <button onclick="syncOrderStatus('${escapeHtml(String(orderId))}')" style="margin-left: 8px; padding: 2px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500;" title="Sync status from DoorDash">🔄 Sync</button>`;
+    } else if (order.doordash_order_id || rawData.doordash_order_id || rawData.doordashOrderId) {
+        tracking = 'Pending';
     } else {
         tracking = 'N/A';
     }
