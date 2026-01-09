@@ -2997,6 +2997,14 @@ async function showMyAccountPage() {
     const mainContainer = document.querySelector('.main-container');
     if (!mainContainer) return;
 
+    // Remove active class from all nav links when on profile page
+    document.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.remove('active');
+    });
+
+    // Add class to body to indicate we're on profile page
+    document.body.classList.add('on-profile-page');
+
     const userName = currentUser?.full_name || currentUser?.email || 'User';
     const userEmail = currentUser?.email || '';
     const userPhone = currentUser?.phone || '';
