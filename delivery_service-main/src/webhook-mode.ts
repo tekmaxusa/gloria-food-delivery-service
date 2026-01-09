@@ -603,8 +603,8 @@ class GloriaFoodWebhookServer {
         });
         
         // Add orders that aren't already in the list
-        const existingIds = new Set(ordersToCheck.map(o => o.gloriafood_order_id));
-        const newOrders = additionalOrders.filter(o => !existingIds.has(o.gloriafood_order_id));
+        const existingIds = new Set(ordersToCheck.map((o: any) => o.gloriafood_order_id));
+        const newOrders = additionalOrders.filter((o: any) => !existingIds.has(o.gloriafood_order_id));
         ordersToCheck.push(...newOrders.slice(0, 50 - ordersToCheck.length));
       }
 
