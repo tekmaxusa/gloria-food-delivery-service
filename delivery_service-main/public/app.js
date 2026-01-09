@@ -6568,26 +6568,26 @@ function createOrderRow(order) {
     `;
 
     return `
-        <tr data-order-id="${escapeHtml(String(orderId))}" class="order-row">
-            <td class="checkbox-cell">
+        <tr data-order-id="${escapeHtml(String(orderId))}">
+            <td>
                 <input type="checkbox" class="order-checkbox" value="${escapeHtml(String(orderId))}">
             </td>
-            <td class="order-number-cell">
+            <td>
                 ${clockIcon}
                 <strong>#${escapeHtml(String(orderId))}</strong>
             </td>
-            <td class="customer-name-cell" title="${escapeHtml(order.customer_name || 'N/A')}">${customerName}</td>
-            <td class="customer-address-cell" title="${escapeHtml(order.delivery_address || order.customer_address || 'N/A')}">${customerAddress}</td>
-            <td class="amount-cell">${amount}</td>
-            <td class="distance-cell">${formattedDistance}</td>
-            <td class="time-cell">${orderPlaced}</td>
-            <td class="time-cell">${formattedDeliveryTime}</td>
-            <td class="elapsed-time-cell">${elapsedTime}</td>
-            <td class="ready-cell">${formattedReadyForPickup}</td>
-            <td class="driver-cell">${formattedDriver}</td>
-            <td class="status-cell"><span class="status-badge status-${status.toLowerCase()}">${escapeHtml(status)}</span></td>
-            <td class="tracking-cell">${tracking}</td>
-            <td class="actions-cell">${moreMenu}</td>
+            <td>${customerName}</td>
+            <td>${customerAddress}</td>
+            <td>${amount}</td>
+            <td>${formattedDistance}</td>
+            <td>${orderPlaced}</td>
+            <td>${formattedDeliveryTime}</td>
+            <td>${elapsedTime}</td>
+            <td>${formattedReadyForPickup}</td>
+            <td>${formattedDriver}</td>
+            <td><span class="status-badge status-${status.toLowerCase()}">${escapeHtml(status)}</span></td>
+            <td>${tracking}</td>
+            <td>${moreMenu}</td>
         </tr>
     `;
 }
