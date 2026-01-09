@@ -691,6 +691,38 @@ export class OrderDatabasePostgreSQL {
     }
   }
 
+  /**
+   * Update merchant_name for orders that have fallback names when merchant name is updated
+   * Only updates orders with fallback merchant names (like "Merchant {store_id}"), preserves valid historical names
+   */
+  async updateOrdersMerchantName(storeId: string, newMerchantName: string): Promise<number> {
+    try {
+      const client = await this.pool.connect();
+      const result = await client.query(
+        `UPDATE orders
+         SET merchant_name = $1, updated_at = NOW()
+         WHERE store_id = $2
+           AND (
+             merchant_name IS NULL
+             OR merchant_name = ''
+             OR merchant_name = store_id
+             OR merchant_name LIKE 'Merchant %'
+             OR merchant_name = 'Unknown Merchant'
+           )`,
+        [newMerchantName, storeId]
+      );
+      client.release();
+      const updatedCount = result.rowCount || 0;
+      if (updatedCount > 0) {
+        console.log(`Updated merchant_name for ${updatedCount} order(s) with store_id ${storeId} to "${newMerchantName}"`);
+      }
+      return updatedCount;
+    } catch (error) {
+      console.error('Error updating orders merchant_name in PostgreSQL:', error);
+      return 0;
+    }
+  }
+
   async getOrderByDoorDashId(doordashOrderId: string): Promise<Order | null> {
     try {
       const client = await this.pool.connect();

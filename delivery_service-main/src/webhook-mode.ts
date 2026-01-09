@@ -1142,6 +1142,22 @@ class GloriaFoodWebhookServer {
           // Reload merchants in manager to reflect changes
           await this.merchantManager.reload();
           console.log(`Merchant ${storeId} updated: merchant_name = ${merchant.merchant_name}`);
+          
+          // If merchant_name was updated, update existing orders with fallback merchant names
+          if (merchant_name !== undefined && merchant.merchant_name) {
+            try {
+              const updatedCount = await this.handleAsync(
+                (this.database as any).updateOrdersMerchantName(storeId, merchant.merchant_name)
+              );
+              if (updatedCount > 0) {
+                console.log(`  ✅ Updated ${updatedCount} existing order(s) with new merchant name "${merchant.merchant_name}"`);
+              }
+            } catch (error: any) {
+              // Don't fail the request if order update fails
+              console.log(`  ⚠️  Could not update existing orders: ${error.message}`);
+            }
+          }
+          
           res.json({ success: true, merchant });
         } else {
           res.status(500).json({ success: false, error: 'Failed to update merchant' });
