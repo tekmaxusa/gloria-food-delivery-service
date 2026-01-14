@@ -1082,12 +1082,22 @@ class GloriaFoodWebhookServer {
         // Try to find merchant by API key first (for per-user merchants)
         let merchant = null;
         if (providedKey) {
-          merchant = await this.handleAsync(this.database.getMerchantByApiKey(providedKey));
+          try {
+            merchant = await this.handleAsync(this.database.getMerchantByApiKey(providedKey));
+          } catch (dbError: any) {
+            console.log(chalk.yellow(`   ⚠️  Could not lookup merchant by API key (database error): ${dbError.message}`));
+            // Continue - we'll try store_id lookup
+          }
         }
         
         // Fallback: Try to find merchant by store_id (for backward compatibility)
         if (!merchant) {
-          merchant = this.merchantManager.findMerchantForOrder(orderData);
+          try {
+            merchant = this.merchantManager.findMerchantForOrder(orderData);
+          } catch (error: any) {
+            console.log(chalk.yellow(`   ⚠️  Could not lookup merchant by store_id: ${error.message}`));
+            // Continue without merchant
+          }
         }
 
         // Validate authentication - check merchant-specific API key or global keys
@@ -1155,12 +1165,28 @@ class GloriaFoodWebhookServer {
         // Determine if this is a new order BEFORE saving
         // Get user_id from merchant if available
         const orderUserId = merchant?.user_id || undefined;
-        const existingBefore = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId.toString(), orderUserId));
+        
+        // Try to get existing order (but don't fail if database is unavailable)
+        let existingBefore = null;
+        try {
+          existingBefore = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId.toString(), orderUserId));
+        } catch (dbError: any) {
+          console.log(chalk.yellow(`   ⚠️  Could not check existing order (database error): ${dbError.message}`));
+          // Continue processing - we'll treat it as a new order
+        }
         
         // Store order in database (handle both sync SQLite and async MySQL)
         console.log(chalk.blue(`💾 Saving order to database...`));
-        const savedOrder = await this.handleAsync(this.database.insertOrUpdateOrder(orderData, orderUserId));
-        console.log(chalk.blue(`💾 Database save result: ${savedOrder ? 'SUCCESS' : 'FAILED'}`));
+        let savedOrder = null;
+        try {
+          savedOrder = await this.handleAsync(this.database.insertOrUpdateOrder(orderData, orderUserId));
+          console.log(chalk.blue(`💾 Database save result: ${savedOrder ? 'SUCCESS' : 'FAILED'}`));
+        } catch (dbError: any) {
+          console.error(chalk.red(`❌ Database error while saving order: ${dbError.message}`));
+          console.log(chalk.yellow(`   ⚠️  Order received but could not be saved to database`));
+          // Continue - we'll still return 200 to prevent retries
+          savedOrder = null;
+        }
 
         if (savedOrder) {
           const isNew = !existingBefore;
