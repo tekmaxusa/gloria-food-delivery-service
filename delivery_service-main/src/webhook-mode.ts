@@ -1290,6 +1290,51 @@ class GloriaFoodWebhookServer {
           orders = await this.handleAsync(this.database.getAllOrders(limit, user?.userId));
         }
         
+        // If user is logged in, also include orders with user_id = NULL that match user's merchants
+        // This handles backward compatibility for orders saved before user_id was set
+        if (user?.userId && orders.length < limit) {
+          try {
+            const userMerchants = await this.handleAsync(this.database.getAllMerchants(user.userId));
+            const userStoreIds = userMerchants.map(m => m.store_id).filter(Boolean);
+            
+            if (userStoreIds.length > 0) {
+              // Get orders with NULL user_id that match user's merchants
+              // Only fetch if we need more orders to reach the limit
+              const remainingLimit = limit - orders.length;
+              const nullUserOrders = await this.handleAsync(
+                this.database.getAllOrders(remainingLimit * 3, undefined) // Get more to account for filtering
+              );
+              
+              // Filter to only orders matching user's store_ids and not already in orders list
+              const existingOrderIds = new Set(orders.map(o => o.gloriafood_order_id));
+              const matchingNullOrders = nullUserOrders
+                .filter(order => {
+                  const orderAny = order as any;
+                  const hasNullUserId = orderAny.user_id === null || orderAny.user_id === undefined;
+                  return hasNullUserId &&
+                         order.store_id && 
+                         userStoreIds.includes(order.store_id) &&
+                         !existingOrderIds.has(order.gloriafood_order_id);
+                })
+                .slice(0, remainingLimit);
+              
+              // Merge and sort by fetched_at DESC, then limit
+              if (matchingNullOrders.length > 0) {
+                orders = [...orders, ...matchingNullOrders]
+                  .sort((a, b) => {
+                    const aTime = new Date(a.fetched_at || a.created_at || 0).getTime();
+                    const bTime = new Date(b.fetched_at || b.created_at || 0).getTime();
+                    return bTime - aTime;
+                  })
+                  .slice(0, limit);
+              }
+            }
+          } catch (merchantError: any) {
+            console.error('Error getting user merchants for order lookup:', merchantError);
+            // Continue with orders we already have
+          }
+        }
+        
         // Filter by store_id if provided
         if (storeId) {
           orders = orders.filter(order => order.store_id === storeId);
