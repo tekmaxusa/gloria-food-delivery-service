@@ -549,6 +549,9 @@ function navigateToPage(page) {
         case 'orders':
             showOrdersPage();
             break;
+        case 'merchants':
+            showMerchantsPage();
+            break;
         case 'dispatch':
             showDispatchPage();
             break;
@@ -797,6 +800,7 @@ function showMerchantsPage() {
     mainContainer.innerHTML = `
         <div class="orders-header">
             <h1 class="page-title">Merchants</h1>
+            <button class="btn-primary" id="addMerchantBtn" style="margin-left: auto;">+ Add Merchant</button>
         </div>
         <div class="table-container">
             <table class="orders-table">
@@ -821,18 +825,18 @@ function showMerchantsPage() {
             </table>
         </div>
         
-        <!-- Merchant Modal (for editing only) -->
+        <!-- Merchant Modal (for adding and editing) -->
         <div id="merchantModal" class="modal hidden">
             <div class="modal-content merchant-modal-content">
                 <div class="modal-header">
-                    <h2 id="merchantModalTitle">Edit Merchant</h2>
+                    <h2 id="merchantModalTitle">Add Merchant</h2>
                     <button class="modal-close" id="closeMerchantModal">&times;</button>
                 </div>
                 <form id="merchantForm" class="modal-body">
                     <div class="form-group">
                         <label>Store ID <span style="color: red;">*</span></label>
                         <input type="text" id="merchantStoreId" required placeholder="Enter Store ID" 
-                               pattern="[A-Za-z0-9_-]+" title="Store ID should contain only letters, numbers, hyphens, and underscores" disabled>
+                               pattern="[A-Za-z0-9_-]+" title="Store ID should contain only letters, numbers, hyphens, and underscores">
                     </div>
                     <div class="form-group">
                         <label>Merchant Name <span style="color: red;">*</span></label>
@@ -871,6 +875,14 @@ function showMerchantsPage() {
     // Initialize event listeners
     initializeMerchantsPage();
     loadMerchants();
+    
+    // Add button click handler
+    const addMerchantBtn = document.getElementById('addMerchantBtn');
+    if (addMerchantBtn) {
+        addMerchantBtn.addEventListener('click', () => {
+            openMerchantModal(null); // null means adding new merchant
+        });
+    }
 }
 
 // Initialize Merchants page
@@ -968,35 +980,35 @@ function displayMerchants(merchants) {
     `).join('');
 }
 
-// Open merchant modal for editing merchant (adding new merchants is disabled)
+// Open merchant modal for adding or editing merchant
 function openMerchantModal(merchant) {
-    if (!merchant) {
-        showError('Merchant data is required');
-        return;
-    }
-
     const modal = document.getElementById('merchantModal');
     const form = document.getElementById('merchantForm');
     const title = document.getElementById('merchantModalTitle');
+    const storeIdInput = document.getElementById('merchantStoreId');
 
-    if (!modal || !form || !title) return;
-
-    // Set title (only editing is allowed)
-    title.textContent = 'Edit Merchant';
+    if (!modal || !form || !title || !storeIdInput) return;
 
     // Reset form
     form.reset();
+    form.dataset.editingStoreId = '';
 
-    // Populate form for editing
-    document.getElementById('merchantStoreId').value = merchant.store_id;
-    document.getElementById('merchantStoreId').disabled = true; // Can't change store_id
-    document.getElementById('merchantName').value = merchant.merchant_name || '';
-    document.getElementById('merchantApiUrl').value = merchant.api_url || '';
-    document.getElementById('merchantIsActive').checked = merchant.is_active !== false;
-    // Don't populate API key and master key for security
-
-    // Store current merchant for form submission
-    form.dataset.editingStoreId = merchant.store_id;
+    if (merchant) {
+        // Editing existing merchant
+        title.textContent = 'Edit Merchant';
+        storeIdInput.value = merchant.store_id;
+        storeIdInput.disabled = true; // Can't change store_id when editing
+        document.getElementById('merchantName').value = merchant.merchant_name || '';
+        document.getElementById('merchantApiUrl').value = merchant.api_url || '';
+        document.getElementById('merchantIsActive').checked = merchant.is_active !== false;
+        // Don't populate API key and master key for security
+        form.dataset.editingStoreId = merchant.store_id;
+    } else {
+        // Adding new merchant
+        title.textContent = 'Add Merchant';
+        storeIdInput.disabled = false; // Can enter store_id when adding
+        document.getElementById('merchantIsActive').checked = true; // Default to active
+    }
 
     // Show modal
     modal.classList.remove('hidden');
@@ -1048,9 +1060,11 @@ async function handleMerchantSubmit(e) {
                 body: JSON.stringify(merchantData)
             });
         } else {
-            // Adding new merchants is disabled
-            showError('Adding new merchants is not allowed through the UI');
-            return;
+            // Add new merchant
+            response = await authenticatedFetch(`${API_BASE}/merchants`, {
+                method: 'POST',
+                body: JSON.stringify(merchantData)
+            });
         }
 
         const data = await response.json();
@@ -1060,7 +1074,7 @@ async function handleMerchantSubmit(e) {
             closeMerchantModal();
             loadMerchants();
         } else {
-            showError(data.error || 'Failed to save merchant');
+            showError(data.error || (editingStoreId ? 'Failed to update merchant' : 'Failed to add merchant'));
         }
     } catch (error) {
         console.error('Error saving merchant:', error);

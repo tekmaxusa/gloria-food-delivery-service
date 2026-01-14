@@ -253,7 +253,8 @@ export class OrderDatabasePostgreSQL {
             doordash_order_id VARCHAR(255),
             doordash_sent_at TIMESTAMP,
             doordash_tracking_url TEXT,
-            ready_for_pickup TIMESTAMP
+            ready_for_pickup TIMESTAMP,
+            accepted_at TIMESTAMP
           )
         `);
 
@@ -320,6 +321,20 @@ export class OrderDatabasePostgreSQL {
           // Column might already exist, ignore error
           if (e.code !== '42701') {
             console.log('   Note: ready_for_pickup column may already exist');
+          }
+        }
+
+        // Add accepted_at column if it doesn't exist (for existing databases)
+        try {
+          await client.query(`
+            ALTER TABLE orders 
+            ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMP
+          `);
+          console.log('✅ Added accepted_at column to orders table');
+        } catch (e: any) {
+          // Column might already exist, ignore error
+          if (e.code !== '42701') {
+            console.log('   Note: accepted_at column may already exist');
           }
         }
 
@@ -696,10 +711,26 @@ export class OrderDatabasePostgreSQL {
   async updateOrderStatus(gloriafoodOrderId: string, newStatus: string): Promise<boolean> {
     try {
       const client = await this.pool.connect();
+      
+      // Check current status to detect ACCEPTED status change
+      const currentOrder = await client.query(
+        `SELECT status FROM orders WHERE gloriafood_order_id = $1`,
+        [gloriafoodOrderId]
+      );
+      
+      const currentStatus = currentOrder.rows[0]?.status;
+      const isAccepting = newStatus.toUpperCase() === 'ACCEPTED' && 
+                         currentStatus?.toUpperCase() !== 'ACCEPTED';
+      
+      // Update status and set accepted_at if status is changing to ACCEPTED
       const result = await client.query(
         `UPDATE orders
          SET status = $1,
-             updated_at = NOW()
+             updated_at = NOW(),
+             accepted_at = CASE 
+               WHEN $1 = 'ACCEPTED' AND accepted_at IS NULL THEN NOW()
+               ELSE accepted_at
+             END
          WHERE gloriafood_order_id = $2`,
         [newStatus, gloriafoodOrderId]
       );

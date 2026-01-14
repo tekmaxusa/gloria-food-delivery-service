@@ -37,6 +37,7 @@ class GloriaFoodWebhookServer {
   private config: WebhookConfig;
   private doorDashClient?: DoorDashClient;
   private deliveryScheduler?: DeliveryScheduler;
+  private acceptanceScheduler: Map<string, NodeJS.Timeout> = new Map(); // Track scheduled post-acceptance calls
   private emailService?: EmailService;
   private merchantManager: MerchantManager;
   private sessions: Map<string, { userId: number; email: string; expires: number }> = new Map();
@@ -443,6 +444,8 @@ class GloriaFoodWebhookServer {
     }
 
     this.deliveryScheduler?.clear(orderId);
+    // Cancel post-acceptance schedule since DoorDash has been called
+    this.cancelPostAcceptanceSchedule(orderId);
   }
 
   private async scheduleDoorDashDelivery(orderData: any, source: string): Promise<void> {
@@ -466,6 +469,94 @@ class GloriaFoodWebhookServer {
     } catch (error: any) {
       console.error(chalk.red(`❌ Failed to schedule DoorDash delivery for order ${orderId}: ${error.message}`));
       await this.dispatchDoorDash(orderData, { trigger: 'immediate', source, reason: 'scheduler-error' });
+    }
+  }
+
+  /**
+   * Schedule DoorDash call 20-25 minutes after order acceptance
+   */
+  private async schedulePostAcceptanceDoorDash(orderId: string, orderData: any): Promise<void> {
+    // Cancel any existing schedule for this order
+    this.cancelPostAcceptanceSchedule(orderId);
+
+    // Check if order was already sent to DoorDash
+    try {
+      const existingOrder = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId));
+      if (existingOrder && (existingOrder as any).sent_to_doordash) {
+        console.log(chalk.yellow(`⚠️  Order ${orderId} already sent to DoorDash, skipping post-acceptance schedule`));
+        return;
+      }
+    } catch (error: any) {
+      console.log(chalk.yellow(`⚠️  Could not check if order already sent: ${error.message}`));
+    }
+
+    // Random delay between 20-25 minutes (1200-1500 seconds)
+    const minMinutes = 20;
+    const maxMinutes = 25;
+    const delayMinutes = minMinutes + Math.random() * (maxMinutes - minMinutes);
+    const delayMs = delayMinutes * 60 * 1000;
+
+    console.log(chalk.cyan(`⏰ Scheduling DoorDash call for order #${orderId} in ${delayMinutes.toFixed(1)} minutes (${Math.round(delayMs / 1000)} seconds)`));
+
+    const timeoutId = setTimeout(async () => {
+      try {
+        // Check again if order was already sent to DoorDash
+        const order = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId));
+        if (!order) {
+          console.log(chalk.yellow(`⚠️  Order #${orderId} not found, skipping DoorDash call`));
+          return;
+        }
+
+        if ((order as any).sent_to_doordash) {
+          console.log(chalk.yellow(`⚠️  Order #${orderId} already sent to DoorDash, skipping post-acceptance call`));
+          return;
+        }
+
+        // Check if order is still accepted
+        const status = (order.status || '').toString().toUpperCase();
+        if (status !== 'ACCEPTED') {
+          console.log(chalk.yellow(`⚠️  Order #${orderId} status changed to ${status}, skipping post-acceptance call`));
+          return;
+        }
+
+        console.log(chalk.green(`🚚 Post-acceptance timer triggered - calling DoorDash for order #${orderId}...`));
+        
+        // Prepare order data from database order
+        let orderDataForDoorDash = orderData;
+        if (order.raw_data) {
+          try {
+            const rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+            orderDataForDoorDash = { ...rawData, ...order };
+          } catch (e) {
+            orderDataForDoorDash = { ...order };
+          }
+        }
+
+        // Send to DoorDash
+        await this.dispatchDoorDash(orderDataForDoorDash, {
+          trigger: 'scheduled',
+          source: 'post-acceptance',
+          reason: '20-25-minutes-after-acceptance'
+        });
+      } catch (error: any) {
+        console.error(chalk.red(`❌ Error in post-acceptance DoorDash call for order #${orderId}: ${error.message}`));
+      } finally {
+        this.acceptanceScheduler.delete(orderId);
+      }
+    }, delayMs);
+
+    this.acceptanceScheduler.set(orderId, timeoutId);
+  }
+
+  /**
+   * Cancel post-acceptance schedule for an order
+   */
+  private cancelPostAcceptanceSchedule(orderId: string): void {
+    const timeoutId = this.acceptanceScheduler.get(orderId);
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      this.acceptanceScheduler.delete(orderId);
+      console.log(chalk.gray(`   Cancelled post-acceptance schedule for order #${orderId}`));
     }
   }
 
@@ -1074,12 +1165,23 @@ class GloriaFoodWebhookServer {
             }
           }
 
+          // Handle order acceptance - schedule DoorDash call 20-25 minutes after acceptance
+          if (statusChanged && newStatus === 'accepted' && prevStatus !== 'accepted' && isDeliveryOrder) {
+            console.log(chalk.cyan(`📦 Order #${orderIdStr} accepted - scheduling DoorDash call in 20-25 minutes...`));
+            await this.schedulePostAcceptanceDoorDash(orderIdStr, orderData);
+          }
+
           if (isCancelled) {
             this.deliveryScheduler?.cancel(orderIdStr, 'order-cancelled');
+            this.cancelPostAcceptanceSchedule(orderIdStr);
           } else if (!isDeliveryOrder) {
             this.deliveryScheduler?.cancel(orderIdStr, 'non-delivery');
+            this.cancelPostAcceptanceSchedule(orderIdStr);
           } else if (isNew || wasNotSent) {
-            await this.scheduleDoorDashDelivery(orderData, isNew ? 'new-order' : 'update-order');
+            // Don't schedule immediately if order is already accepted - let post-acceptance scheduler handle it
+            if (newStatus !== 'accepted') {
+              await this.scheduleDoorDashDelivery(orderData, isNew ? 'new-order' : 'update-order');
+            }
           } else {
             this.deliveryScheduler?.cancel(orderIdStr, 'already-sent');
           }
@@ -1325,17 +1427,18 @@ class GloriaFoodWebhookServer {
           return res.status(404).json({ success: false, error: 'Order not found' });
         }
 
-        // If ready_for_pickup is being set to true and order has DoorDash delivery, notify DoorDash
+        // If ready_for_pickup is being set to true, handle DoorDash assignment
         if (ready_for_pickup === true && this.doorDashClient) {
           // Try to get DoorDash delivery ID from multiple sources
           let doorDashId = (order as any).doordash_order_id;
+          let rawData: any = {};
           
-          // If not found, try to extract from raw_data
-          if (!doorDashId && order.raw_data) {
+          // Parse raw_data if available
+          if (order.raw_data) {
             try {
-              const rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+              rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
               // Check for delivery_id in doordash_data (this is the actual DoorDash delivery ID)
-              if (rawData.doordash_data) {
+              if (!doorDashId && rawData.doordash_data) {
                 const doordashData = typeof rawData.doordash_data === 'string' ? JSON.parse(rawData.doordash_data) : rawData.doordash_data;
                 doorDashId = doordashData.delivery_id || doordashData.id || doordashData.deliveryId;
               }
@@ -1358,20 +1461,75 @@ class GloriaFoodWebhookServer {
           }
           
           if (doorDashId) {
+            // Order already has DoorDash delivery - notify DoorDash that it's ready for pickup
+            // Cancel post-acceptance schedule since we're calling DoorDash now
+            this.cancelPostAcceptanceSchedule(orderId);
+            
             try {
               await this.doorDashClient.notifyReadyForPickup(doorDashId);
               console.log(chalk.green(`✅ Notified DoorDash rider that order #${orderId} is ready for pickup (delivery ID: ${doorDashId})`));
             } catch (ddError: any) {
               // Check if it's a 404 (delivery not found) - this is expected if delivery hasn't been created yet
               if (ddError.message && (ddError.message.includes('404') || ddError.message.includes('unknown_delivery_id'))) {
-                console.log(chalk.yellow(`⚠️  Order #${orderId} not found in DoorDash (delivery may not be created yet). Skipping notification.`));
+                console.log(chalk.yellow(`⚠️  Order #${orderId} not found in DoorDash (delivery may not be created yet). Will assign driver now.`));
+                // If delivery not found, treat as if no DoorDash ID and assign driver
+                doorDashId = null;
               } else {
                 console.log(chalk.yellow(`⚠️  Could not notify DoorDash for order #${orderId}: ${ddError.message}`));
               }
-              // Continue with update even if DoorDash notification fails
             }
-          } else {
-            console.log(chalk.gray(`ℹ️  Order #${orderId} does not have a DoorDash delivery ID. Skipping DoorDash notification.`));
+          }
+          
+          // If no DoorDash delivery ID exists, send order to DoorDash immediately to assign driver
+          if (!doorDashId) {
+            // Cancel any scheduled delivery since we're sending immediately
+            this.deliveryScheduler?.cancel(orderId, 'ready-for-pickup-manual-assign');
+            // Cancel post-acceptance schedule if it exists
+            this.cancelPostAcceptanceSchedule(orderId);
+            
+            console.log(chalk.blue(`🚚 Order #${orderId} marked as ready - assigning DoorDash driver immediately...`));
+            
+            try {
+              // Prepare order data for DoorDash
+              const orderDataForDoorDash = {
+                ...order,
+                raw_data: rawData
+              };
+              
+              // Send to DoorDash immediately
+              const doorDashResult = await this.sendOrderToDoorDash(orderDataForDoorDash);
+              
+              if (doorDashResult && doorDashResult.id) {
+                // Get merchant name before updating
+                const storeId = order.store_id;
+                let merchantName = order.merchant_name;
+                if (storeId && !merchantName) {
+                  const merchant = this.merchantManager.getMerchantByStoreId(storeId);
+                  if (merchant && merchant.merchant_name) {
+                    merchantName = merchant.merchant_name;
+                  }
+                }
+
+                // Update order with DoorDash info
+                await this.handleAsync(this.database.insertOrUpdateOrder({
+                  ...order,
+                  merchant_name: merchantName,
+                  doordash_order_id: doorDashResult.id,
+                  sent_to_doordash: true
+                }));
+                
+                console.log(chalk.green(`✅ Order #${orderId} sent to DoorDash. Driver will be automatically assigned.`));
+                console.log(chalk.gray(`   DoorDash Delivery ID: ${doorDashResult.id}`));
+                if (doorDashResult.tracking_url) {
+                  console.log(chalk.gray(`   Tracking URL: ${doorDashResult.tracking_url}`));
+                }
+              } else {
+                console.log(chalk.yellow(`⚠️  Failed to send order #${orderId} to DoorDash. Order may not be a delivery type or DoorDash may be unavailable.`));
+              }
+            } catch (assignError: any) {
+              console.error(chalk.red(`❌ Error assigning DoorDash driver for order #${orderId}: ${assignError.message}`));
+              // Continue with update even if DoorDash assignment fails
+            }
           }
         }
 
@@ -1665,15 +1823,35 @@ class GloriaFoodWebhookServer {
         }
 
         if (newStatus !== order.status && (this.database as any).updateOrderStatus) {
+          const oldStatus = order.status;
           const updated = await this.handleAsync(
             (this.database as any).updateOrderStatus(order.gloriafood_order_id, newStatus)
           );
           if (updated) {
-            console.log(chalk.green(`  ✅ Updated order #${order.gloriafood_order_id} status: ${order.status} → ${newStatus}`));
+            console.log(chalk.green(`  ✅ Updated order #${order.gloriafood_order_id} status: ${oldStatus} → ${newStatus}`));
+            
+            // Check if status changed to ACCEPTED and schedule post-acceptance DoorDash call
+            if (newStatus.toUpperCase() === 'ACCEPTED' && oldStatus?.toUpperCase() !== 'ACCEPTED') {
+              const orderType = (order.order_type || '').toString().toLowerCase();
+              if (orderType === 'delivery') {
+                // Get full order data for DoorDash
+                let orderData = order;
+                if (order.raw_data) {
+                  try {
+                    const rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
+                    orderData = { ...rawData, ...order };
+                  } catch (e) {
+                    // Use order as-is
+                  }
+                }
+                await this.schedulePostAcceptanceDoorDash(order.gloriafood_order_id, orderData);
+              }
+            }
+            
             return res.json({ 
               success: true, 
               message: `Order status updated to ${newStatus}`,
-              oldStatus: order.status,
+              oldStatus: oldStatus,
               newStatus: newStatus,
               doordashStatus: ddStatus.status
             });
