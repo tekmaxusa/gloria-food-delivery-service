@@ -1635,13 +1635,36 @@ class GloriaFoodWebhookServer {
     this.app.get('/orders/:orderId', async (req: Request, res: Response) => {
       try {
         const user = getCurrentUser(req);
-        const order = await this.handleAsync(this.database.getOrderByGloriaFoodId(req.params.orderId, user?.userId));
+        let order = await this.handleAsync(this.database.getOrderByGloriaFoodId(req.params.orderId, user?.userId));
+        
+        // If order not found and user is logged in, try to find order with NULL user_id that matches user's merchants
+        if (!order && user?.userId) {
+          try {
+            // Try without user_id filter first
+            const nullUserOrder = await this.handleAsync(this.database.getOrderByGloriaFoodId(req.params.orderId, undefined));
+            
+            if (nullUserOrder && (nullUserOrder as any).user_id === null && nullUserOrder.store_id) {
+              // Check if this order's store_id matches one of the user's merchants
+              const userMerchants = await this.handleAsync(this.database.getAllMerchants(user.userId));
+              const userStoreIds = userMerchants.map(m => m.store_id).filter(Boolean);
+              
+              if (userStoreIds.includes(nullUserOrder.store_id)) {
+                order = nullUserOrder;
+              }
+            }
+          } catch (merchantError: any) {
+            console.error('Error checking user merchants for order lookup:', merchantError);
+            // Continue - we'll return 404 if order not found
+          }
+        }
+        
         if (!order) {
-          return res.status(404).json({ error: 'Order not found' });
+          return res.status(404).json({ success: false, error: 'Order not found' });
         }
         res.json({ success: true, order });
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        console.error('Error getting order:', error);
+        res.status(500).json({ success: false, error: error.message });
       }
     });
 
