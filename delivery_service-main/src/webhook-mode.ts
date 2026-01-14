@@ -1335,7 +1335,16 @@ class GloriaFoodWebhookServer {
           orders: enrichedOrders
         });
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        console.error('Error getting orders:', error);
+        const limit = parseInt((req.query.limit as string) || '50', 10);
+        // Return empty array instead of error to prevent UI issues
+        res.status(200).json({ 
+          success: true, 
+          count: 0, 
+          limit: limit,
+          orders: [],
+          error: error.message 
+        });
       }
     });
 

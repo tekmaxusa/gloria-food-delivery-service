@@ -1492,9 +1492,17 @@ async function loadDashboardData() {
         const ordersResponse = await authenticatedFetch(`${API_BASE}/orders?limit=10`);
         if (ordersResponse.ok) {
             const ordersData = await ordersResponse.json();
-            if (ordersData.success && ordersData.orders) {
-                displayDashboardOrders(ordersData.orders.slice(0, 10));
+            if (ordersData.success !== false) {
+                // Handle both formats: { orders: [...] } or direct array
+                const orders = ordersData.orders || ordersData || [];
+                displayDashboardOrders(orders.slice(0, 10));
+            } else {
+                console.error('Orders API returned error:', ordersData);
+                displayDashboardOrders([]);
             }
+        } else {
+            console.error('Failed to load orders:', ordersResponse.status);
+            displayDashboardOrders([]);
         }
     } catch (error) {
         console.error('Error loading dashboard data:', error);
