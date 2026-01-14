@@ -259,19 +259,6 @@ export class OrderDatabasePostgreSQL {
             accepted_at TIMESTAMP
           )
         `);
-        
-        // Create unique index for orders - allow NULL user_id but enforce uniqueness for non-NULL
-        await client.query(`
-          CREATE UNIQUE INDEX IF NOT EXISTS orders_user_id_gloriafood_order_id_unique 
-          ON orders (user_id, gloriafood_order_id) 
-          WHERE user_id IS NOT NULL
-        `);
-        // Also allow NULL user_id with unique gloriafood_order_id (for backward compatibility)
-        await client.query(`
-          CREATE UNIQUE INDEX IF NOT EXISTS orders_null_user_gloriafood_order_id_unique 
-          ON orders (gloriafood_order_id) 
-          WHERE user_id IS NULL
-        `);
 
         // Add scheduled_delivery_time column if it doesn't exist (for existing databases)
         try {
@@ -359,27 +346,50 @@ export class OrderDatabasePostgreSQL {
             ALTER TABLE orders 
             ADD COLUMN IF NOT EXISTS user_id INTEGER
           `);
-          // Remove old unique constraint and add new composite unique constraint
-          try {
-            await client.query(`
-              ALTER TABLE orders 
-              DROP CONSTRAINT IF EXISTS orders_gloriafood_order_id_key
-            `);
-            await client.query(`
-              ALTER TABLE orders 
-              ADD CONSTRAINT orders_user_id_gloriafood_order_id_unique UNIQUE (user_id, gloriafood_order_id)
-            `);
-          } catch (e: any) {
-            // Constraint might already exist or not exist, ignore error
-            if (e.code !== '42P07' && e.code !== '42710' && e.code !== '42804') {
-              console.log('   Note: Unique constraint may already exist');
-            }
-          }
           console.log('✅ Added user_id column to orders table');
         } catch (e: any) {
           // Column might already exist, ignore error
           if (e.code !== '42701') {
             console.log('   Note: user_id column may already exist');
+          }
+        }
+        
+        // Remove old unique constraint if it exists
+        try {
+          await client.query(`
+            ALTER TABLE orders 
+            DROP CONSTRAINT IF EXISTS orders_gloriafood_order_id_key
+          `);
+        } catch (e: any) {
+          // Constraint might not exist, ignore error
+        }
+        
+        // Create unique indexes for orders - allow NULL user_id but enforce uniqueness for non-NULL
+        // Do this AFTER adding the column to avoid errors on existing databases
+        try {
+          await client.query(`
+            CREATE UNIQUE INDEX IF NOT EXISTS orders_user_id_gloriafood_order_id_unique 
+            ON orders (user_id, gloriafood_order_id) 
+            WHERE user_id IS NOT NULL
+          `);
+        } catch (e: any) {
+          // Index might already exist or column might not exist yet, ignore error
+          if (e.code !== '42P07' && e.code !== '42710') {
+            console.log('   Note: orders_user_id_gloriafood_order_id_unique index may already exist or user_id column not ready');
+          }
+        }
+        
+        // Also allow NULL user_id with unique gloriafood_order_id (for backward compatibility)
+        try {
+          await client.query(`
+            CREATE UNIQUE INDEX IF NOT EXISTS orders_null_user_gloriafood_order_id_unique 
+            ON orders (gloriafood_order_id) 
+            WHERE user_id IS NULL
+          `);
+        } catch (e: any) {
+          // Index might already exist, ignore error
+          if (e.code !== '42P07' && e.code !== '42710') {
+            console.log('   Note: orders_null_user_gloriafood_order_id_unique index may already exist');
           }
         }
 
@@ -400,20 +410,6 @@ export class OrderDatabasePostgreSQL {
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
           )
-        `);
-        
-        // Create partial unique indexes for merchants
-        // Allow multiple NULL user_id but enforce uniqueness for non-NULL user_id + store_id
-        await client.query(`
-          CREATE UNIQUE INDEX IF NOT EXISTS merchants_user_id_store_id_unique 
-          ON merchants (user_id, store_id) 
-          WHERE user_id IS NOT NULL
-        `);
-        // Also allow NULL user_id with unique store_id (for backward compatibility)
-        await client.query(`
-          CREATE UNIQUE INDEX IF NOT EXISTS merchants_null_user_store_id_unique 
-          ON merchants (store_id) 
-          WHERE user_id IS NULL
         `);
 
         // Add phone, address, and user_id columns if they don't exist (for existing databases)
@@ -453,24 +449,6 @@ export class OrderDatabasePostgreSQL {
             // Constraint might already exist or not exist, ignore error
             if (e.code !== '42P07' && e.code !== '42710') {
               console.log('   Note: Unique constraint may already exist');
-            }
-          }
-          
-          // Create indexes for orders user_id
-          try {
-            await client.query(`
-              CREATE UNIQUE INDEX IF NOT EXISTS orders_user_id_gloriafood_order_id_unique 
-              ON orders (user_id, gloriafood_order_id) 
-              WHERE user_id IS NOT NULL
-            `);
-            await client.query(`
-              CREATE UNIQUE INDEX IF NOT EXISTS orders_null_user_gloriafood_order_id_unique 
-              ON orders (gloriafood_order_id) 
-              WHERE user_id IS NULL
-            `);
-          } catch (e: any) {
-            if (e.code !== '42P07' && e.code !== '42710') {
-              console.log('   Note: Orders unique indexes may already exist');
             }
           }
           console.log('✅ Added user_id column to merchants table');
