@@ -1042,29 +1042,7 @@ class GloriaFoodWebhookServer {
     this.app.post(this.config.webhookPath, async (req: Request, res: Response) => {
       console.log(chalk.cyan('\n🔵 WEBHOOK ENDPOINT CALLED'));
       try {
-        // Validate authentication if master key is provided
-        // Note: Some webhook providers may not send authentication, so we make it optional
-        if (this.config.masterKey || this.config.apiKey) {
-          const authHeader = req.headers['authorization'] || req.headers['x-api-key'];
-          const providedKey = authHeader?.toString().replace('Bearer ', '').trim();
-          
-          // Check multiple possible auth methods
-          const isValid = 
-            providedKey === this.config.apiKey ||
-            providedKey === this.config.masterKey ||
-            req.headers['x-master-key'] === this.config.masterKey ||
-            req.headers['master-key'] === this.config.masterKey ||
-            req.body?.api_key === this.config.apiKey ||
-            req.body?.master_key === this.config.masterKey ||
-            req.query?.token === this.config.apiKey;
-
-          // If authentication is expected but not provided, log warning but don't block
-          if (!isValid && (this.config.masterKey || this.config.apiKey)) {
-            // Silent authentication check - still process the order
-          }
-        }
-
-        // Extract order data from request
+        // Extract order data from request first (needed to identify merchant)
         // Try body first, then query params, then raw body
         let orderData = this.extractOrderData(req.body);
         
@@ -1095,32 +1073,76 @@ class GloriaFoodWebhookServer {
           });
         }
 
+        // Identify merchant for this order (needed for authentication)
+        const merchant = this.merchantManager.findMerchantForOrder(orderData);
+
+        // Validate authentication - check merchant-specific API key or global keys
+        if (merchant) {
+          const authHeader = req.headers['authorization'] || req.headers['x-api-key'];
+          const providedKey = authHeader?.toString().replace('Bearer ', '').trim();
+          
+          // Check merchant-specific API key first
+          let isValid = false;
+          if (merchant.api_key && providedKey) {
+            isValid = providedKey === merchant.api_key;
+          }
+          
+          // Also check master key (global) or global API key
+          if (!isValid) {
+            isValid = 
+              providedKey === this.config.apiKey ||
+              providedKey === this.config.masterKey ||
+              req.headers['x-master-key'] === this.config.masterKey ||
+              req.headers['master-key'] === this.config.masterKey ||
+              req.body?.api_key === merchant.api_key ||
+              req.body?.api_key === this.config.apiKey ||
+              req.body?.master_key === this.config.masterKey ||
+              req.query?.token === merchant.api_key ||
+              req.query?.token === this.config.apiKey;
+          }
+
+          // Log authentication status (but don't block - some webhooks don't send auth)
+          if (!isValid && (merchant.api_key || this.config.masterKey || this.config.apiKey)) {
+            console.log(chalk.yellow(`   ⚠️  Authentication check failed for merchant ${merchant.merchant_name}, but processing order anyway`));
+          } else if (isValid) {
+            console.log(chalk.green(`   ✅ Authentication validated for merchant ${merchant.merchant_name}`));
+          }
+        } else if (this.config.masterKey || this.config.apiKey) {
+          // Fallback to global authentication if merchant not found
+          const authHeader = req.headers['authorization'] || req.headers['x-api-key'];
+          const providedKey = authHeader?.toString().replace('Bearer ', '').trim();
+          
+          const isValid = 
+            providedKey === this.config.apiKey ||
+            providedKey === this.config.masterKey ||
+            req.headers['x-master-key'] === this.config.masterKey ||
+            req.headers['master-key'] === this.config.masterKey ||
+            req.body?.api_key === this.config.apiKey ||
+            req.body?.master_key === this.config.masterKey ||
+            req.query?.token === this.config.apiKey;
+
+          if (!isValid) {
+            console.log(chalk.yellow(`   ⚠️  Global authentication check failed, but processing order anyway`));
+          }
+        }
+
         // Log received order
         const orderId = orderData.id || orderData.order_id || 'unknown';
         console.log(chalk.green(`\n✅ Order data extracted successfully from GloriaFood: #${orderId}`));
         console.log(chalk.green(`   ✅ Connected to GloriaFood - Order received!`));
-
-        // Identify merchant for this order
-        const merchant = this.merchantManager.findMerchantForOrder(orderData);
+        
         if (merchant) {
           console.log(chalk.cyan(`   🏪 Merchant: ${merchant.merchant_name} (${merchant.store_id})`));
+          // Add merchant name to orderData
+          orderData.merchant_name = merchant.merchant_name;
         } else {
           const storeId = orderData.store_id || orderData.restaurant_id || 'unknown';
           console.log(chalk.yellow(`   ⚠️  Merchant not found for store_id: ${storeId}`));
-          console.log(chalk.gray(`   💡 Add this merchant to GLORIAFOOD_MERCHANTS in .env or database`));
+          console.log(chalk.gray(`   💡 Add this merchant to Integrations page or GLORIAFOOD_MERCHANTS in .env`));
         }
 
         // Determine if this is a new order BEFORE saving
         const existingBefore = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId.toString()));
-
-        // Get merchant name from merchant manager and add to orderData
-        const storeId = orderData.store_id || orderData.restaurant_id;
-        if (storeId) {
-          const merchant = this.merchantManager.getMerchantByStoreId(storeId.toString());
-          if (merchant && merchant.merchant_name) {
-            orderData.merchant_name = merchant.merchant_name;
-          }
-        }
 
         // Store order in database (handle both sync SQLite and async MySQL)
         console.log(chalk.blue(`💾 Saving order to database...`));
@@ -2303,6 +2325,53 @@ class GloriaFoodWebhookServer {
       }
     });
 
+    // Get all users endpoint
+    this.app.get('/api/auth/users', async (req: Request, res: Response) => {
+      try {
+        const users = await this.handleAsync(this.database.getAllUsers());
+        res.json({ success: true, users });
+      } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    // Delete user endpoint
+    this.app.delete('/api/auth/users/:email', async (req: Request, res: Response) => {
+      try {
+        const email = req.params.email;
+        
+        if (!email) {
+          return res.status(400).json({ success: false, error: 'Email is required' });
+        }
+
+        // Check if user exists
+        const user = await this.handleAsync(this.database.getUserByEmail(email));
+        if (!user) {
+          return res.status(404).json({ success: false, error: 'User not found' });
+        }
+
+        // Delete user from database
+        const deleted = await this.handleAsync(this.database.deleteUser(email));
+        
+        if (deleted) {
+          // Also delete any active sessions for this user
+          for (const [token, session] of this.sessions.entries()) {
+            if (session.email === email) {
+              this.sessions.delete(token);
+            }
+          }
+          
+          console.log(chalk.green(`✅ User deleted: ${email}`));
+          res.json({ success: true, message: 'User deleted successfully' });
+        } else {
+          res.status(500).json({ success: false, error: 'Failed to delete user' });
+        }
+      } catch (error: any) {
+        console.error(chalk.red('Error deleting user:'), error);
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
     // Drivers endpoints
     this.app.get('/api/drivers', async (req: Request, res: Response) => {
       try {
@@ -3097,15 +3166,19 @@ async function main() {
   console.log(chalk.gray(`   GLORIAFOOD_MERCHANTS: ${merchantsJson ? '✅ SET (multi-merchant mode)' : '❌ NOT SET'}`));
   console.log(chalk.gray(`   PORT: ${process.env.PORT || 'NOT SET (will use 3000)'}`));
 
-  // Check if we have at least one merchant configuration method
-  if (!merchantsJson && (!apiKey || !storeId)) {
-    console.error(chalk.red.bold('\n❌ Error: Missing merchant configuration!\n'));
+  // Note: Merchants are now optional - users can add them through the UI
+  // Only require merchants if AUTO_LOAD_MERCHANTS=true is set
+  const autoLoadMerchants = process.env.AUTO_LOAD_MERCHANTS === 'true';
+  
+  if (autoLoadMerchants && !merchantsJson && (!apiKey || !storeId)) {
+    console.error(chalk.red.bold('\n❌ Error: AUTO_LOAD_MERCHANTS=true but missing merchant configuration!\n'));
     console.error(chalk.yellow('Please configure merchants using one of these methods:'));
     console.error(chalk.gray('\n  Option 1: Multi-merchant (recommended)'));
     console.error(chalk.gray('  GLORIAFOOD_MERCHANTS=[{"store_id":"123","merchant_name":"Restaurant 1","api_key":"key1","api_url":"https://api.example.com"},{"store_id":"456","merchant_name":"Restaurant 2","api_key":"key2"}]'));
     console.error(chalk.gray('\n  Option 2: Single merchant (legacy)'));
     console.error(chalk.gray('  GLORIAFOOD_API_KEY=your_api_key'));
     console.error(chalk.gray('  GLORIAFOOD_STORE_ID=your_store_id'));
+    console.error(chalk.gray('\n  Or set AUTO_LOAD_MERCHANTS=false to add merchants through UI'));
     console.error(chalk.gray('\n  Optional:'));
     console.error(chalk.gray('  WEBHOOK_PORT=3000'));
     console.error(chalk.gray('  WEBHOOK_PATH=/webhook'));
@@ -3118,6 +3191,10 @@ async function main() {
     console.error(chalk.gray('  DB_PASSWORD= (leave empty if no password)'));
     console.error(chalk.gray('  DB_NAME=gloriafood_orders\n'));
     process.exit(1);
+  } else if (!autoLoadMerchants) {
+    console.log(chalk.cyan('ℹ️  AUTO_LOAD_MERCHANTS is not set or false'));
+    console.log(chalk.cyan('   Merchants will be loaded from database only'));
+    console.log(chalk.cyan('   Add merchants through the Integrations page in the UI\n'));
   }
   
   console.log(chalk.green('✅ Environment variables check passed\n'));
