@@ -1153,11 +1153,13 @@ class GloriaFoodWebhookServer {
         }
 
         // Determine if this is a new order BEFORE saving
-        const existingBefore = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId.toString()));
-
+        // Get user_id from merchant if available
+        const orderUserId = merchant?.user_id || undefined;
+        const existingBefore = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId.toString(), orderUserId));
+        
         // Store order in database (handle both sync SQLite and async MySQL)
         console.log(chalk.blue(`💾 Saving order to database...`));
-        const savedOrder = await this.handleAsync(this.database.insertOrUpdateOrder(orderData));
+        const savedOrder = await this.handleAsync(this.database.insertOrUpdateOrder(orderData, orderUserId));
         console.log(chalk.blue(`💾 Database save result: ${savedOrder ? 'SUCCESS' : 'FAILED'}`));
 
         if (savedOrder) {
@@ -1250,15 +1252,16 @@ class GloriaFoodWebhookServer {
     // Get all orders endpoint with filters
     this.app.get('/orders', async (req: Request, res: Response) => {
       try {
+        const user = getCurrentUser(req);
         const limit = parseInt(req.query.limit as string) || 50;
         const status = req.query.status as string | undefined;
         const storeId = req.query.store_id as string | undefined;
         
         let orders;
         if (status) {
-          orders = await this.handleAsync(this.database.getOrdersByStatus(status));
+          orders = await this.handleAsync(this.database.getOrdersByStatus(status, user?.userId));
         } else {
-          orders = await this.handleAsync(this.database.getAllOrders(limit));
+          orders = await this.handleAsync(this.database.getAllOrders(limit, user?.userId));
         }
         
         // Filter by store_id if provided
@@ -1537,7 +1540,8 @@ class GloriaFoodWebhookServer {
     // Get order by ID endpoint
     this.app.get('/orders/:orderId', async (req: Request, res: Response) => {
       try {
-        const order = await this.handleAsync(this.database.getOrderByGloriaFoodId(req.params.orderId));
+        const user = getCurrentUser(req);
+        const order = await this.handleAsync(this.database.getOrderByGloriaFoodId(req.params.orderId, user?.userId));
         if (!order) {
           return res.status(404).json({ error: 'Order not found' });
         }
@@ -1730,8 +1734,9 @@ class GloriaFoodWebhookServer {
     // Get recent orders endpoint
     this.app.get('/orders/recent/:minutes?', async (req: Request, res: Response) => {
       try {
+        const user = getCurrentUser(req);
         const minutes = parseInt(req.params.minutes || '60', 10);
-        const orders = await this.handleAsync(this.database.getRecentOrders(minutes));
+        const orders = await this.handleAsync(this.database.getRecentOrders(minutes, user?.userId));
         res.json({ 
           success: true, 
           count: orders.length, 
@@ -2011,7 +2016,8 @@ class GloriaFoodWebhookServer {
 
     this.app.get('/api/dashboard/stats', async (req: Request, res: Response) => {
       try {
-        const stats = await this.handleAsync(this.database.getDashboardStats());
+        const user = getCurrentUser(req);
+        const stats = await this.handleAsync(this.database.getDashboardStats(user?.userId));
         res.json({ success: true, stats });
       } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
@@ -2041,8 +2047,9 @@ class GloriaFoodWebhookServer {
     // Get orders by status
     this.app.get('/orders/status/:status', async (req: Request, res: Response) => {
       try {
+        const user = getCurrentUser(req);
         const status = req.params.status;
-        const orders = await this.handleAsync(this.database.getOrdersByStatus(status));
+        const orders = await this.handleAsync(this.database.getOrdersByStatus(status, user?.userId));
         res.json({ 
           success: true, 
           count: orders.length, 
@@ -2057,12 +2064,13 @@ class GloriaFoodWebhookServer {
     // Statistics endpoint
     this.app.get('/stats', async (req: Request, res: Response) => {
       try {
-        const totalOrders = await this.handleAsync(this.database.getOrderCount());
-        const recentOrders = await this.handleAsync(this.database.getRecentOrders(60));
-        const recentOrders24h = await this.handleAsync(this.database.getRecentOrders(1440));
+        const user = getCurrentUser(req);
+        const totalOrders = await this.handleAsync(this.database.getOrderCount(user?.userId));
+        const recentOrders = await this.handleAsync(this.database.getRecentOrders(60, user?.userId));
+        const recentOrders24h = await this.handleAsync(this.database.getRecentOrders(1440, user?.userId));
         
         // Get orders by status
-        const allOrders = await this.handleAsync(this.database.getAllOrders(1000));
+        const allOrders = await this.handleAsync(this.database.getAllOrders(1000, user?.userId));
         const statusCounts: { [key: string]: number } = {};
         allOrders.forEach((order: Order) => {
           statusCounts[order.status] = (statusCounts[order.status] || 0) + 1;
@@ -2230,10 +2238,11 @@ class GloriaFoodWebhookServer {
     // Get orders summary
     this.app.get('/summary', async (req: Request, res: Response) => {
       try {
-        const totalOrders = await this.handleAsync(this.database.getOrderCount());
-        const recent1h = await this.handleAsync(this.database.getRecentOrders(60));
-        const recent24h = await this.handleAsync(this.database.getRecentOrders(1440));
-        const allOrders = await this.handleAsync(this.database.getAllOrders(1000));
+        const user = getCurrentUser(req);
+        const totalOrders = await this.handleAsync(this.database.getOrderCount(user?.userId));
+        const recent1h = await this.handleAsync(this.database.getRecentOrders(60, user?.userId));
+        const recent24h = await this.handleAsync(this.database.getRecentOrders(1440, user?.userId));
+        const allOrders = await this.handleAsync(this.database.getAllOrders(1000, user?.userId));
         
         // Calculate totals by status
         const statusCounts: { [key: string]: number } = {};

@@ -31,12 +31,12 @@ export interface Merchant {
 
 // Database interface for abstraction
 export interface IDatabase {
-  insertOrUpdateOrder(orderData: any): Promise<Order | null> | Order | null;
-  getOrderByGloriaFoodId(orderId: string): Promise<Order | null> | Order | null;
-  getAllOrders(limit: number): Promise<Order[]> | Order[];
-  getRecentOrders(minutes: number): Promise<Order[]> | Order[];
-  getOrdersByStatus(status: string): Promise<Order[]> | Order[];
-  getOrderCount(): Promise<number> | number;
+  insertOrUpdateOrder(orderData: any, userId?: number): Promise<Order | null> | Order | null;
+  getOrderByGloriaFoodId(orderId: string, userId?: number): Promise<Order | null> | Order | null;
+  getAllOrders(limit: number, userId?: number): Promise<Order[]> | Order[];
+  getRecentOrders(minutes: number, userId?: number): Promise<Order[]> | Order[];
+  getOrdersByStatus(status: string, userId?: number): Promise<Order[]> | Order[];
+  getOrderCount(userId?: number): Promise<number> | number;
   // User authentication methods
   createUser(email: string, password: string, fullName: string): Promise<User | null> | User | null;
   getUserByEmail(email: string): Promise<User | null> | User | null;
@@ -52,7 +52,7 @@ export interface IDatabase {
   getAllReviews(): Promise<any[]> | any[];
   getReviewsByOrderId(orderId: number): Promise<any[]> | any[];
   // Statistics methods
-  getDashboardStats(): Promise<any> | any;
+  getDashboardStats(userId?: number): Promise<any> | any;
   // Merchant methods
   getAllMerchants(userId?: number): Promise<Merchant[]> | Merchant[];
   getMerchantByStoreId(storeId: string, userId?: number): Promise<Merchant | null> | Merchant | null;

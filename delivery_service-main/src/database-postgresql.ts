@@ -230,10 +230,12 @@ export class OrderDatabasePostgreSQL {
         console.log('✅ PostgreSQL connection successful!');
 
         // Create orders table if not exists
+        // Note: user_id can be NULL for backward compatibility
         await client.query(`
           CREATE TABLE IF NOT EXISTS orders (
             id SERIAL PRIMARY KEY,
-            gloriafood_order_id VARCHAR(255) UNIQUE NOT NULL,
+            user_id INTEGER,
+            gloriafood_order_id VARCHAR(255) NOT NULL,
             store_id VARCHAR(255),
             customer_name VARCHAR(255) NOT NULL,
             customer_phone VARCHAR(100),
@@ -256,6 +258,19 @@ export class OrderDatabasePostgreSQL {
             ready_for_pickup TIMESTAMP,
             accepted_at TIMESTAMP
           )
+        `);
+        
+        // Create unique index for orders - allow NULL user_id but enforce uniqueness for non-NULL
+        await client.query(`
+          CREATE UNIQUE INDEX IF NOT EXISTS orders_user_id_gloriafood_order_id_unique 
+          ON orders (user_id, gloriafood_order_id) 
+          WHERE user_id IS NOT NULL
+        `);
+        // Also allow NULL user_id with unique gloriafood_order_id (for backward compatibility)
+        await client.query(`
+          CREATE UNIQUE INDEX IF NOT EXISTS orders_null_user_gloriafood_order_id_unique 
+          ON orders (gloriafood_order_id) 
+          WHERE user_id IS NULL
         `);
 
         // Add scheduled_delivery_time column if it doesn't exist (for existing databases)
@@ -338,7 +353,38 @@ export class OrderDatabasePostgreSQL {
           }
         }
 
+        // Add user_id column to orders if it doesn't exist (for existing databases)
+        try {
+          await client.query(`
+            ALTER TABLE orders 
+            ADD COLUMN IF NOT EXISTS user_id INTEGER
+          `);
+          // Remove old unique constraint and add new composite unique constraint
+          try {
+            await client.query(`
+              ALTER TABLE orders 
+              DROP CONSTRAINT IF EXISTS orders_gloriafood_order_id_key
+            `);
+            await client.query(`
+              ALTER TABLE orders 
+              ADD CONSTRAINT orders_user_id_gloriafood_order_id_unique UNIQUE (user_id, gloriafood_order_id)
+            `);
+          } catch (e: any) {
+            // Constraint might already exist or not exist, ignore error
+            if (e.code !== '42P07' && e.code !== '42710' && e.code !== '42804') {
+              console.log('   Note: Unique constraint may already exist');
+            }
+          }
+          console.log('✅ Added user_id column to orders table');
+        } catch (e: any) {
+          // Column might already exist, ignore error
+          if (e.code !== '42701') {
+            console.log('   Note: user_id column may already exist');
+          }
+        }
+
         // Create merchants table if not exists
+        // Note: user_id can be NULL for backward compatibility
         await client.query(`
           CREATE TABLE IF NOT EXISTS merchants (
             id SERIAL PRIMARY KEY,
@@ -352,9 +398,22 @@ export class OrderDatabasePostgreSQL {
             address TEXT,
             is_active BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(user_id, store_id)
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
           )
+        `);
+        
+        // Create partial unique indexes for merchants
+        // Allow multiple NULL user_id but enforce uniqueness for non-NULL user_id + store_id
+        await client.query(`
+          CREATE UNIQUE INDEX IF NOT EXISTS merchants_user_id_store_id_unique 
+          ON merchants (user_id, store_id) 
+          WHERE user_id IS NOT NULL
+        `);
+        // Also allow NULL user_id with unique store_id (for backward compatibility)
+        await client.query(`
+          CREATE UNIQUE INDEX IF NOT EXISTS merchants_null_user_store_id_unique 
+          ON merchants (store_id) 
+          WHERE user_id IS NULL
         `);
 
         // Add phone, address, and user_id columns if they don't exist (for existing databases)
@@ -371,20 +430,47 @@ export class OrderDatabasePostgreSQL {
             ALTER TABLE merchants 
             ADD COLUMN IF NOT EXISTS user_id INTEGER
           `);
-          // Remove old unique constraint on store_id and add new composite unique constraint
+          // Remove old unique constraint on store_id and add new partial unique indexes
+          // Allow NULL user_id for backward compatibility
           try {
             await client.query(`
               ALTER TABLE merchants 
               DROP CONSTRAINT IF EXISTS merchants_store_id_key
             `);
+            // Create partial unique index that allows multiple NULL user_id but enforces uniqueness for non-NULL
             await client.query(`
-              ALTER TABLE merchants 
-              ADD CONSTRAINT merchants_user_id_store_id_unique UNIQUE (user_id, store_id)
+              CREATE UNIQUE INDEX IF NOT EXISTS merchants_user_id_store_id_unique 
+              ON merchants (user_id, store_id) 
+              WHERE user_id IS NOT NULL
+            `);
+            // Also allow NULL user_id with unique store_id (for backward compatibility)
+            await client.query(`
+              CREATE UNIQUE INDEX IF NOT EXISTS merchants_null_user_store_id_unique 
+              ON merchants (store_id) 
+              WHERE user_id IS NULL
             `);
           } catch (e: any) {
             // Constraint might already exist or not exist, ignore error
             if (e.code !== '42P07' && e.code !== '42710') {
               console.log('   Note: Unique constraint may already exist');
+            }
+          }
+          
+          // Create indexes for orders user_id
+          try {
+            await client.query(`
+              CREATE UNIQUE INDEX IF NOT EXISTS orders_user_id_gloriafood_order_id_unique 
+              ON orders (user_id, gloriafood_order_id) 
+              WHERE user_id IS NOT NULL
+            `);
+            await client.query(`
+              CREATE UNIQUE INDEX IF NOT EXISTS orders_null_user_gloriafood_order_id_unique 
+              ON orders (gloriafood_order_id) 
+              WHERE user_id IS NULL
+            `);
+          } catch (e: any) {
+            if (e.code !== '42P07' && e.code !== '42710') {
+              console.log('   Note: Orders unique indexes may already exist');
             }
           }
           console.log('✅ Added user_id column to merchants table');
@@ -398,6 +484,14 @@ export class OrderDatabasePostgreSQL {
         `);
         await client.query(`
           CREATE INDEX IF NOT EXISTS idx_merchants_is_active ON merchants(is_active)
+        `);
+        await client.query(`
+          CREATE INDEX IF NOT EXISTS idx_merchants_user_id ON merchants(user_id)
+        `);
+
+        // Create index for orders user_id
+        await client.query(`
+          CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id)
         `);
 
         // Create trigger function for updated_at
@@ -587,7 +681,7 @@ export class OrderDatabasePostgreSQL {
     }
   }
 
-  async insertOrUpdateOrder(orderData: any): Promise<Order | null> {
+  async insertOrUpdateOrder(orderData: any, userId?: number): Promise<Order | null> {
     try {
       const customerName = this.extractCustomerName(orderData);
       const customerPhone = this.extractCustomerPhone(orderData);
@@ -595,21 +689,49 @@ export class OrderDatabasePostgreSQL {
       const deliveryAddress = this.extractDeliveryAddress(orderData);
       const scheduledDeliveryTime = this.extractScheduledDeliveryTime(orderData);
 
-      // Extract merchant_name from orderData if provided, otherwise look it up from merchants table
+      // Extract merchant_name and user_id from orderData if provided, otherwise look it up from merchants table
       let merchantName = orderData.merchant_name || orderData.merchantName || null;
+      const orderId = orderData.id?.toString() || orderData.order_id?.toString() || '';
       
-      // If merchant_name is not provided, look it up from merchants table using store_id
-      if (!merchantName) {
+      // First, check if order already exists to preserve its user_id
+      let orderUserId = userId || orderData.user_id || null;
+      let existingOrder = null;
+      if (orderId) {
+        try {
+          // Try to find existing order without user_id filter first (for backward compatibility)
+          existingOrder = await this.getOrderByGloriaFoodId(orderId);
+          if (existingOrder && (existingOrder as any).user_id) {
+            // Preserve existing user_id
+            orderUserId = (existingOrder as any).user_id;
+          }
+        } catch (error) {
+          // If lookup fails, continue
+        }
+      }
+      
+      // If user_id is still not set, look it up from merchants table
+      if (!orderUserId) {
         const storeId = orderData.store_id?.toString() || orderData.restaurant_id?.toString();
         if (storeId) {
           try {
-            const merchant = await this.getMerchantByStoreId(storeId);
-            if (merchant && merchant.merchant_name) {
+            // Try to find merchant by API key first (for webhooks)
+            let merchant = null;
+            if (orderData.api_key) {
+              merchant = await this.getMerchantByApiKey(orderData.api_key);
+            }
+            // Fallback to store_id lookup (without user_id filter for backward compatibility)
+            if (!merchant) {
+              merchant = await this.getMerchantByStoreId(storeId);
+            }
+            if (merchant && merchant.user_id) {
+              orderUserId = merchant.user_id;
+            }
+            if (!merchantName && merchant && merchant.merchant_name) {
               merchantName = merchant.merchant_name;
             }
           } catch (error) {
             // If lookup fails, continue without merchant_name
-            console.log(`Could not lookup merchant_name for store_id ${storeId}: ${error}`);
+            console.log(`Could not lookup merchant for store_id ${storeId}: ${error}`);
           }
         }
       }
@@ -637,70 +759,153 @@ export class OrderDatabasePostgreSQL {
 
       const client = await this.pool.connect();
 
-      const result = await client.query(`
-        INSERT INTO orders (
-          gloriafood_order_id, store_id, merchant_name, customer_name, customer_phone,
-          customer_email, delivery_address, total_price, currency,
-          status, order_type, items, raw_data, scheduled_delivery_time, created_at, updated_at, fetched_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-        ON CONFLICT (gloriafood_order_id) DO UPDATE SET
-          customer_name = EXCLUDED.customer_name,
-          customer_phone = EXCLUDED.customer_phone,
-          customer_email = EXCLUDED.customer_email,
-          delivery_address = EXCLUDED.delivery_address,
-          status = EXCLUDED.status,
-          total_price = EXCLUDED.total_price,
-          order_type = EXCLUDED.order_type,
-          items = EXCLUDED.items,
-          scheduled_delivery_time = EXCLUDED.scheduled_delivery_time,
-          updated_at = EXCLUDED.updated_at,
-          fetched_at = EXCLUDED.fetched_at,
-          raw_data = EXCLUDED.raw_data,
-          merchant_name = CASE 
-            -- Priority 1: Keep existing valid merchant_name if it's not a fallback
-            WHEN orders.merchant_name IS NOT NULL 
-                 AND orders.merchant_name != ''
-                 AND orders.merchant_name != orders.store_id
-                 AND orders.merchant_name NOT LIKE 'Merchant %'
-                 AND orders.merchant_name != 'Unknown Merchant'
-                 AND orders.merchant_name != 'N/A'
-            THEN orders.merchant_name
-            -- Priority 2: Use new merchant_name if it's valid
-            WHEN EXCLUDED.merchant_name IS NOT NULL 
-                 AND EXCLUDED.merchant_name != ''
-                 AND EXCLUDED.merchant_name != EXCLUDED.store_id
-                 AND EXCLUDED.merchant_name NOT LIKE 'Merchant %'
-                 AND EXCLUDED.merchant_name != 'Unknown Merchant'
-                 AND EXCLUDED.merchant_name != 'N/A'
-            THEN EXCLUDED.merchant_name
-            -- Priority 3: Fallback to existing or new (but prefer existing)
-            ELSE COALESCE(orders.merchant_name, EXCLUDED.merchant_name)
-          END,
-          store_id = EXCLUDED.store_id
-        RETURNING *
-      `, [
-        order.gloriafood_order_id,
-        order.store_id,
-        order.merchant_name || null,
-        order.customer_name,
-        order.customer_phone || null,
-        order.customer_email || null,
-        order.delivery_address || null,
-        order.total_price,
-        order.currency,
-        order.status,
-        order.order_type,
-        order.items,
-        order.raw_data,
-        order.scheduled_delivery_time || null,
-        order.created_at,
-        order.updated_at,
-        order.fetched_at
-      ]);
+      // Check if order exists (with or without user_id) for backward compatibility
+      let existingOrderRow = null;
+      if (orderId) {
+        // First check for order with matching user_id
+        if (orderUserId) {
+          const existingCheck = await client.query(
+            'SELECT * FROM orders WHERE gloriafood_order_id = $1 AND user_id = $2',
+            [orderId, orderUserId]
+          );
+          if (existingCheck.rows.length > 0) {
+            existingOrderRow = existingCheck.rows[0];
+          }
+        }
+        // If not found, check for order with NULL user_id (for backward compatibility)
+        if (!existingOrderRow) {
+          const existingNullCheck = await client.query(
+            'SELECT * FROM orders WHERE gloriafood_order_id = $1 AND user_id IS NULL',
+            [orderId]
+          );
+          if (existingNullCheck.rows.length > 0) {
+            existingOrderRow = existingNullCheck.rows[0];
+            // If existing order has NULL user_id and we have a user_id, update it first
+            if (orderUserId) {
+              await client.query(
+                'UPDATE orders SET user_id = $1 WHERE gloriafood_order_id = $2 AND user_id IS NULL',
+                [orderUserId, orderId]
+              );
+              existingOrderRow.user_id = orderUserId;
+            }
+          }
+        }
+        // If existing order has a user_id but we don't, use the existing one
+        if (existingOrderRow && existingOrderRow.user_id && !orderUserId) {
+          orderUserId = existingOrderRow.user_id;
+        }
+      }
+
+      // Use INSERT with ON CONFLICT - handle both cases
+      // For non-NULL user_id: conflict on (user_id, gloriafood_order_id)
+      // For NULL user_id: update existing order if found, otherwise insert
+      let result;
+      if (existingOrderRow && !orderUserId) {
+        // Update existing order with NULL user_id
+        result = await client.query(`
+          UPDATE orders SET
+            customer_name = $1,
+            customer_phone = $2,
+            customer_email = $3,
+            delivery_address = $4,
+            status = $5,
+            total_price = $6,
+            order_type = $7,
+            items = $8,
+            scheduled_delivery_time = $9,
+            updated_at = $10,
+            fetched_at = $11,
+            raw_data = $12,
+            merchant_name = CASE 
+              WHEN orders.merchant_name IS NOT NULL 
+                   AND orders.merchant_name != ''
+                   AND orders.merchant_name != orders.store_id
+                   AND orders.merchant_name NOT LIKE 'Merchant %'
+                   AND orders.merchant_name != 'Unknown Merchant'
+                   AND orders.merchant_name != 'N/A'
+              THEN orders.merchant_name
+              WHEN $13 IS NOT NULL 
+                   AND $13 != ''
+                   AND $13 != $14
+                   AND $13 NOT LIKE 'Merchant %'
+                   AND $13 != 'Unknown Merchant'
+                   AND $13 != 'N/A'
+              THEN $13
+              ELSE COALESCE(orders.merchant_name, $13)
+            END,
+            store_id = $14
+          WHERE gloriafood_order_id = $15 AND user_id IS NULL
+          RETURNING *
+        `, [
+          order.customer_name,
+          order.customer_phone || null,
+          order.customer_email || null,
+          order.delivery_address || null,
+          order.status,
+          order.total_price,
+          order.order_type,
+          order.items,
+          order.scheduled_delivery_time || null,
+          order.updated_at,
+          order.fetched_at,
+          order.raw_data,
+          order.merchant_name || null,
+          order.store_id,
+          order.gloriafood_order_id
+        ]);
+      } else {
+        // Insert or update with user_id (or NULL user_id for new orders)
+        // Use a simpler approach: try INSERT, if conflict then UPDATE
+        try {
+          result = await client.query(`
+            INSERT INTO orders (
+              user_id, gloriafood_order_id, store_id, merchant_name, customer_name, customer_phone,
+              customer_email, delivery_address, total_price, currency,
+              status, order_type, items, raw_data, scheduled_delivery_time, created_at, updated_at, fetched_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+            RETURNING *
+          `, [
+            orderUserId,
+            order.gloriafood_order_id,
+            order.store_id,
+            order.merchant_name || null,
+            order.customer_name,
+            order.customer_phone || null,
+            order.customer_email || null,
+            order.delivery_address || null,
+            order.total_price,
+            order.currency,
+            order.status,
+            order.order_type,
+            order.items,
+            order.raw_data,
+            order.scheduled_delivery_time || null,
+            order.created_at,
+            order.updated_at,
+            order.fetched_at
+          ]);
+        } catch (insertError: any) {
+          // If insert fails due to unique constraint, update instead
+          if (insertError.code === '23505') {
+            // Unique constraint violation - update existing order
+            const updateQuery = orderUserId 
+              ? 'UPDATE orders SET customer_name = $1, customer_phone = $2, customer_email = $3, delivery_address = $4, status = $5, total_price = $6, order_type = $7, items = $8, scheduled_delivery_time = $9, updated_at = $10, fetched_at = $11, raw_data = $12, merchant_name = CASE WHEN orders.merchant_name IS NOT NULL AND orders.merchant_name != \'\' AND orders.merchant_name != orders.store_id AND orders.merchant_name NOT LIKE \'Merchant %\' AND orders.merchant_name != \'Unknown Merchant\' AND orders.merchant_name != \'N/A\' THEN orders.merchant_name WHEN $13 IS NOT NULL AND $13 != \'\' AND $13 != $14 AND $13 NOT LIKE \'Merchant %\' AND $13 != \'Unknown Merchant\' AND $13 != \'N/A\' THEN $13 ELSE COALESCE(orders.merchant_name, $13) END, store_id = $14 WHERE gloriafood_order_id = $15 AND user_id = $16 RETURNING *'
+              : 'UPDATE orders SET customer_name = $1, customer_phone = $2, customer_email = $3, delivery_address = $4, status = $5, total_price = $6, order_type = $7, items = $8, scheduled_delivery_time = $9, updated_at = $10, fetched_at = $11, raw_data = $12, merchant_name = CASE WHEN orders.merchant_name IS NOT NULL AND orders.merchant_name != \'\' AND orders.merchant_name != orders.store_id AND orders.merchant_name NOT LIKE \'Merchant %\' AND orders.merchant_name != \'Unknown Merchant\' AND orders.merchant_name != \'N/A\' THEN orders.merchant_name WHEN $13 IS NOT NULL AND $13 != \'\' AND $13 != $14 AND $13 NOT LIKE \'Merchant %\' AND $13 != \'Unknown Merchant\' AND $13 != \'N/A\' THEN $13 ELSE COALESCE(orders.merchant_name, $13) END, store_id = $14 WHERE gloriafood_order_id = $15 AND user_id IS NULL RETURNING *';
+            
+            const updateParams = orderUserId
+              ? [order.customer_name, order.customer_phone || null, order.customer_email || null, order.delivery_address || null, order.status, order.total_price, order.order_type, order.items, order.scheduled_delivery_time || null, order.updated_at, order.fetched_at, order.raw_data, order.merchant_name || null, order.store_id, order.gloriafood_order_id, orderUserId]
+              : [order.customer_name, order.customer_phone || null, order.customer_email || null, order.delivery_address || null, order.status, order.total_price, order.order_type, order.items, order.scheduled_delivery_time || null, order.updated_at, order.fetched_at, order.raw_data, order.merchant_name || null, order.store_id, order.gloriafood_order_id];
+            
+            result = await client.query(updateQuery, updateParams);
+          } else {
+            throw insertError;
+          }
+        }
+      }
 
       client.release();
 
-      const savedOrder = await this.getOrderByGloriaFoodId(order.gloriafood_order_id);
+      const savedOrder = await this.getOrderByGloriaFoodId(order.gloriafood_order_id, orderUserId || undefined);
       return savedOrder;
     } catch (error: any) {
       console.error('❌ Error inserting order to PostgreSQL:', error.message);
@@ -1076,13 +1281,19 @@ export class OrderDatabasePostgreSQL {
     return null;
   }
 
-  async getOrderByGloriaFoodId(orderId: string): Promise<Order | null> {
+  async getOrderByGloriaFoodId(orderId: string, userId?: number): Promise<Order | null> {
     try {
       const client = await this.pool.connect();
-      const result = await client.query(
-        'SELECT * FROM orders WHERE gloriafood_order_id = $1',
-        [orderId]
-      );
+      // If userId is provided, filter by it. Otherwise, get any order with this ID (for backward compatibility)
+      let query = 'SELECT * FROM orders WHERE gloriafood_order_id = $1';
+      const params: any[] = [orderId];
+      
+      if (userId !== undefined) {
+        query += ' AND user_id = $2';
+        params.push(userId);
+      }
+      
+      const result = await client.query(query, params);
 
       client.release();
       return result.rows.length > 0 ? this.mapRowToOrder(result.rows[0]) : null;
@@ -1092,13 +1303,21 @@ export class OrderDatabasePostgreSQL {
     }
   }
 
-  async getAllOrders(limit: number = 50): Promise<Order[]> {
+  async getAllOrders(limit: number = 50, userId?: number): Promise<Order[]> {
     try {
       const client = await this.pool.connect();
-      const result = await client.query(
-        'SELECT * FROM orders ORDER BY fetched_at DESC LIMIT $1',
-        [limit]
-      );
+      let query = 'SELECT * FROM orders';
+      const params: any[] = [];
+      
+      if (userId !== undefined) {
+        query += ' WHERE user_id = $1';
+        params.push(userId);
+      }
+      
+      query += ' ORDER BY fetched_at DESC LIMIT $' + (params.length + 1);
+      params.push(limit);
+      
+      const result = await client.query(query, params);
 
       client.release();
       return result.rows.map(row => this.mapRowToOrder(row));
@@ -1108,14 +1327,21 @@ export class OrderDatabasePostgreSQL {
     }
   }
 
-  async getRecentOrders(minutes: number = 60): Promise<Order[]> {
+  async getRecentOrders(minutes: number = 60, userId?: number): Promise<Order[]> {
     try {
       const client = await this.pool.connect();
-      const result = await client.query(
-        `SELECT * FROM orders 
-         WHERE fetched_at > NOW() - INTERVAL '${minutes} minutes'
-         ORDER BY fetched_at DESC`
-      );
+      let query = `SELECT * FROM orders 
+         WHERE fetched_at > NOW() - INTERVAL '${minutes} minutes'`;
+      const params: any[] = [];
+      
+      if (userId !== undefined) {
+        query += ' AND user_id = $1';
+        params.push(userId);
+      }
+      
+      query += ' ORDER BY fetched_at DESC';
+      
+      const result = await client.query(query, params);
 
       client.release();
       return result.rows.map(row => this.mapRowToOrder(row));
@@ -1125,13 +1351,20 @@ export class OrderDatabasePostgreSQL {
     }
   }
 
-  async getOrdersByStatus(status: string): Promise<Order[]> {
+  async getOrdersByStatus(status: string, userId?: number): Promise<Order[]> {
     try {
       const client = await this.pool.connect();
-      const result = await client.query(
-        'SELECT * FROM orders WHERE status = $1 ORDER BY fetched_at DESC',
-        [status]
-      );
+      let query = 'SELECT * FROM orders WHERE status = $1';
+      const params: any[] = [status];
+      
+      if (userId !== undefined) {
+        query += ' AND user_id = $2';
+        params.push(userId);
+      }
+      
+      query += ' ORDER BY fetched_at DESC';
+      
+      const result = await client.query(query, params);
 
       client.release();
       return result.rows.map(row => this.mapRowToOrder(row));
@@ -1173,10 +1406,18 @@ export class OrderDatabasePostgreSQL {
     }
   }
 
-  async getOrderCount(): Promise<number> {
+  async getOrderCount(userId?: number): Promise<number> {
     try {
       const client = await this.pool.connect();
-      const result = await client.query('SELECT COUNT(*) as count FROM orders');
+      let query = 'SELECT COUNT(*) as count FROM orders';
+      const params: any[] = [];
+      
+      if (userId !== undefined) {
+        query += ' WHERE user_id = $1';
+        params.push(userId);
+      }
+      
+      const result = await client.query(query, params);
 
       client.release();
       return parseInt(result.rows[0]?.count || '0', 10);
@@ -1519,24 +1760,38 @@ export class OrderDatabasePostgreSQL {
   }
 
   // Statistics methods
-  async getDashboardStats(): Promise<any> {
+  async getDashboardStats(userId?: number): Promise<any> {
     try {
       const client = await this.pool.connect();
 
-      const orderStats = await client.query(`
+      let orderStatsQuery = `
         SELECT 
           COUNT(*) as total_orders,
           SUM(CASE WHEN status = 'DELIVERED' THEN 1 ELSE 0 END) as completed_orders,
           SUM(CASE WHEN status NOT IN ('DELIVERED', 'CANCELLED', 'CANCELED') THEN 1 ELSE 0 END) as active_orders,
           SUM(CASE WHEN status IN ('CANCELLED', 'CANCELED') THEN 1 ELSE 0 END) as cancelled_orders,
           SUM(CASE WHEN status NOT IN ('CANCELLED', 'CANCELED') THEN total_price ELSE 0 END) as total_revenue
-        FROM orders
-      `);
+        FROM orders`;
+      const orderParams: any[] = [];
+      
+      if (userId !== undefined) {
+        orderStatsQuery += ' WHERE user_id = $1';
+        orderParams.push(userId);
+      }
 
-      const recentOrders = await client.query(`
+      const orderStats = await client.query(orderStatsQuery, orderParams);
+
+      let recentOrdersQuery = `
         SELECT COUNT(*) as count FROM orders 
-        WHERE fetched_at >= NOW() - INTERVAL '24 hours'
-      `);
+        WHERE fetched_at >= NOW() - INTERVAL '24 hours'`;
+      const recentParams: any[] = [];
+      
+      if (userId !== undefined) {
+        recentOrdersQuery += ' AND user_id = $1';
+        recentParams.push(userId);
+      }
+
+      const recentOrders = await client.query(recentOrdersQuery, recentParams);
 
       const driverStats = await client.query(`
         SELECT 
@@ -1581,7 +1836,8 @@ export class OrderDatabasePostgreSQL {
       const params: any[] = [];
       
       if (userId !== undefined) {
-        query += ` AND user_id = $1`;
+        // Show merchants for this user OR merchants with NULL user_id (for backward compatibility/migration)
+        query += ` AND (user_id = $1 OR user_id IS NULL)`;
         params.push(userId);
       }
       
