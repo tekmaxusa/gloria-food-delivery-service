@@ -1814,9 +1814,13 @@ export class OrderDatabasePostgreSQL {
       const params: any[] = [];
       
       if (userId !== undefined) {
-        // Show merchants for this user OR merchants with NULL user_id (for backward compatibility/migration)
-        query += ` AND (user_id = $1 OR user_id IS NULL)`;
+        // Show ONLY merchants for this user (strict per-user isolation)
+        // NULL user_id merchants are NOT shown to any user
+        query += ` AND user_id = $1`;
         params.push(userId);
+      } else {
+        // If no userId provided, show only merchants with NULL user_id (for admin/system use)
+        query += ` AND user_id IS NULL`;
       }
       
       query += ` ORDER BY merchant_name`;
@@ -1851,8 +1855,12 @@ export class OrderDatabasePostgreSQL {
       const params: any[] = [storeId];
       
       if (userId !== undefined) {
+        // Strict per-user isolation - only return merchant if it belongs to this user
         query += ` AND user_id = $2`;
         params.push(userId);
+      } else {
+        // If no userId provided, only return merchants with NULL user_id (for admin/system use)
+        query += ` AND user_id IS NULL`;
       }
       
       const result = await client.query(query, params);
