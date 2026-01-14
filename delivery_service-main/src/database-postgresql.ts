@@ -780,6 +780,9 @@ export class OrderDatabasePostgreSQL {
       let result;
       if (existingOrderRow && !orderUserId) {
         // Update existing order with NULL user_id
+        const merchantNameParam = order.merchant_name || null;
+        const storeIdParam = order.store_id || null;
+        
         result = await client.query(`
           UPDATE orders SET
             customer_name = $1,
@@ -802,14 +805,14 @@ export class OrderDatabasePostgreSQL {
                    AND orders.merchant_name != 'Unknown Merchant'
                    AND orders.merchant_name != 'N/A'
               THEN orders.merchant_name
-              WHEN $13 IS NOT NULL 
-                   AND $13 != ''
-                   AND $13 != $14
-                   AND $13 NOT LIKE 'Merchant %'
-                   AND $13 != 'Unknown Merchant'
-                   AND $13 != 'N/A'
-              THEN $13
-              ELSE COALESCE(orders.merchant_name, $13)
+              WHEN $13::text IS NOT NULL 
+                   AND $13::text != ''
+                   AND $13::text != $14::text
+                   AND $13::text NOT LIKE 'Merchant %'
+                   AND $13::text != 'Unknown Merchant'
+                   AND $13::text != 'N/A'
+              THEN $13::text
+              ELSE COALESCE(orders.merchant_name, $13::text)
             END,
             store_id = $14
           WHERE gloriafood_order_id = $15 AND user_id IS NULL
@@ -827,8 +830,8 @@ export class OrderDatabasePostgreSQL {
           order.updated_at,
           order.fetched_at,
           order.raw_data,
-          order.merchant_name || null,
-          order.store_id,
+          merchantNameParam,
+          storeIdParam,
           order.gloriafood_order_id
         ]);
       } else {
@@ -866,13 +869,80 @@ export class OrderDatabasePostgreSQL {
           // If insert fails due to unique constraint, update instead
           if (insertError.code === '23505') {
             // Unique constraint violation - update existing order
+            const merchantNameParam = order.merchant_name || null;
+            const storeIdParam = order.store_id || null;
+            
             const updateQuery = orderUserId 
-              ? 'UPDATE orders SET customer_name = $1, customer_phone = $2, customer_email = $3, delivery_address = $4, status = $5, total_price = $6, order_type = $7, items = $8, scheduled_delivery_time = $9, updated_at = $10, fetched_at = $11, raw_data = $12, merchant_name = CASE WHEN orders.merchant_name IS NOT NULL AND orders.merchant_name != \'\' AND orders.merchant_name != orders.store_id AND orders.merchant_name NOT LIKE \'Merchant %\' AND orders.merchant_name != \'Unknown Merchant\' AND orders.merchant_name != \'N/A\' THEN orders.merchant_name WHEN $13 IS NOT NULL AND $13 != \'\' AND $13 != $14 AND $13 NOT LIKE \'Merchant %\' AND $13 != \'Unknown Merchant\' AND $13 != \'N/A\' THEN $13 ELSE COALESCE(orders.merchant_name, $13) END, store_id = $14 WHERE gloriafood_order_id = $15 AND user_id = $16 RETURNING *'
-              : 'UPDATE orders SET customer_name = $1, customer_phone = $2, customer_email = $3, delivery_address = $4, status = $5, total_price = $6, order_type = $7, items = $8, scheduled_delivery_time = $9, updated_at = $10, fetched_at = $11, raw_data = $12, merchant_name = CASE WHEN orders.merchant_name IS NOT NULL AND orders.merchant_name != \'\' AND orders.merchant_name != orders.store_id AND orders.merchant_name NOT LIKE \'Merchant %\' AND orders.merchant_name != \'Unknown Merchant\' AND orders.merchant_name != \'N/A\' THEN orders.merchant_name WHEN $13 IS NOT NULL AND $13 != \'\' AND $13 != $14 AND $13 NOT LIKE \'Merchant %\' AND $13 != \'Unknown Merchant\' AND $13 != \'N/A\' THEN $13 ELSE COALESCE(orders.merchant_name, $13) END, store_id = $14 WHERE gloriafood_order_id = $15 AND user_id IS NULL RETURNING *';
+              ? `UPDATE orders SET 
+                  customer_name = $1, 
+                  customer_phone = $2, 
+                  customer_email = $3, 
+                  delivery_address = $4, 
+                  status = $5, 
+                  total_price = $6, 
+                  order_type = $7, 
+                  items = $8, 
+                  scheduled_delivery_time = $9, 
+                  updated_at = $10, 
+                  fetched_at = $11, 
+                  raw_data = $12, 
+                  merchant_name = CASE 
+                    WHEN orders.merchant_name IS NOT NULL 
+                         AND orders.merchant_name != ''
+                         AND orders.merchant_name != orders.store_id
+                         AND orders.merchant_name NOT LIKE 'Merchant %'
+                         AND orders.merchant_name != 'Unknown Merchant'
+                         AND orders.merchant_name != 'N/A'
+                    THEN orders.merchant_name
+                    WHEN $13::text IS NOT NULL 
+                         AND $13::text != ''
+                         AND $13::text != $14::text
+                         AND $13::text NOT LIKE 'Merchant %'
+                         AND $13::text != 'Unknown Merchant'
+                         AND $13::text != 'N/A'
+                    THEN $13::text
+                    ELSE COALESCE(orders.merchant_name, $13::text)
+                  END, 
+                  store_id = $14 
+                  WHERE gloriafood_order_id = $15 AND user_id = $16 
+                  RETURNING *`
+              : `UPDATE orders SET 
+                  customer_name = $1, 
+                  customer_phone = $2, 
+                  customer_email = $3, 
+                  delivery_address = $4, 
+                  status = $5, 
+                  total_price = $6, 
+                  order_type = $7, 
+                  items = $8, 
+                  scheduled_delivery_time = $9, 
+                  updated_at = $10, 
+                  fetched_at = $11, 
+                  raw_data = $12, 
+                  merchant_name = CASE 
+                    WHEN orders.merchant_name IS NOT NULL 
+                         AND orders.merchant_name != ''
+                         AND orders.merchant_name != orders.store_id
+                         AND orders.merchant_name NOT LIKE 'Merchant %'
+                         AND orders.merchant_name != 'Unknown Merchant'
+                         AND orders.merchant_name != 'N/A'
+                    THEN orders.merchant_name
+                    WHEN $13::text IS NOT NULL 
+                         AND $13::text != ''
+                         AND $13::text != $14::text
+                         AND $13::text NOT LIKE 'Merchant %'
+                         AND $13::text != 'Unknown Merchant'
+                         AND $13::text != 'N/A'
+                    THEN $13::text
+                    ELSE COALESCE(orders.merchant_name, $13::text)
+                  END, 
+                  store_id = $14 
+                  WHERE gloriafood_order_id = $15 AND user_id IS NULL 
+                  RETURNING *`;
             
             const updateParams = orderUserId
-              ? [order.customer_name, order.customer_phone || null, order.customer_email || null, order.delivery_address || null, order.status, order.total_price, order.order_type, order.items, order.scheduled_delivery_time || null, order.updated_at, order.fetched_at, order.raw_data, order.merchant_name || null, order.store_id, order.gloriafood_order_id, orderUserId]
-              : [order.customer_name, order.customer_phone || null, order.customer_email || null, order.delivery_address || null, order.status, order.total_price, order.order_type, order.items, order.scheduled_delivery_time || null, order.updated_at, order.fetched_at, order.raw_data, order.merchant_name || null, order.store_id, order.gloriafood_order_id];
+              ? [order.customer_name, order.customer_phone || null, order.customer_email || null, order.delivery_address || null, order.status, order.total_price, order.order_type, order.items, order.scheduled_delivery_time || null, order.updated_at, order.fetched_at, order.raw_data, merchantNameParam, storeIdParam, order.gloriafood_order_id, orderUserId]
+              : [order.customer_name, order.customer_phone || null, order.customer_email || null, order.delivery_address || null, order.status, order.total_price, order.order_type, order.items, order.scheduled_delivery_time || null, order.updated_at, order.fetched_at, order.raw_data, merchantNameParam, storeIdParam, order.gloriafood_order_id];
             
             result = await client.query(updateQuery, updateParams);
           } else {
