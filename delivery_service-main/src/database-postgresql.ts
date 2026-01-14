@@ -1287,10 +1287,45 @@ export class OrderDatabasePostgreSQL {
         };
       }
 
-      return null;
+      return false;
     } catch (error) {
       console.error('Error verifying password:', error);
-      return null;
+      return false;
+    }
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    try {
+      const client = await this.pool.connect();
+      const result = await client.query(
+        'SELECT id, email, full_name, role, created_at FROM users ORDER BY created_at DESC'
+      );
+      client.release();
+      return result.rows.map(row => ({
+        id: row.id,
+        email: row.email,
+        full_name: row.full_name,
+        role: row.role || 'user',
+        created_at: row.created_at
+      }));
+    } catch (error) {
+      console.error('Error getting all users:', error);
+      return [];
+    }
+  }
+
+  async deleteUser(email: string): Promise<boolean> {
+    try {
+      const client = await this.pool.connect();
+      const result = await client.query(
+        'DELETE FROM users WHERE email = $1',
+        [email]
+      );
+      client.release();
+      return (result.rowCount || 0) > 0;
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      return false;
     }
   }
 

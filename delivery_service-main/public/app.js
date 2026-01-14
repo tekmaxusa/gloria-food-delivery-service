@@ -3737,16 +3737,23 @@ async function getThirdPartyDeliveryContent() {
 
 // Get Users content
 async function getUsersContent() {
-    // Get users from API or use current user
+    // Get users from API
     let users = [];
     try {
-        // TODO: Implement users API endpoint
-        // For now, use current user if available
-        if (currentUser) {
+        const response = await authenticatedFetch(`${API_BASE}/api/auth/users`);
+        const data = await response.json();
+        if (data.success && data.users) {
+            users = data.users;
+        } else if (currentUser) {
+            // Fallback to current user if API fails
             users = [currentUser];
         }
     } catch (error) {
         console.error('Error fetching users:', error);
+        // Fallback to current user if API fails
+        if (currentUser) {
+            users = [currentUser];
+        }
     }
 
     return `
@@ -3782,6 +3789,7 @@ async function getUsersContent() {
                             </svg>
                         </th>
                         <th>Role</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody id="usersTableBody">
@@ -3797,10 +3805,18 @@ async function getUsersContent() {
                             </td>
                             <td>${escapeHtml(user.email || 'N/A')}</td>
                             <td><span class="status-badge status-active">${escapeHtml(user.role || 'User')}</span></td>
+                            <td>
+                                <button class="btn-icon" onclick="deleteUser('${escapeHtml(user.email)}')" title="Delete" style="color: #ef4444;">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="3 6 5 6 21 6"></polyline>
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                    </svg>
+                                </button>
+                            </td>
                         </tr>
                     `).join('') : `
                         <tr>
-                            <td colspan="3" class="empty-state-cell">
+                            <td colspan="4" class="empty-state-cell">
                                 <div class="empty-state">
                                     <div class="empty-state-text">No users found</div>
                                 </div>
@@ -4636,11 +4652,26 @@ function editUser(email) {
     showNotification('Info', 'Edit user functionality coming soon', 'info');
 }
 
-function deleteUser(email) {
-    if (confirm(`Are you sure you want to delete user ${email}?`)) {
-        // TODO: Implement user deletion
-        showNotification('Success', 'User deleted successfully', 'success');
-        loadSettingsContent('users');
+async function deleteUser(email) {
+    if (!confirm(`Are you sure you want to delete user ${email}?\n\nThis action cannot be undone.`)) {
+        return;
+    }
+
+    try {
+        const response = await authenticatedFetch(`${API_BASE}/api/auth/users/${encodeURIComponent(email)}`, {
+            method: 'DELETE'
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            showNotification('Success', 'User deleted successfully', 'success');
+            loadSettingsContent('users');
+        } else {
+            showError(data.error || 'Failed to delete user');
+        }
+    } catch (error) {
+        console.error('Error deleting user:', error);
+        showError('Error deleting user: ' + error.message);
     }
 }
 

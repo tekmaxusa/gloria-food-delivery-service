@@ -38,8 +38,10 @@ export interface IDatabase {
   getOrderCount(): Promise<number> | number;
   // User authentication methods
   createUser(email: string, password: string, fullName: string): Promise<User | null> | User | null;
- getUserByEmail(email: string): Promise<User | null> | User | null;
+  getUserByEmail(email: string): Promise<User | null> | User | null;
   verifyPassword(email: string, password: string): Promise<boolean | User | null> | boolean | User | null;
+  getAllUsers(): Promise<User[]> | User[];
+  deleteUser(email: string): Promise<boolean> | boolean;
   // Drivers methods
   getAllDrivers(): Promise<any[]> | any[];
   getDriverById(id: number): Promise<any | null> | any | null;
