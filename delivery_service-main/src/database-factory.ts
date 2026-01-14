@@ -16,6 +16,7 @@ export interface User {
 // Merchant interface for multi-merchant support
 export interface Merchant {
   id: number;
+  user_id?: number;
   store_id: string;
   merchant_name: string;
   api_key?: string;
@@ -53,10 +54,11 @@ export interface IDatabase {
   // Statistics methods
   getDashboardStats(): Promise<any> | any;
   // Merchant methods
-  getAllMerchants(): Promise<Merchant[]> | Merchant[];
-  getMerchantByStoreId(storeId: string): Promise<Merchant | null> | Merchant | null;
+  getAllMerchants(userId?: number): Promise<Merchant[]> | Merchant[];
+  getMerchantByStoreId(storeId: string, userId?: number): Promise<Merchant | null> | Merchant | null;
+  getMerchantByApiKey(apiKey: string): Promise<Merchant | null> | Merchant | null;
   insertOrUpdateMerchant(merchant: Partial<Merchant>): Promise<Merchant | null> | Merchant | null;
-  deleteMerchant(storeId: string): Promise<boolean> | boolean;
+  deleteMerchant(storeId: string, userId?: number): Promise<boolean> | boolean;
   // Order deletion method
   deleteOrder(orderId: string): Promise<boolean> | boolean;
   close(): Promise<void> | void;

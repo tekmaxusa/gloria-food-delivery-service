@@ -81,21 +81,11 @@ export class MerchantManager {
       console.log(chalk.gray('   💡 To enable auto-loading from .env, set AUTO_LOAD_MERCHANTS=true in .env\n'));
     }
 
-    // Load all active merchants from database (always load from database)
-    await this.loadMerchantsFromDatabase();
-
-    const merchantCount = this.merchants.size;
-    if (merchantCount === 0) {
-      console.log(chalk.yellow('   ⚠️  No merchants found in database'));
-      console.log(chalk.cyan('   💡 Add your first merchant through the Integrations page'));
-      console.log(chalk.gray('   💡 Go to: Integrations → API Credentials → Add Integration\n'));
-    } else {
-      console.log(chalk.green(`   ✅ Loaded ${merchantCount} active merchant(s) from database\n`));
-      this.merchants.forEach((merchant, storeId) => {
-        console.log(chalk.gray(`      • ${merchant.merchant_name} (${storeId})`));
-      });
-      console.log();
-    }
+    // Don't load merchants at startup - merchants are now per-user
+    // They will be loaded on-demand through API endpoints with user context
+    console.log(chalk.cyan('   ℹ️  Merchants are now per-user and loaded on-demand'));
+    console.log(chalk.gray('   💡 Each user will only see their own merchants'));
+    console.log(chalk.gray('   💡 Add merchants through: Integrations → API Credentials → Add Integration\n'));
   }
 
   /**

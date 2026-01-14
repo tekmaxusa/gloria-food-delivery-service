@@ -342,7 +342,8 @@ export class OrderDatabasePostgreSQL {
         await client.query(`
           CREATE TABLE IF NOT EXISTS merchants (
             id SERIAL PRIMARY KEY,
-            store_id VARCHAR(255) UNIQUE NOT NULL,
+            user_id INTEGER,
+            store_id VARCHAR(255) NOT NULL,
             merchant_name VARCHAR(255) NOT NULL,
             api_key VARCHAR(500),
             api_url VARCHAR(500),
@@ -351,11 +352,12 @@ export class OrderDatabasePostgreSQL {
             address TEXT,
             is_active BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, store_id)
           )
         `);
 
-        // Add phone and address columns if they don't exist (for existing databases)
+        // Add phone, address, and user_id columns if they don't exist (for existing databases)
         try {
           await client.query(`
             ALTER TABLE merchants 
@@ -365,6 +367,27 @@ export class OrderDatabasePostgreSQL {
             ALTER TABLE merchants 
             ADD COLUMN IF NOT EXISTS address TEXT
           `);
+          await client.query(`
+            ALTER TABLE merchants 
+            ADD COLUMN IF NOT EXISTS user_id INTEGER
+          `);
+          // Remove old unique constraint on store_id and add new composite unique constraint
+          try {
+            await client.query(`
+              ALTER TABLE merchants 
+              DROP CONSTRAINT IF EXISTS merchants_store_id_key
+            `);
+            await client.query(`
+              ALTER TABLE merchants 
+              ADD CONSTRAINT merchants_user_id_store_id_unique UNIQUE (user_id, store_id)
+            `);
+          } catch (e: any) {
+            // Constraint might already exist or not exist, ignore error
+            if (e.code !== '42P07' && e.code !== '42710') {
+              console.log('   Note: Unique constraint may already exist');
+            }
+          }
+          console.log('✅ Added user_id column to merchants table');
         } catch (e) {
           // Columns might already exist, ignore error
         }
@@ -1551,16 +1574,25 @@ export class OrderDatabasePostgreSQL {
   }
 
   // Merchant methods
-  async getAllMerchants(): Promise<Merchant[]> {
+  async getAllMerchants(userId?: number): Promise<Merchant[]> {
     try {
       const client = await this.pool.connect();
-      const result = await client.query(`
-        SELECT * FROM merchants WHERE is_active = TRUE ORDER BY merchant_name
-      `);
+      let query = `SELECT * FROM merchants WHERE is_active = TRUE`;
+      const params: any[] = [];
+      
+      if (userId !== undefined) {
+        query += ` AND user_id = $1`;
+        params.push(userId);
+      }
+      
+      query += ` ORDER BY merchant_name`;
+      
+      const result = await client.query(query, params);
       client.release();
 
       return result.rows.map(m => ({
         id: m.id,
+        user_id: m.user_id || undefined,
         store_id: m.store_id,
         merchant_name: m.merchant_name,
         api_key: m.api_key,
@@ -1578,13 +1610,18 @@ export class OrderDatabasePostgreSQL {
     }
   }
 
-  async getMerchantByStoreId(storeId: string): Promise<Merchant | null> {
+  async getMerchantByStoreId(storeId: string, userId?: number): Promise<Merchant | null> {
     try {
       const client = await this.pool.connect();
-      const result = await client.query(
-        `SELECT * FROM merchants WHERE store_id = $1`,
-        [storeId]
-      );
+      let query = `SELECT * FROM merchants WHERE store_id = $1`;
+      const params: any[] = [storeId];
+      
+      if (userId !== undefined) {
+        query += ` AND user_id = $2`;
+        params.push(userId);
+      }
+      
+      const result = await client.query(query, params);
       client.release();
 
       if (!result.rows || result.rows.length === 0) return null;
@@ -1592,6 +1629,7 @@ export class OrderDatabasePostgreSQL {
       const merchant = result.rows[0];
       return {
         id: merchant.id,
+        user_id: merchant.user_id || undefined,
         store_id: merchant.store_id,
         merchant_name: merchant.merchant_name,
         api_key: merchant.api_key,
@@ -1609,15 +1647,50 @@ export class OrderDatabasePostgreSQL {
     }
   }
 
+  async getMerchantByApiKey(apiKey: string): Promise<Merchant | null> {
+    try {
+      const client = await this.pool.connect();
+      const result = await client.query(
+        `SELECT * FROM merchants WHERE api_key = $1 AND is_active = TRUE`,
+        [apiKey]
+      );
+      client.release();
+
+      if (!result.rows || result.rows.length === 0) return null;
+
+      const merchant = result.rows[0];
+      return {
+        id: merchant.id,
+        user_id: merchant.user_id || undefined,
+        store_id: merchant.store_id,
+        merchant_name: merchant.merchant_name,
+        api_key: merchant.api_key,
+        api_url: merchant.api_url,
+        master_key: merchant.master_key,
+        phone: merchant.phone || null,
+        address: merchant.address || null,
+        is_active: merchant.is_active === true,
+        created_at: merchant.created_at,
+        updated_at: merchant.updated_at
+      };
+    } catch (error) {
+      console.error('Error getting merchant by API key:', error);
+      return null;
+    }
+  }
+
   async insertOrUpdateMerchant(merchant: Partial<Merchant>): Promise<Merchant | null> {
     try {
       if (!merchant.store_id) {
         throw new Error('store_id is required');
       }
+      if (merchant.user_id === undefined || merchant.user_id === null) {
+        throw new Error('user_id is required');
+      }
 
       // For updates, merchant_name is optional (can update other fields without changing name)
       // For inserts, merchant_name is required
-      const existing = await this.getMerchantByStoreId(merchant.store_id);
+      const existing = await this.getMerchantByStoreId(merchant.store_id, merchant.user_id);
       if (!existing && !merchant.merchant_name) {
         throw new Error('merchant_name is required for new merchants');
       }
@@ -1664,18 +1737,20 @@ export class OrderDatabasePostgreSQL {
 
         if (updates.length > 1) { // More than just updated_at
           values.push(merchant.store_id);
+          values.push(merchant.user_id);
           await client.query(`
             UPDATE merchants 
             SET ${updates.join(', ')}
-            WHERE store_id = $${paramIndex}
+            WHERE store_id = $${paramIndex++} AND user_id = $${paramIndex}
           `, values);
         }
       } else {
         // Insert new merchant
         await client.query(`
-          INSERT INTO merchants (store_id, merchant_name, api_key, api_url, master_key, phone, address, is_active)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          INSERT INTO merchants (user_id, store_id, merchant_name, api_key, api_url, master_key, phone, address, is_active)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         `, [
+          merchant.user_id,
           merchant.store_id,
           merchant.merchant_name!.trim(),
           merchant.api_key || null,
@@ -1688,9 +1763,9 @@ export class OrderDatabasePostgreSQL {
       }
 
       client.release();
-      const updated = await this.getMerchantByStoreId(merchant.store_id);
+      const updated = await this.getMerchantByStoreId(merchant.store_id, merchant.user_id);
       if (updated) {
-        console.log(`Merchant ${merchant.store_id} saved: merchant_name="${updated.merchant_name}", store_id="${updated.store_id}"`);
+        console.log(`Merchant ${merchant.store_id} saved: merchant_name="${updated.merchant_name}", store_id="${updated.store_id}", user_id="${updated.user_id}"`);
       }
       return updated;
     } catch (error) {
@@ -1699,13 +1774,18 @@ export class OrderDatabasePostgreSQL {
     }
   }
 
-  async deleteMerchant(storeId: string): Promise<boolean> {
+  async deleteMerchant(storeId: string, userId?: number): Promise<boolean> {
     try {
       const client = await this.pool.connect();
-      const result = await client.query(
-        `DELETE FROM merchants WHERE store_id = $1`,
-        [storeId]
-      );
+      let query = `DELETE FROM merchants WHERE store_id = $1`;
+      const params: any[] = [storeId];
+      
+      if (userId !== undefined) {
+        query += ` AND user_id = $2`;
+        params.push(userId);
+      }
+      
+      const result = await client.query(query, params);
       client.release();
 
       return (result.rowCount || 0) > 0;

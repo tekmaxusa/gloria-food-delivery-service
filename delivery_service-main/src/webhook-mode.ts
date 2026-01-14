@@ -1073,14 +1073,25 @@ class GloriaFoodWebhookServer {
           });
         }
 
-        // Identify merchant for this order (needed for authentication)
-        const merchant = this.merchantManager.findMerchantForOrder(orderData);
+        // Extract API key from request for merchant identification
+        const authHeader = req.headers['authorization'] || req.headers['x-api-key'];
+        const providedKey = authHeader?.toString().replace('Bearer ', '').trim() ||
+                          req.body?.api_key ||
+                          req.query?.token;
+
+        // Try to find merchant by API key first (for per-user merchants)
+        let merchant = null;
+        if (providedKey) {
+          merchant = await this.handleAsync(this.database.getMerchantByApiKey(providedKey));
+        }
+        
+        // Fallback: Try to find merchant by store_id (for backward compatibility)
+        if (!merchant) {
+          merchant = this.merchantManager.findMerchantForOrder(orderData);
+        }
 
         // Validate authentication - check merchant-specific API key or global keys
         if (merchant) {
-          const authHeader = req.headers['authorization'] || req.headers['x-api-key'];
-          const providedKey = authHeader?.toString().replace('Bearer ', '').trim();
-          
           // Check merchant-specific API key first
           let isValid = false;
           if (merchant.api_key && providedKey) {
@@ -1299,10 +1310,30 @@ class GloriaFoodWebhookServer {
       }
     });
 
+    // Helper function to get current user from session
+    const getCurrentUser = (req: Request): { userId: number; email: string } | null => {
+      const sessionId = req.headers['x-session-id'] as string;
+      if (!sessionId) return null;
+      
+      const session = this.sessions.get(sessionId);
+      if (!session || session.expires < Date.now()) {
+        this.sessions.delete(sessionId);
+        return null;
+      }
+      
+      return { userId: session.userId, email: session.email };
+    };
+
     // Merchant management endpoints
     this.app.get('/merchants', async (req: Request, res: Response) => {
       try {
-        const merchants = this.merchantManager.getAllMerchants();
+        const user = getCurrentUser(req);
+        if (!user) {
+          return res.status(401).json({ success: false, error: 'Not authenticated' });
+        }
+        
+        // Get merchants for current user only
+        const merchants = await this.handleAsync(this.database.getAllMerchants(user.userId));
         res.json({ 
           success: true, 
           count: merchants.length, 
@@ -1315,7 +1346,12 @@ class GloriaFoodWebhookServer {
 
     this.app.get('/merchants/:storeId', async (req: Request, res: Response) => {
       try {
-        const merchant = this.merchantManager.getMerchantByStoreId(req.params.storeId);
+        const user = getCurrentUser(req);
+        if (!user) {
+          return res.status(401).json({ success: false, error: 'Not authenticated' });
+        }
+        
+        const merchant = await this.handleAsync(this.database.getMerchantByStoreId(req.params.storeId, user.userId));
         if (!merchant) {
           return res.status(404).json({ success: false, error: 'Merchant not found' });
         }
@@ -1327,6 +1363,11 @@ class GloriaFoodWebhookServer {
 
     this.app.post('/merchants', async (req: Request, res: Response) => {
       try {
+        const user = getCurrentUser(req);
+        if (!user) {
+          return res.status(401).json({ success: false, error: 'Not authenticated' });
+        }
+        
         const { store_id, merchant_name, api_key, api_url, master_key, is_active } = req.body;
         
         if (!store_id || !merchant_name) {
@@ -1337,6 +1378,7 @@ class GloriaFoodWebhookServer {
         }
 
         const merchant = await this.handleAsync(this.database.insertOrUpdateMerchant({
+          user_id: user.userId,
           store_id,
           merchant_name,
           api_key,
@@ -1360,8 +1402,13 @@ class GloriaFoodWebhookServer {
     // Generate API key for merchant
     this.app.post('/merchants/:storeId/generate-api-key', async (req: Request, res: Response) => {
       try {
+        const user = getCurrentUser(req);
+        if (!user) {
+          return res.status(401).json({ success: false, error: 'Not authenticated' });
+        }
+        
         const storeId = req.params.storeId;
-        const merchant = this.merchantManager.getMerchantByStoreId(storeId);
+        const merchant = await this.handleAsync(this.database.getMerchantByStoreId(storeId, user.userId));
         
         if (!merchant) {
           return res.status(404).json({ success: false, error: 'Merchant not found' });
@@ -1373,6 +1420,7 @@ class GloriaFoodWebhookServer {
 
         // Update merchant with new API key
         const updated = await this.handleAsync(this.database.insertOrUpdateMerchant({
+          user_id: user.userId,
           store_id: storeId,
           merchant_name: merchant.merchant_name,
           api_key: apiKey,
@@ -1409,6 +1457,11 @@ class GloriaFoodWebhookServer {
 
     this.app.put('/merchants/:storeId', async (req: Request, res: Response) => {
       try {
+        const user = getCurrentUser(req);
+        if (!user) {
+          return res.status(401).json({ success: false, error: 'Not authenticated' });
+        }
+        
         const { merchant_name, api_key, api_url, master_key, is_active, phone, address } = req.body;
         const storeId = req.params.storeId;
 
@@ -1418,6 +1471,7 @@ class GloriaFoodWebhookServer {
         }
 
         const merchant = await this.handleAsync(this.database.insertOrUpdateMerchant({
+          user_id: user.userId,
           store_id: storeId,
           merchant_name: merchant_name ? merchant_name.trim() : undefined,
           api_key,
@@ -1460,8 +1514,13 @@ class GloriaFoodWebhookServer {
 
     this.app.delete('/merchants/:storeId', async (req: Request, res: Response) => {
       try {
+        const user = getCurrentUser(req);
+        if (!user) {
+          return res.status(401).json({ success: false, error: 'Not authenticated' });
+        }
+        
         const storeId = req.params.storeId;
-        const deleted = await this.handleAsync(this.database.deleteMerchant(storeId));
+        const deleted = await this.handleAsync(this.database.deleteMerchant(storeId, user.userId));
         
         if (deleted) {
           // Reload merchants in manager
