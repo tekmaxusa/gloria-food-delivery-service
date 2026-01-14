@@ -248,8 +248,22 @@ class GloriaFoodWebhookServer {
     }
 
     try {
+      // Get merchant address from database if available
+      let merchantAddress: string | undefined = undefined;
+      const storeId = orderData.store_id || orderData.restaurant_id;
+      if (storeId) {
+        try {
+          const merchant = this.merchantManager.getMerchantByStoreId(storeId);
+          if (merchant && (merchant as any).address) {
+            merchantAddress = (merchant as any).address;
+          }
+        } catch (merchantError: any) {
+          console.log(chalk.yellow(`   ⚠️  Could not get merchant address: ${merchantError.message}`));
+        }
+      }
+
       // Convert to DoorDash Drive delivery payload
-      const drivePayload = this.doorDashClient.convertGloriaFoodToDrive(orderData);
+      const drivePayload = this.doorDashClient.convertGloriaFoodToDrive(orderData, merchantAddress);
       console.log(chalk.blue(`🔍 DoorDash payload prepared, sending to API...`));
 
       // Send to DoorDash Drive

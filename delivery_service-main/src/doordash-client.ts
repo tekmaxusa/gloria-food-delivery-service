@@ -61,7 +61,14 @@ export interface DoorDashDriveDelivery {
   pickup_business_name?: string;
   pickup_instructions?: string;
   pickup_reference_tag?: string;
-  dropoff_address: string;
+  dropoff_address?: string; // Either dropoff_address or dropoff_address_components must be set
+  dropoff_address_components?: {
+    street_address: string;
+    city: string;
+    state: string;
+    zip_code: string;
+    country?: string;
+  };
   dropoff_phone_number: string;
   dropoff_contact_given_name?: string;
   dropoff_contact_family_name?: string;
@@ -252,31 +259,108 @@ export class DoorDashClient {
   /**
    * Convert GloriaFood order to DoorDash Drive delivery payload
    */
-  convertGloriaFoodToDrive(orderData: any): DoorDashDriveDelivery {
+  convertGloriaFoodToDrive(orderData: any, merchantAddress?: string): DoorDashDriveDelivery {
     const externalId = orderData.id?.toString() || orderData.order_id?.toString() || crypto.randomUUID?.() || `${Date.now()}`;
 
-    // Pickup: restaurant details
-    const pickupAddressParts = [
-      orderData.restaurant_street,
-      orderData.restaurant_city,
-      orderData.restaurant_state,
-      orderData.restaurant_zipcode,
-      orderData.restaurant_country
-    ].filter(Boolean).join(', ');
+    // Helper to parse raw_data if it's a JSON string
+    let rawDataParsed: any = null;
+    if (orderData.raw_data) {
+      try {
+        rawDataParsed = typeof orderData.raw_data === 'string' 
+          ? JSON.parse(orderData.raw_data) 
+          : orderData.raw_data;
+      } catch (e) {
+        // Ignore parse errors
+      }
+    }
 
-    // Dropoff: customer details
-    const country = (orderData.client_address_parts?.country || orderData.restaurant_country || '').toString();
-    const city = (orderData.client_address_parts?.city || orderData.restaurant_city || '').toString();
-    const state = (orderData.client_address_parts?.state || orderData.restaurant_state || '').toString();
-    const zip = (orderData.client_address_parts?.zip || orderData.client_address_parts?.postal_code || orderData.restaurant_zipcode || '').toString();
-    const street = (orderData.client_address_parts?.street || orderData.client_address || '').toString();
+    // Merge raw_data into orderData for easier access
+    const mergedData = rawDataParsed ? { ...orderData, ...rawDataParsed } : orderData;
 
-    const parts = [street, city, [state, zip].filter(Boolean).join(' '), country].filter(Boolean);
-    const dropoffAddress = parts.join(', ');
+    // Extract pickup address (restaurant/merchant address)
+    let pickupAddress = '';
+    
+    // Try merchant address from database first
+    if (merchantAddress && merchantAddress.trim()) {
+      pickupAddress = merchantAddress.trim();
+    } else {
+      // Try various fields for restaurant address
+      const pickupParts = [
+        mergedData.restaurant_street || mergedData.restaurant?.street || mergedData.merchant_street,
+        mergedData.restaurant_city || mergedData.restaurant?.city || mergedData.merchant_city,
+        mergedData.restaurant_state || mergedData.restaurant?.state || mergedData.merchant_state,
+        mergedData.restaurant_zipcode || mergedData.restaurant?.zipcode || mergedData.restaurant?.zip || mergedData.merchant_zipcode,
+        mergedData.restaurant_country || mergedData.restaurant?.country || mergedData.merchant_country || 'US'
+      ].filter(Boolean);
+      
+      pickupAddress = pickupParts.join(', ');
+    }
 
-    const given = orderData.client_first_name || orderData.client?.first_name || '';
-    const family = orderData.client_last_name || orderData.client?.last_name || '';
-    const phone = orderData.client_phone || orderData.client?.phone || '';
+    // Validate pickup address
+    if (!pickupAddress || pickupAddress.trim().length < 10) {
+      throw new Error(`Invalid pickup address: "${pickupAddress}". Please ensure merchant address is set in Integrations page or order contains restaurant address fields.`);
+    }
+
+    // Extract dropoff address (customer delivery address)
+    let dropoffStreet = '';
+    let dropoffCity = '';
+    let dropoffState = '';
+    let dropoffZip = '';
+    let dropoffCountry = '';
+
+    // Try multiple sources for dropoff address
+    if (mergedData.client_address_parts) {
+      const parts = mergedData.client_address_parts;
+      dropoffStreet = (parts.street || parts.address || parts.address_line_1 || '').toString().trim();
+      dropoffCity = (parts.city || parts.locality || '').toString().trim();
+      dropoffState = (parts.state || parts.province || parts.region || '').toString().trim();
+      dropoffZip = (parts.zip || parts.postal_code || parts.postcode || '').toString().trim();
+      dropoffCountry = (parts.country || 'US').toString().trim();
+    } else if (mergedData.delivery?.address) {
+      const addr = mergedData.delivery.address;
+      dropoffStreet = (addr.street || addr.address_line_1 || addr.address || addr.line1 || '').toString().trim();
+      dropoffCity = (addr.city || addr.locality || '').toString().trim();
+      dropoffState = (addr.state || addr.province || addr.region || '').toString().trim();
+      dropoffZip = (addr.zip || addr.postal_code || addr.postcode || '').toString().trim();
+      dropoffCountry = (addr.country || 'US').toString().trim();
+    } else if (mergedData.delivery) {
+      const delivery = mergedData.delivery;
+      dropoffStreet = (delivery.street || delivery.address || delivery.address_line_1 || '').toString().trim();
+      dropoffCity = (delivery.city || delivery.locality || '').toString().trim();
+      dropoffState = (delivery.state || delivery.province || delivery.region || '').toString().trim();
+      dropoffZip = (delivery.zip || delivery.postal_code || delivery.postcode || '').toString().trim();
+      dropoffCountry = (delivery.country || 'US').toString().trim();
+    } else if (mergedData.client_address) {
+      // Try to parse a full address string
+      const fullAddress = mergedData.client_address.toString().trim();
+      dropoffStreet = fullAddress;
+      // Try to extract city/state/zip from full address if possible
+      const zipMatch = fullAddress.match(/\b(\d{5}(?:-\d{4})?)\b/);
+      if (zipMatch) {
+        dropoffZip = zipMatch[1];
+      }
+    } else if (mergedData.delivery_address) {
+      dropoffStreet = mergedData.delivery_address.toString().trim();
+    }
+
+    // Build dropoff address string
+    const dropoffParts = [
+      dropoffStreet,
+      dropoffCity,
+      [dropoffState, dropoffZip].filter(Boolean).join(' '),
+      dropoffCountry
+    ].filter(Boolean);
+    const dropoffAddress = dropoffParts.join(', ');
+
+    // Validate dropoff address
+    if (!dropoffAddress || dropoffAddress.trim().length < 10 || !dropoffStreet) {
+      throw new Error(`Invalid dropoff address: "${dropoffAddress}". Order must contain valid customer delivery address (client_address_parts or delivery.address).`);
+    }
+
+    // Extract customer contact info
+    const given = mergedData.client_first_name || mergedData.client?.first_name || '';
+    const family = mergedData.client_last_name || mergedData.client?.last_name || '';
+    const phone = mergedData.client_phone || mergedData.client?.phone || '';
 
     const normalizePhone = (raw: string): string => {
       const trimmed = (raw || '').replace(/[^\d+]/g, '');
@@ -292,18 +376,35 @@ export class DoorDashClient {
       return Number.isFinite(n) ? Math.round(n * 100) : undefined;
     };
 
+    // Build dropoff_address_components as alternative format (DoorDash accepts either dropoff_address or dropoff_address_components)
+    // DoorDash prefers dropoff_address_components when we have structured data
+    const dropoffAddressComponents = dropoffStreet && dropoffCity && dropoffState && dropoffZip ? {
+      street_address: dropoffStreet,
+      city: dropoffCity,
+      state: dropoffState,
+      zip_code: dropoffZip,
+      country: dropoffCountry || 'US'
+    } : undefined;
+
     const payload: DoorDashDriveDelivery = {
       external_delivery_id: externalId,
-      pickup_address: pickupAddressParts,
-      pickup_phone_number: orderData.restaurant_phone ? normalizePhone(orderData.restaurant_phone) : undefined,
-      pickup_business_name: orderData.restaurant_name || undefined,
-      dropoff_address: dropoffAddress,
+      pickup_address: pickupAddress,
+      pickup_phone_number: (mergedData.restaurant_phone || mergedData.restaurant?.phone) ? normalizePhone(mergedData.restaurant_phone || mergedData.restaurant?.phone) : undefined,
+      pickup_business_name: mergedData.restaurant_name || mergedData.restaurant?.name || mergedData.merchant_name || undefined,
       dropoff_phone_number: normalizePhone(phone),
       dropoff_contact_given_name: given || undefined,
       dropoff_contact_family_name: family || undefined,
-      dropoff_instructions: orderData.instructions || undefined,
-      order_value: toCents(orderData.total_price),
+      dropoff_instructions: mergedData.instructions || mergedData.notes || mergedData.special_instructions || undefined,
+      order_value: toCents(mergedData.total_price || mergedData.total),
     };
+
+    // Use dropoff_address_components if we have structured data (DoorDash prefers this), otherwise use dropoff_address string
+    if (dropoffAddressComponents) {
+      payload.dropoff_address_components = dropoffAddressComponents;
+    } else {
+      // Fallback to string address if we don't have structured components
+      payload.dropoff_address = dropoffAddress;
+    }
 
     return payload;
   }
