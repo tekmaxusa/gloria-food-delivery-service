@@ -24,12 +24,16 @@ export class MerchantManager {
   /**
    * Initialize merchants from environment variables and database
    * Supports both single merchant (backward compatible) and multiple merchants
-   * Only loads from env vars if AUTO_LOAD_MERCHANTS=true is set (for new accounts, start fresh)
+   * 
+   * IMPORTANT: By default, merchants are NOT loaded from .env file
+   * Only loads from env vars if AUTO_LOAD_MERCHANTS=true is explicitly set
+   * This ensures new accounts start with zero merchants - users add their own via UI
    */
   async initialize(): Promise<void> {
     console.log(chalk.blue('\n🔧 Initializing Merchants...\n'));
 
     // Check if auto-loading from env vars is enabled
+    // DEFAULT: false - merchants from .env are IGNORED unless explicitly enabled
     const autoLoadMerchants = process.env.AUTO_LOAD_MERCHANTS === 'true';
     
     if (autoLoadMerchants) {
@@ -67,10 +71,14 @@ export class MerchantManager {
         });
       }
     } else {
-      console.log(chalk.cyan('   ℹ️  Auto-loading merchants from environment variables is disabled'));
-      console.log(chalk.gray('   💡 Merchants will only be loaded from database'));
-      console.log(chalk.gray('   💡 Add merchants through the Integrations page in the UI'));
-      console.log(chalk.gray('   💡 To enable auto-loading, set AUTO_LOAD_MERCHANTS=true in .env\n'));
+      // Default behavior: DO NOT load merchants from .env
+      // This ensures new accounts start fresh with zero merchants
+      console.log(chalk.cyan('   ℹ️  Auto-loading merchants from .env is DISABLED (default behavior)'));
+      console.log(chalk.gray('   ✅ Merchants from .env file will be IGNORED'));
+      console.log(chalk.gray('   ✅ New accounts start with ZERO merchants'));
+      console.log(chalk.gray('   💡 Merchants will only be loaded from database (if any exist)'));
+      console.log(chalk.gray('   💡 Add new merchants through: Integrations → API Credentials → Add Integration'));
+      console.log(chalk.gray('   💡 To enable auto-loading from .env, set AUTO_LOAD_MERCHANTS=true in .env\n'));
     }
 
     // Load all active merchants from database (always load from database)
