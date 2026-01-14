@@ -549,8 +549,8 @@ function navigateToPage(page) {
         case 'orders':
             showOrdersPage();
             break;
-        case 'merchants':
-            showMerchantsPage();
+        case 'integrations':
+            showIntegrationsPage();
             break;
         case 'dispatch':
             showDispatchPage();
@@ -794,42 +794,83 @@ function showDispatchPage() {
     `;
 }
 
-// Show Merchants page
-function showMerchantsPage() {
+// Show Integrations page
+function showIntegrationsPage() {
     const mainContainer = document.querySelector('.main-container');
+    const webhookUrl = `${API_BASE}/webhook`;
+    
     mainContainer.innerHTML = `
-        <div class="orders-header">
-            <h1 class="page-title">Merchants</h1>
-            <button class="btn-primary" id="addMerchantBtn" style="margin-left: auto;">+ Add Merchant</button>
-        </div>
-        <div class="table-container">
-            <table class="orders-table">
-                <thead>
-                    <tr>
-                        <th>Store ID</th>
-                        <th>Merchant Name</th>
-                        <th>API URL</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="merchantsTableBody">
-                    <tr>
-                        <td colspan="5" class="empty-state-cell">
-                            <div class="empty-state">
-                                <div class="empty-state-text">Loading merchants...</div>
-                            </div>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+        <div style="display: flex; gap: 20px; padding: 20px;">
+            <!-- Left Sidebar -->
+            <div style="width: 280px; background: #f8f9fa; border-radius: 8px; padding: 20px; height: fit-content;">
+                <h2 style="margin: 0 0 8px 0; font-size: 20px; font-weight: 600;">Integrations</h2>
+                <p style="margin: 0 0 24px 0; color: #666; font-size: 14px; line-height: 1.5;">
+                    Connect your online ordering or POS to automatically sync your orders with the system.
+                </p>
+                
+                <div style="margin-bottom: 32px;">
+                    <button id="apiCredentialsBtn" class="btn-primary" style="width: 100%; padding: 12px; font-weight: 600; display: flex; align-items: center; gap: 8px; justify-content: center;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path>
+                        </svg>
+                        API Credentials
+                    </button>
+                </div>
+                
+                <div style="border-top: 1px solid #e0e0e0; padding-top: 20px;">
+                    <h3 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #333;">Current Integrations</h3>
+                    <div id="integrationStats" style="color: #666; font-size: 13px;">
+                        <div style="margin-bottom: 8px;">All: <strong id="totalIntegrations">0</strong></div>
+                        <div style="margin-bottom: 8px;">Online Ordering: <strong id="onlineOrderingCount">0</strong></div>
+                        <div>Active: <strong id="activeCount">0</strong></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Main Content -->
+            <div style="flex: 1;">
+                <!-- Direct Integrations Section -->
+                <div style="background: white; border-radius: 8px; padding: 24px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    <h3 style="margin: 0 0 12px 0; font-size: 18px; font-weight: 600;">Direct integrations</h3>
+                    <p style="margin: 0 0 20px 0; color: #666; font-size: 14px; line-height: 1.6;">
+                        Please use your API key to establish a direct integration with our integration partners.
+                    </p>
+                    
+                    <div id="merchantApiKeys" style="margin-bottom: 20px;">
+                        <!-- Merchant API keys will be loaded here -->
+                    </div>
+                </div>
+                
+                <!-- Webhook Setup Section -->
+                <div style="background: white; border-radius: 8px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    <h3 style="margin: 0 0 12px 0; font-size: 18px; font-weight: 600;">Webhook Setup</h3>
+                    <p style="margin: 0 0 20px 0; color: #666; font-size: 14px; line-height: 1.6;">
+                        Provide your webhook URL to receive order status updates from GloriaFood. Configure this URL in your GloriaFood dashboard.
+                    </p>
+                    
+                    <div style="margin-bottom: 12px;">
+                        <label style="display: block; margin-bottom: 8px; font-weight: 500; color: #333;">Webhook URL:</label>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" id="webhookUrl" value="${webhookUrl}" readonly 
+                                   style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px; background: #f8f9fa; font-family: monospace; font-size: 13px;">
+                            <button id="copyWebhookBtn" class="btn-secondary" style="padding: 10px 20px; white-space: nowrap;">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline-block; vertical-align: middle; margin-right: 4px;">
+                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                </svg>
+                                Copy URL
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
         
         <!-- Merchant Modal (for adding and editing) -->
         <div id="merchantModal" class="modal hidden">
             <div class="modal-content merchant-modal-content">
                 <div class="modal-header">
-                    <h2 id="merchantModalTitle">Add Merchant</h2>
+                    <h2 id="merchantModalTitle">Add Integration</h2>
                     <button class="modal-close" id="closeMerchantModal">&times;</button>
                 </div>
                 <form id="merchantForm" class="modal-body">
@@ -845,7 +886,7 @@ function showMerchantsPage() {
                     <div class="form-group">
                         <label>API Key</label>
                         <input type="password" id="merchantApiKey" placeholder="Enter API Key">
-                        <small style="color: #666; font-size: 12px;">Leave empty to keep existing API key when editing</small>
+                        <small style="color: #666; font-size: 12px;">Leave empty to auto-generate</small>
                     </div>
                     <div class="form-group">
                         <label>API URL</label>
@@ -861,32 +902,45 @@ function showMerchantsPage() {
                         <label class="checkbox-label">
                             <input type="checkbox" id="merchantIsActive" checked> Active
                         </label>
-                        <small style="color: #666; font-size: 12px; display: block; margin-top: 4px;">Inactive merchants will not be polled for orders</small>
+                        <small style="color: #666; font-size: 12px; display: block; margin-top: 4px;">Inactive integrations will not receive orders</small>
                     </div>
                     <div class="modal-actions">
                         <button type="button" class="btn-secondary" id="cancelMerchantBtn">Cancel</button>
-                        <button type="submit" class="btn-primary">Save Merchant</button>
+                        <button type="submit" class="btn-primary">Save Integration</button>
                     </div>
                 </form>
             </div>
         </div>
     `;
-
-    // Initialize event listeners
-    initializeMerchantsPage();
-    loadMerchants();
     
-    // Add button click handler
-    const addMerchantBtn = document.getElementById('addMerchantBtn');
-    if (addMerchantBtn) {
-        addMerchantBtn.addEventListener('click', () => {
-            openMerchantModal(null); // null means adding new merchant
+    // Initialize event listeners
+    initializeIntegrationsPage();
+    loadIntegrations();
+    
+    // Copy webhook URL button
+    const copyWebhookBtn = document.getElementById('copyWebhookBtn');
+    if (copyWebhookBtn) {
+        copyWebhookBtn.addEventListener('click', () => {
+            const webhookInput = document.getElementById('webhookUrl');
+            if (webhookInput) {
+                webhookInput.select();
+                document.execCommand('copy');
+                showNotification('Success', 'Webhook URL copied to clipboard!', 'success');
+            }
         });
     }
+    
+    // Load webhook URL from API
+    loadWebhookUrl();
 }
 
-// Initialize Merchants page
-function initializeMerchantsPage() {
+// Show Merchants page (legacy - redirects to integrations)
+function showMerchantsPage() {
+    showIntegrationsPage();
+}
+
+// Initialize Integrations page
+function initializeIntegrationsPage() {
     // Modal close buttons
     const closeModal = document.getElementById('closeMerchantModal');
     const cancelBtn = document.getElementById('cancelMerchantBtn');
@@ -908,25 +962,196 @@ function initializeMerchantsPage() {
             }
         });
     }
+    
+    // Add Integration button
+    const apiCredentialsBtn = document.getElementById('apiCredentialsBtn');
+    if (apiCredentialsBtn) {
+        apiCredentialsBtn.addEventListener('click', () => {
+            openMerchantModal(null);
+        });
+    }
 }
 
-// Load merchants from API
-async function loadMerchants() {
+// Initialize Merchants page (legacy)
+function initializeMerchantsPage() {
+    initializeIntegrationsPage();
+}
+
+// Load integrations from API
+async function loadIntegrations() {
     try {
         const response = await authenticatedFetch(`${API_BASE}/merchants`);
         const data = await response.json();
 
         if (data.success) {
-            displayMerchants(data.merchants || []);
+            displayIntegrations(data.merchants || []);
+            updateIntegrationStats(data.merchants || []);
         } else {
-            showError('Failed to load merchants: ' + (data.error || 'Unknown error'));
-            displayMerchants([]);
+            showError('Failed to load integrations: ' + (data.error || 'Unknown error'));
+            displayIntegrations([]);
         }
     } catch (error) {
-        console.error('Error loading merchants:', error);
+        console.error('Error loading integrations:', error);
         showError('Error connecting to server: ' + error.message);
-        displayMerchants([]);
+        displayIntegrations([]);
     }
+}
+
+// Display integrations with API keys
+function displayIntegrations(merchants) {
+    const container = document.getElementById('merchantApiKeys');
+    if (!container) return;
+
+    if (merchants.length === 0) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: #666;">
+                <p style="margin: 0 0 16px 0;">No integrations found</p>
+                <button class="btn-primary" onclick="document.getElementById('apiCredentialsBtn').click()" 
+                        style="background: #10b981; border: none; padding: 10px 20px; border-radius: 6px; color: white; cursor: pointer;">
+                    Add Integration
+                </button>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = merchants.map(merchant => {
+        const hasApiKey = merchant.api_key && merchant.api_key.length > 0;
+        const apiKeyDisplay = hasApiKey ? merchant.api_key : '';
+        
+        return `
+            <div style="background: #f8f9fa; border-radius: 6px; padding: 20px; margin-bottom: 16px; border: 1px solid #e0e0e0;">
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 16px;">
+                    <div>
+                        <h3 style="margin: 0 0 4px 0; font-size: 16px; font-weight: 600; color: #333;">${escapeHtml(merchant.merchant_name)}</h3>
+                        <p style="margin: 0; color: #666; font-size: 13px;">Store ID: ${escapeHtml(merchant.store_id)}</p>
+                    </div>
+                    <span class="status-badge status-${merchant.is_active ? 'active' : 'inactive'}" 
+                          style="padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 500;">
+                        ${merchant.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                </div>
+                
+                <div style="margin-bottom: 16px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 500; color: #333;">Your API key:</label>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="apiKey_${escapeHtml(merchant.store_id)}" readonly 
+                               value="${hasApiKey ? escapeHtml(apiKeyDisplay) : ''}"
+                               style="flex: 1; background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 12px; color: #333; font-size: 14px; font-family: monospace;">
+                        ${hasApiKey ? 
+                            `<button onclick="copyApiKey('${escapeHtml(merchant.store_id)}')" class="btn-secondary" 
+                                     style="padding: 12px 20px; border-radius: 6px; border: 1px solid #ddd; background: #fff; color: #333; cursor: pointer; white-space: nowrap;">
+                                Copy API Key
+                            </button>
+                            <button onclick="regenerateApiKey('${escapeHtml(merchant.store_id)}')" class="btn-secondary" 
+                                     style="padding: 12px 20px; border-radius: 6px; border: 1px solid #ddd; background: #fff; color: #333; cursor: pointer; white-space: nowrap;">
+                                Regenerate
+                            </button>` :
+                            `<button onclick="generateApiKey('${escapeHtml(merchant.store_id)}')" class="btn-primary" 
+                                     style="padding: 12px 20px; border-radius: 6px; background: #10b981; border: none; color: #fff; cursor: pointer; white-space: nowrap;">
+                                Generate API Key
+                            </button>`
+                        }
+                    </div>
+                </div>
+                
+                <div style="display: flex; gap: 8px;">
+                    <button onclick="editMerchant('${escapeHtml(merchant.store_id)}')" class="btn-secondary" 
+                            style="flex: 1; padding: 10px; border-radius: 6px; border: 1px solid #ddd; background: #fff; color: #333; cursor: pointer;">
+                        Edit
+                    </button>
+                    <button onclick="deleteMerchant('${escapeHtml(merchant.store_id)}', '${escapeHtml(merchant.merchant_name)}')" 
+                            style="padding: 10px 20px; border-radius: 6px; border: 1px solid #ef4444; background: transparent; color: #ef4444; cursor: pointer;">
+                        Delete
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Update integration stats
+function updateIntegrationStats(merchants) {
+    const totalCount = merchants.length;
+    const activeCount = merchants.filter(m => m.is_active).length;
+    
+    const totalEl = document.getElementById('totalIntegrations');
+    const onlineOrderingEl = document.getElementById('onlineOrderingCount');
+    const activeEl = document.getElementById('activeCount');
+    
+    if (totalEl) totalEl.textContent = totalCount;
+    if (onlineOrderingEl) onlineOrderingEl.textContent = totalCount; // All are online ordering for now
+    if (activeEl) activeEl.textContent = activeCount;
+}
+
+// Copy API key
+async function copyApiKey(storeId) {
+    const apiKeyInput = document.getElementById(`apiKey_${storeId}`);
+    if (apiKeyInput && apiKeyInput.value) {
+        apiKeyInput.select();
+        document.execCommand('copy');
+        showNotification('Success', 'API key copied to clipboard!', 'success');
+    }
+}
+
+// Generate API key
+async function generateApiKey(storeId) {
+    try {
+        const response = await authenticatedFetch(`${API_BASE}/merchants/${storeId}/generate-api-key`, {
+            method: 'POST'
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            showNotification('Success', 'API key generated successfully!', 'success');
+            loadIntegrations();
+        } else {
+            showError(data.error || 'Failed to generate API key');
+        }
+    } catch (error) {
+        console.error('Error generating API key:', error);
+        showError('Error generating API key: ' + error.message);
+    }
+}
+
+// Regenerate API key
+async function regenerateApiKey(storeId) {
+    if (!confirm('Are you sure you want to regenerate this API key? The old key will no longer work.')) {
+        return;
+    }
+    await generateApiKey(storeId);
+}
+
+// Load webhook URL from API
+async function loadWebhookUrl() {
+    try {
+        const response = await authenticatedFetch(`${API_BASE}/api/webhook-url`);
+        const data = await response.json();
+        
+        if (data.success && data.webhook_url) {
+            const webhookInput = document.getElementById('webhookUrl');
+            if (webhookInput) {
+                webhookInput.value = data.webhook_url;
+            }
+        }
+    } catch (error) {
+        console.error('Error loading webhook URL:', error);
+        // Fallback to default
+        const webhookInput = document.getElementById('webhookUrl');
+        if (webhookInput) {
+            webhookInput.value = `${API_BASE}/webhook`;
+        }
+    }
+}
+
+// Make functions globally available
+window.copyApiKey = copyApiKey;
+window.generateApiKey = generateApiKey;
+window.regenerateApiKey = regenerateApiKey;
+
+// Load merchants from API (legacy)
+async function loadMerchants() {
+    await loadIntegrations();
 }
 
 // Display merchants in table
@@ -995,7 +1220,7 @@ function openMerchantModal(merchant) {
 
     if (merchant) {
         // Editing existing merchant
-        title.textContent = 'Edit Merchant';
+        title.textContent = 'Edit Integration';
         storeIdInput.value = merchant.store_id;
         storeIdInput.disabled = true; // Can't change store_id when editing
         document.getElementById('merchantName').value = merchant.merchant_name || '';
@@ -1005,7 +1230,7 @@ function openMerchantModal(merchant) {
         form.dataset.editingStoreId = merchant.store_id;
     } else {
         // Adding new merchant
-        title.textContent = 'Add Merchant';
+        title.textContent = 'Add Integration';
         storeIdInput.disabled = false; // Can enter store_id when adding
         document.getElementById('merchantIsActive').checked = true; // Default to active
     }

@@ -1335,6 +1335,56 @@ class GloriaFoodWebhookServer {
       }
     });
 
+    // Generate API key for merchant
+    this.app.post('/merchants/:storeId/generate-api-key', async (req: Request, res: Response) => {
+      try {
+        const storeId = req.params.storeId;
+        const merchant = this.merchantManager.getMerchantByStoreId(storeId);
+        
+        if (!merchant) {
+          return res.status(404).json({ success: false, error: 'Merchant not found' });
+        }
+
+        // Generate a secure API key
+        const crypto = require('crypto');
+        const apiKey = `gf_${crypto.randomBytes(32).toString('hex')}`;
+
+        // Update merchant with new API key
+        const updated = await this.handleAsync(this.database.insertOrUpdateMerchant({
+          store_id: storeId,
+          merchant_name: merchant.merchant_name,
+          api_key: apiKey,
+          api_url: merchant.api_url,
+          master_key: merchant.master_key,
+          is_active: merchant.is_active
+        }));
+
+        if (updated) {
+          await this.merchantManager.reload();
+          res.json({ success: true, api_key: apiKey, merchant: updated });
+        } else {
+          res.status(500).json({ success: false, error: 'Failed to generate API key' });
+        }
+      } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    // Get webhook URL endpoint
+    this.app.get('/api/webhook-url', async (req: Request, res: Response) => {
+      try {
+        const webhookUrl = process.env.WEBHOOK_URL || 
+                          `${req.protocol}://${req.get('host')}${this.config.webhookPath}`;
+        res.json({ 
+          success: true, 
+          webhook_url: webhookUrl,
+          webhook_path: this.config.webhookPath
+        });
+      } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
     this.app.put('/merchants/:storeId', async (req: Request, res: Response) => {
       try {
         const { merchant_name, api_key, api_url, master_key, is_active, phone, address } = req.body;
