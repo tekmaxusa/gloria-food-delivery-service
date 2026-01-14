@@ -645,6 +645,18 @@ body.on-profile-page .nav-link:hover {
     color: #dc2626;
 }
 
+.delete-btn {
+    background: #fee2e2 !important;
+    color: #ef4444 !important;
+    border: 1px solid #fecaca;
+}
+
+.delete-btn:hover {
+    background: #fecaca !important;
+    color: #dc2626 !important;
+    transform: scale(1.05);
+}
+
 /* Dropdown Menu Styles */
 .dropdown {
     position: relative;

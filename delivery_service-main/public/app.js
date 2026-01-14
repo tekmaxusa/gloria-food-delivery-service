@@ -3793,7 +3793,9 @@ async function getUsersContent() {
                     </tr>
                 </thead>
                 <tbody id="usersTableBody">
-                    ${users.length > 0 ? users.map(user => `
+                    ${users.length > 0 ? users.map(user => {
+                        const userEmail = user.email || '';
+                        return `
                         <tr>
                             <td>
                                 <div style="display: flex; align-items: center; gap: 12px;">
@@ -3806,15 +3808,22 @@ async function getUsersContent() {
                             <td>${escapeHtml(user.email || 'N/A')}</td>
                             <td><span class="status-badge status-active">${escapeHtml(user.role || 'User')}</span></td>
                             <td>
-                                <button class="btn-icon" onclick="deleteUser('${escapeHtml(user.email)}')" title="Delete" style="color: #ef4444;">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <polyline points="3 6 5 6 21 6"></polyline>
-                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                                    </svg>
-                                </button>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    ${userEmail ? `
+                                    <button class="btn-icon delete-btn" onclick="deleteUser('${escapeHtml(userEmail)}')" title="Delete User" style="color: #ef4444; background: #fee2e2; padding: 8px; cursor: pointer;">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <polyline points="3 6 5 6 21 6"></polyline>
+                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                            <line x1="10" y1="11" x2="10" y2="17"></line>
+                                            <line x1="14" y1="11" x2="14" y2="17"></line>
+                                        </svg>
+                                    </button>
+                                    ` : '<span style="color: #94a3b8; font-size: 12px;">No email</span>'}
+                                </div>
                             </td>
                         </tr>
-                    `).join('') : `
+                    `;
+                    }).join('') : `
                         <tr>
                             <td colspan="4" class="empty-state-cell">
                                 <div class="empty-state">
