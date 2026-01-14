@@ -5793,7 +5793,12 @@ function escapeHtml(text) {
 function createOrderRow(order) {
     if (!order) return '';
 
-    const orderId = order.gloriafood_order_id || order.id || 'N/A';
+    // Get order ID - prefer gloriafood_order_id, fallback to id, but never use 'N/A'
+    const orderId = (order.gloriafood_order_id || order.id || '').toString();
+    if (!orderId) {
+        console.error('Order missing ID:', order);
+        return ''; // Return empty string if no ID found - this will skip the row
+    }
     const customerName = escapeHtml(order.customer_name || 'N/A');
     const customerAddress = escapeHtml(order.delivery_address || order.customer_address || 'N/A');
 
@@ -6706,12 +6711,34 @@ async function confirmAssignDriver(orderId) {
 // View order details
 async function viewOrderDetails(orderId) {
     try {
+        // Validate orderId
+        if (!orderId || orderId === 'N/A' || orderId === 'undefined') {
+            showNotification('Error', 'Invalid order ID', 'error');
+            console.error('Invalid order ID:', orderId);
+            return;
+        }
+
         // Fetch order details from API
-        const response = await authenticatedFetch(`${API_BASE}/orders/${orderId}`);
+        const response = await authenticatedFetch(`${API_BASE}/orders/${encodeURIComponent(orderId)}`);
+        
+        if (!response.ok) {
+            if (response.status === 404) {
+                showNotification('Error', 'Order not found', 'error');
+            } else if (response.status === 401) {
+                showNotification('Error', 'Session expired. Please login again.', 'error');
+                saveSessionId(null);
+                showLogin();
+            } else {
+                showNotification('Error', `Failed to load order: ${response.status}`, 'error');
+            }
+            return;
+        }
+
         const data = await response.json();
 
         if (!data.success || !data.order) {
-            showNotification('Error', 'Order not found', 'error');
+            showNotification('Error', data.error || 'Order not found', 'error');
+            console.error('Order not found:', data);
             return;
         }
 

@@ -1673,8 +1673,29 @@ class GloriaFoodWebhookServer {
       try {
         const orderId = req.params.orderId;
         const { ready_for_pickup } = req.body;
+        const user = getCurrentUser(req);
         
-        const order = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId));
+        // Get order with user filtering
+        let order = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId, user?.userId));
+        
+        // If order not found and user is logged in, try to find order with NULL user_id that matches user's merchants
+        if (!order && user?.userId) {
+          try {
+            const nullUserOrder = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId, undefined));
+            
+            if (nullUserOrder && (nullUserOrder as any).user_id === null && nullUserOrder.store_id) {
+              const userMerchants = await this.handleAsync(this.database.getAllMerchants(user.userId));
+              const userStoreIds = userMerchants.map(m => m.store_id).filter(Boolean);
+              
+              if (userStoreIds.includes(nullUserOrder.store_id)) {
+                order = nullUserOrder;
+              }
+            }
+          } catch (merchantError: any) {
+            console.error('Error checking user merchants for order lookup:', merchantError);
+          }
+        }
+        
         if (!order) {
           return res.status(404).json({ success: false, error: 'Order not found' });
         }
@@ -1806,16 +1827,22 @@ class GloriaFoodWebhookServer {
             // Use database method if available
             await this.handleAsync(db.updateOrderReadyForPickup(orderId, ready_for_pickup ? new Date().toISOString() : null));
           } else {
-            // Fallback: update only the ready_for_pickup field in the order object
-            const updatedOrder = {
-              ...order,
-              ready_for_pickup: ready_for_pickup ? new Date().toISOString() : null
-            };
-            await this.handleAsync(this.database.insertOrUpdateOrder(updatedOrder as any));
+            // Fallback: use direct UPDATE query to avoid creating duplicates
+            const client = await db.pool.connect();
+            try {
+              await client.query(
+                `UPDATE orders SET ready_for_pickup = $1, updated_at = NOW() WHERE gloriafood_order_id = $2`,
+                [ready_for_pickup ? new Date().toISOString() : null, orderId]
+              );
+              client.release();
+            } catch (dbError: any) {
+              client.release();
+              throw dbError;
+            }
           }
           
-          // Fetch updated order
-          const updated = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId));
+          // Fetch updated order (with user filtering)
+          const updated = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId, user?.userId));
           if (updated) {
             res.json({ success: true, order: updated });
           } else {
