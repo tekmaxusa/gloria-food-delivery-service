@@ -4872,6 +4872,11 @@ async function saveDispatchTimeWindow() {
             // Store in minutes
             await saveSetting('dispatchTimeWindow', value.toString());
             showNotification('Success', `Dispatch time window updated to ${value} minutes`, 'success');
+            
+            // Refresh orders display to apply new dispatch window immediately
+            if (typeof filterAndDisplayOrders === 'function' && allOrders.length > 0) {
+                filterAndDisplayOrders();
+            }
         } else {
             showNotification('Error', 'Please enter a valid number (1-1440 minutes)', 'error');
         }
@@ -4893,6 +4898,11 @@ function saveDispatchSettings() {
     }
 
     showNotification('Success', 'Dispatch settings saved successfully', 'success');
+    
+    // Refresh orders display to apply new dispatch window immediately
+    if (typeof filterAndDisplayOrders === 'function' && allOrders.length > 0) {
+        filterAndDisplayOrders();
+    }
 }
 
 function cancelDispatchSettings() {
