@@ -7006,13 +7006,27 @@ async function viewOrderDetails(orderId) {
 
         const data = await response.json();
 
-        if (!data.success || !data.order) {
+        if (!data.success) {
             showNotification('Error', data.error || 'Order not found', 'error');
-            console.error('Order not found:', data);
+            console.error('Order API error:', data);
+            return;
+        }
+
+        if (!data.order) {
+            showNotification('Error', 'Order data not found in response', 'error');
+            console.error('Order not found in response:', data);
             return;
         }
 
         const order = data.order;
+        
+        // Log for debugging
+        console.log('Order details loaded:', {
+            orderId: orderId,
+            gloriafood_order_id: order.gloriafood_order_id,
+            id: order.id,
+            status: order.status
+        });
 
         // Parse raw_data for additional details
         let rawData = {};
@@ -7754,27 +7768,48 @@ async function viewOrderDetails(orderId) {
         // Insert modal into body
         document.body.insertAdjacentHTML('beforeend', modalHTML);
 
-        const modal = document.getElementById('orderDetailsModal');
-        const closeBtn = document.getElementById('closeOrderDetailsModal');
-
-        // Close modal function
-        const closeModal = () => {
-            modal.remove();
-        };
-
-        // Close handlers
-        closeBtn.addEventListener('click', closeModal);
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) closeModal();
-        });
-
-        // Close on Escape key
-        document.addEventListener('keydown', function escapeHandler(e) {
-            if (e.key === 'Escape' && modal && document.body.contains(modal)) {
-                closeModal();
-                document.removeEventListener('keydown', escapeHandler);
+        // Wait a bit for DOM to update
+        setTimeout(() => {
+            const modal = document.getElementById('orderDetailsModal');
+            const closeBtn = document.getElementById('closeOrderDetailsModal');
+            
+            if (!modal) {
+                console.error('Modal element not found after insertion');
+                showNotification('Error', 'Failed to display order details modal', 'error');
+                return;
             }
-        });
+
+            // Show modal (ensure it's visible)
+            modal.style.display = 'flex';
+            modal.style.alignItems = 'center';
+            modal.style.justifyContent = 'center';
+
+            // Close modal function
+            const closeModal = () => {
+                if (modal && document.body.contains(modal)) {
+                    modal.style.display = 'none';
+                    setTimeout(() => modal.remove(), 300); // Remove after fade out
+                }
+            };
+
+            // Close handlers
+            if (closeBtn) {
+                closeBtn.addEventListener('click', closeModal);
+            }
+            
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) closeModal();
+            });
+
+            // Close on Escape key
+            const escapeHandler = (e) => {
+                if (e.key === 'Escape' && modal && document.body.contains(modal)) {
+                    closeModal();
+                    document.removeEventListener('keydown', escapeHandler);
+                }
+            };
+            document.addEventListener('keydown', escapeHandler);
+        }, 10);
 
     } catch (error) {
         console.error('Error loading order details:', error);
