@@ -1735,7 +1735,7 @@ class GloriaFoodWebhookServer {
           
           if (doorDashId) {
             // Order already has DoorDash delivery - notify DoorDash that it's ready for pickup
-            // Cancel post-acceptance schedule since we're calling DoorDash now
+            // Cancel post-acceptance schedule since DoorDash was already called
             this.cancelPostAcceptanceSchedule(orderId);
             
             try {
@@ -1757,10 +1757,12 @@ class GloriaFoodWebhookServer {
           if (!doorDashId) {
             // Cancel any scheduled delivery since we're sending immediately
             this.deliveryScheduler?.cancel(orderId, 'ready-for-pickup-manual-assign');
-            // Cancel post-acceptance schedule if it exists
-            this.cancelPostAcceptanceSchedule(orderId);
+            // DON'T cancel post-acceptance schedule - let it run but it will be bypassed
+            // The automatic 20-25 minute schedule will check if sent_to_doordash is true and skip if it is
+            // This way the automatic schedule is still there but will be bypassed if DoorDash was already called
             
             console.log(chalk.blue(`🚚 Order #${orderId} marked as ready - assigning DoorDash driver immediately...`));
+            console.log(chalk.gray(`   Note: Automatic 20-25 minute schedule will still run but will be bypassed if DoorDash call succeeds`));
             
             try {
               // Prepare order data for DoorDash
@@ -1796,12 +1798,14 @@ class GloriaFoodWebhookServer {
                 if (doorDashResult.tracking_url) {
                   console.log(chalk.gray(`   Tracking URL: ${doorDashResult.tracking_url}`));
                 }
+                // Automatic 20-25 minute schedule will still run but will check sent_to_doordash and skip
               } else {
                 console.log(chalk.yellow(`⚠️  Failed to send order #${orderId} to DoorDash. Order may not be a delivery type or DoorDash may be unavailable.`));
+                // If DoorDash call failed, keep the automatic schedule active so it can try again
               }
             } catch (assignError: any) {
               console.error(chalk.red(`❌ Error assigning DoorDash driver for order #${orderId}: ${assignError.message}`));
-              // Continue with update even if DoorDash assignment fails
+              // If DoorDash call failed, keep the automatic schedule active so it can try again
             }
           }
         }
