@@ -3128,16 +3128,87 @@ function editField(fieldId, fieldLabel, fieldType) {
     const fieldElement = document.getElementById(fieldId);
     if (!fieldElement) return;
 
-    const currentValue = fieldElement.textContent;
-    const newValue = prompt(`Enter new ${fieldLabel}:`, currentValue);
+    const currentValue = fieldElement.textContent.trim();
+    
+    // Create modal similar to new order modal
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Edit ${fieldLabel}</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="editFieldForm">
+                    <div class="form-group">
+                        <label>${fieldLabel}</label>
+                        ${fieldType === 'tel' 
+                            ? `<input type="tel" id="editFieldInput" name="value" value="${escapeHtml(currentValue)}" required>`
+                            : fieldType === 'email'
+                            ? `<input type="email" id="editFieldInput" name="value" value="${escapeHtml(currentValue)}" required>`
+                            : fieldType === 'password'
+                            ? `<input type="password" id="editFieldInput" name="value" placeholder="Enter new ${fieldLabel}" required>`
+                            : `<input type="text" id="editFieldInput" name="value" value="${escapeHtml(currentValue)}" required>`
+                        }
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+                        <button type="submit" class="btn-primary">Save Changes</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    `;
 
-    if (newValue !== null && newValue.trim() !== '') {
-        // Update the field
-        fieldElement.textContent = newValue.trim();
+    document.body.appendChild(modal);
 
-        // TODO: Save to backend API
-        showNotification('Success', `${fieldLabel} updated successfully`, 'success');
-    }
+    // Focus on input
+    setTimeout(() => {
+        const input = modal.querySelector('#editFieldInput');
+        if (input) {
+            input.focus();
+            input.select();
+        }
+    }, 100);
+
+    // Close modal on X button
+    modal.querySelector('.modal-close').addEventListener('click', () => {
+        modal.remove();
+    });
+
+    // Close modal on overlay click
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            modal.remove();
+        }
+    });
+
+    // Handle form submission
+    modal.querySelector('#editFieldForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        const newValue = formData.get('value')?.toString().trim() || '';
+
+        if (newValue && newValue !== currentValue) {
+            // Update the field
+            fieldElement.textContent = newValue;
+
+            // TODO: Save to backend API
+            showNotification('Success', `${fieldLabel} updated successfully`, 'success');
+        }
+        
+        modal.remove();
+    });
+
+    // Close on Escape key
+    const escapeHandler = (e) => {
+        if (e.key === 'Escape' && document.body.contains(modal)) {
+            modal.remove();
+            document.removeEventListener('keydown', escapeHandler);
+        }
+    };
+    document.addEventListener('keydown', escapeHandler);
 }
 
 // Toggle API Key visibility
