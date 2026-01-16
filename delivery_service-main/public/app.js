@@ -3704,7 +3704,22 @@ async function getBusinessSettingsContent() {
 // Get Dispatch Settings content
 async function getDispatchSettingsContent() {
     const autoAssign = localStorage.getItem('dispatchAutoAssign') === 'true';
-    const dispatchTimeWindow = localStorage.getItem('dispatchTimeWindow') || '1';
+    // Get dispatch time window - handle both old format (hours) and new format (minutes)
+    let dispatchTimeWindowMinutes = localStorage.getItem('dispatchTimeWindow');
+    if (!dispatchTimeWindowMinutes) {
+        dispatchTimeWindowMinutes = '60'; // Default to 60 minutes
+    } else {
+        // Convert old format (hours) to new format (minutes) if needed
+        const value = parseFloat(dispatchTimeWindowMinutes);
+        if (value <= 24 && value >= 0.5) {
+            // Likely old format in hours, convert to minutes
+            dispatchTimeWindowMinutes = Math.round(value * 60).toString();
+            // Save converted value
+            localStorage.setItem('dispatchTimeWindow', dispatchTimeWindowMinutes);
+            saveSetting('dispatchTimeWindow', dispatchTimeWindowMinutes);
+        }
+    }
+    const dispatchTimeWindow = dispatchTimeWindowMinutes;
 
     return `
         <h1 class="settings-content-title">Dispatch settings</h1>
@@ -3726,11 +3741,11 @@ async function getDispatchSettingsContent() {
         <!-- Dispatch time window Section -->
         <div class="driver-settings-section">
             <h3 class="settings-section-subtitle">Dispatch time window</h3>
-            <p class="settings-instruction-text">This time is used to indicate when a scheduled order will be put in the current order tab for dispatch. If this time is 1 hours, it means when the required delivery time is within 1 hours window, this order will be moved to the current order tab for dispatch.</p>
+            <p class="settings-instruction-text">This time is used to indicate when a scheduled order will be put in the current order tab for dispatch. If this time is 60 minutes, it means when the required delivery time is within 60 minutes window, this order will be moved to the current order tab for dispatch.</p>
             
             <div class="driver-time-input">
-                <input type="number" class="business-input" id="dispatchTimeWindowInput" value="${dispatchTimeWindow}" min="0.5" max="24" step="0.5" style="width: 100px; display: inline-block;">
-                <span style="margin-left: 8px; color: #475569;">hours</span>
+                <input type="number" class="business-input" id="dispatchTimeWindowInput" value="${Math.round(parseFloat(dispatchTimeWindow) * 60)}" min="1" max="1440" step="1" style="width: 100px; display: inline-block;">
+                <span style="margin-left: 8px; color: #475569;">minutes</span>
                 <button class="btn-primary" onclick="saveDispatchTimeWindow()" style="margin-left: 16px; padding: 8px 16px;">Save</button>
             </div>
         </div>
@@ -4852,12 +4867,13 @@ async function toggleDispatchSetting(setting, enabled) {
 async function saveDispatchTimeWindow() {
     const input = document.getElementById('dispatchTimeWindowInput');
     if (input) {
-        const value = parseFloat(input.value);
-        if (!isNaN(value) && value >= 0.5 && value <= 24) {
+        const value = parseInt(input.value);
+        if (!isNaN(value) && value >= 1 && value <= 1440) {
+            // Store in minutes
             await saveSetting('dispatchTimeWindow', value.toString());
-            showNotification('Success', 'Dispatch time window updated', 'success');
+            showNotification('Success', `Dispatch time window updated to ${value} minutes`, 'success');
         } else {
-            showNotification('Error', 'Please enter a valid number (0.5-24)', 'error');
+            showNotification('Error', 'Please enter a valid number (1-1440 minutes)', 'error');
         }
     }
 }
@@ -4866,11 +4882,13 @@ async function saveDispatchTimeWindow() {
 function saveDispatchSettings() {
     // Save all dispatch settings
     // Auto-assign is already saved via toggleDispatchSetting
-    const dispatchTimeWindow = document.getElementById('dispatchTimeWindowInput')?.value || '1';
+    const dispatchTimeWindow = document.getElementById('dispatchTimeWindowInput')?.value || '60';
     if (dispatchTimeWindow) {
-        const value = parseFloat(dispatchTimeWindow);
-        if (!isNaN(value) && value >= 0.5 && value <= 24) {
+        const value = parseInt(dispatchTimeWindow);
+        if (!isNaN(value) && value >= 1 && value <= 1440) {
+            // Store in minutes
             localStorage.setItem('dispatchTimeWindow', dispatchTimeWindow);
+            saveSetting('dispatchTimeWindow', dispatchTimeWindow);
         }
     }
 
@@ -5733,7 +5751,9 @@ function filterAndDisplayOrders() {
         // History = ALL orders - no filtering needed
     } else if (currentStatusFilter === 'current') {
         // Current = all active orders, BUT respect dispatch time window for scheduled orders
-        const dispatchTimeWindow = parseFloat(localStorage.getItem('dispatchTimeWindow') || '1');
+        // dispatchTimeWindow is now stored in minutes, convert to hours for calculation
+        const dispatchTimeWindowMinutes = parseInt(localStorage.getItem('dispatchTimeWindow') || '60');
+        const dispatchTimeWindowHours = dispatchTimeWindowMinutes / 60; // Convert minutes to hours for calculation
 
         filtered = filtered.filter(order => {
             const status = (order.status || '').toUpperCase();
@@ -5765,12 +5785,12 @@ function filterAndDisplayOrders() {
                     if (scheduledTime) {
                         const scheduledDate = new Date(scheduledTime);
                         const now = new Date();
-                        // Difference in hours
-                        const hoursDiff = (scheduledDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+                        // Difference in minutes (more precise)
+                        const minutesDiff = (scheduledDate.getTime() - now.getTime()) / (1000 * 60);
 
-                        // If scheduled time is more than dispatchTimeWindow hours in future, hide from Current
+                        // If scheduled time is more than dispatchTimeWindow minutes in future, hide from Current
                         // (Allow a 15 min buffer where we might show it slightly early or if time is very close)
-                        if (hoursDiff > dispatchTimeWindow) {
+                        if (minutesDiff > dispatchTimeWindowMinutes) {
                             return false;
                         }
                     }
