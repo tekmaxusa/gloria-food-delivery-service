@@ -62,19 +62,24 @@ function authenticatedFetch(url, options = {}) {
             return Promise.reject(new Error('Session expired. Please login again.'));
         }
         
-        // Show error notification for other HTTP errors
+        // Show error notification for other HTTP errors (only if on dashboard)
         if (!response.ok && response.status >= 400 && response.status !== 401) {
             const errorMsg = `Request failed: ${response.status} ${response.statusText}`;
-            showNotification('API Error', errorMsg, 'error');
+            // Only show notification if on dashboard
+            if (isOnDashboard()) {
+                showNotification('API Error', errorMsg, 'error');
+            }
         }
         
         return response;
     }).catch(error => {
-        // Show network/connection errors
-        if (error.message && (error.message.includes('fetch') || error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
-            showNotification('Connection Error', 'Unable to connect to server. Please check your connection.', 'error');
-        } else if (error.message && !error.message.includes('Session expired')) {
-            showNotification('Error', error.message || 'An unexpected error occurred', 'error');
+        // Show network/connection errors (only if on dashboard)
+        if (isOnDashboard()) {
+            if (error.message && (error.message.includes('fetch') || error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
+                showNotification('Connection Error', 'Unable to connect to server. Please check your connection.', 'error');
+            } else if (error.message && !error.message.includes('Session expired')) {
+                showNotification('Error', error.message || 'An unexpected error occurred', 'error');
+            }
         }
         // Re-throw the error so callers can handle it if needed
         throw error;
@@ -134,6 +139,9 @@ function showLogin() {
 
     if (authContainer) authContainer.classList.remove('hidden');
     if (dashboardContainer) dashboardContainer.classList.add('hidden');
+
+    // Stop auto-refresh when on login page
+    stopAutoRefresh();
 
     // Make sure login form is active
     const loginForm = document.getElementById('loginForm');
@@ -1056,10 +1064,6 @@ function displayIntegrations(merchants) {
                             `<button onclick="copyApiKey('${escapeHtml(merchant.store_id)}')" class="btn-secondary" 
                                      style="padding: 12px 20px; border-radius: 6px; border: 1px solid #ddd; background: #fff; color: #333; cursor: pointer; white-space: nowrap;">
                                 Copy API Key
-                            </button>
-                            <button onclick="regenerateApiKey('${escapeHtml(merchant.store_id)}')" class="btn-secondary" 
-                                     style="padding: 12px 20px; border-radius: 6px; border: 1px solid #ddd; background: #fff; color: #333; cursor: pointer; white-space: nowrap;">
-                                Regenerate
                             </button>` :
                             `<button onclick="generateApiKey('${escapeHtml(merchant.store_id)}')" class="btn-primary" 
                                      style="padding: 12px 20px; border-radius: 6px; background: #10b981; border: none; color: #fff; cursor: pointer; white-space: nowrap;">
@@ -1128,13 +1132,6 @@ async function generateApiKey(storeId) {
     }
 }
 
-// Regenerate API key
-async function regenerateApiKey(storeId) {
-    if (!confirm('Are you sure you want to regenerate this API key? The old key will no longer work.')) {
-        return;
-    }
-    await generateApiKey(storeId);
-}
 
 // Load webhook URL from API
 async function loadWebhookUrl() {
@@ -1161,7 +1158,6 @@ async function loadWebhookUrl() {
 // Make functions globally available
 window.copyApiKey = copyApiKey;
 window.generateApiKey = generateApiKey;
-window.regenerateApiKey = regenerateApiKey;
 
 // Load merchants from API (legacy)
 async function loadMerchants() {
@@ -6580,6 +6576,11 @@ function createOrderRow(order) {
 
 // Check for new orders and show notifications
 function checkForNewOrders(orders) {
+    // Only check for new orders if user is on dashboard
+    if (!isOnDashboard()) {
+        return;
+    }
+    
     const currentOrderIds = new Set(orders.map(o => o.gloriafood_order_id || o.id));
 
     // Find new orders
@@ -6599,7 +6600,7 @@ function checkForNewOrders(orders) {
             const totalPrice = formatCurrency(order.total_price || 0, order.currency || 'USD');
             const message = `${customerName} - ${totalPrice}`;
 
-            // Show toast pop-up notification
+            // Show toast pop-up notification (will check if on dashboard internally)
             showNotification(`New Order #${orderId}`, message, 'info');
 
             // Add to notification panel
@@ -6763,6 +6764,24 @@ if (!document.getElementById('toastStyles')) {
     document.head.appendChild(style);
 }
 
+// Check if user is on dashboard (not login page)
+function isOnDashboard() {
+    const dashboardContainer = document.getElementById('dashboardContainer');
+    const authContainer = document.getElementById('authContainer');
+    
+    // Check if dashboard is visible and auth is hidden
+    if (dashboardContainer && authContainer) {
+        return !dashboardContainer.classList.contains('hidden') && authContainer.classList.contains('hidden');
+    }
+    
+    // Fallback: check if dashboard container exists and is visible
+    if (dashboardContainer) {
+        return !dashboardContainer.classList.contains('hidden');
+    }
+    
+    return false;
+}
+
 // Show notification (shows toast pop-up AND adds to notification panel)
 function showNotification(title, message, type = 'success') {
     // Determine type if passed as boolean (backward compatibility)
@@ -6777,10 +6796,12 @@ function showNotification(title, message, type = 'success') {
         notificationType = 'success';
     }
     
-    // Show toast pop-up
-    showToast(title, message, notificationType, notificationType === 'error' ? 7000 : 5000);
+    // Only show toast pop-up if user is on dashboard (not login page)
+    if (isOnDashboard()) {
+        showToast(title, message, notificationType, notificationType === 'error' ? 7000 : 5000);
+    }
     
-    // Also add to notification panel
+    // Always add to notification panel (will be visible when user logs in)
     addNotification(title, message, notificationType);
 }
 
