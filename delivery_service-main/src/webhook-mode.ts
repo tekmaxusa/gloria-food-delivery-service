@@ -2537,10 +2537,12 @@ class GloriaFoodWebhookServer {
       }
     });
 
-    // Get all users endpoint
+    // Get all users endpoint - only show users who share merchants with current user
     this.app.get('/api/auth/users', async (req: Request, res: Response) => {
       try {
-        const users = await this.handleAsync(this.database.getAllUsers());
+        const user = getCurrentUser(req);
+        // Only return users who share at least one merchant with the current user
+        const users = await this.handleAsync(this.database.getAllUsers(user?.userId));
         res.json({ success: true, users });
       } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
