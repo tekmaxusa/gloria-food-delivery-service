@@ -56,12 +56,26 @@ function authenticatedFetch(url, options = {}) {
             saveSessionId(null);
             currentUser = null;
             sessionId = null;
+            showNotification('Session Expired', 'Please login again', 'warning');
             showLogin();
             // Return a rejected promise to prevent further processing
             return Promise.reject(new Error('Session expired. Please login again.'));
         }
+        
+        // Show error notification for other HTTP errors
+        if (!response.ok && response.status >= 400 && response.status !== 401) {
+            const errorMsg = `Request failed: ${response.status} ${response.statusText}`;
+            showNotification('API Error', errorMsg, 'error');
+        }
+        
         return response;
     }).catch(error => {
+        // Show network/connection errors
+        if (error.message && (error.message.includes('fetch') || error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
+            showNotification('Connection Error', 'Unable to connect to server. Please check your connection.', 'error');
+        } else if (error.message && !error.message.includes('Session expired')) {
+            showNotification('Error', error.message || 'An unexpected error occurred', 'error');
+        }
         // Re-throw the error so callers can handle it if needed
         throw error;
     });
@@ -1103,14 +1117,14 @@ async function generateApiKey(storeId) {
         const data = await response.json();
         
         if (data.success) {
-            showNotification('Success', 'API key generated successfully!', 'success');
+            showNotification('API Key Generated', 'API key generated successfully!', 'success');
             loadIntegrations();
         } else {
-            showError(data.error || 'Failed to generate API key');
+            showNotification('Error', data.error || 'Failed to generate API key', 'error');
         }
     } catch (error) {
         console.error('Error generating API key:', error);
-        showError('Error generating API key: ' + error.message);
+        showNotification('Error', 'Error generating API key: ' + (error.message || 'Unknown error'), 'error');
     }
 }
 
@@ -1295,15 +1309,15 @@ async function handleMerchantSubmit(e) {
         const data = await response.json();
 
         if (data.success) {
-            showNotification('Success', editingStoreId ? 'Merchant updated successfully' : 'Merchant added successfully');
+            showNotification('Merchant Saved', editingStoreId ? 'Merchant updated successfully' : 'Merchant added successfully', 'success');
             closeMerchantModal();
             loadMerchants();
         } else {
-            showError(data.error || (editingStoreId ? 'Failed to update merchant' : 'Failed to add merchant'));
+            showNotification('Error', data.error || (editingStoreId ? 'Failed to update merchant' : 'Failed to add merchant'), 'error');
         }
     } catch (error) {
         console.error('Error saving merchant:', error);
-        showError('Error saving merchant: ' + error.message);
+        showNotification('Error', 'Error saving merchant: ' + (error.message || 'Unknown error'), 'error');
     }
 }
 
@@ -1506,6 +1520,7 @@ async function loadDashboardData() {
         }
     } catch (error) {
         console.error('Error loading dashboard data:', error);
+        showNotification('Error', 'Failed to load dashboard data: ' + (error.message || 'Unknown error'), 'error');
     }
 }
 
@@ -6580,9 +6595,14 @@ function checkForNewOrders(orders) {
         // Add notification for each new order
         newOrders.forEach(order => {
             const orderId = order.gloriafood_order_id || order.id;
-            const message = `${order.customer_name || 'Customer'} - ${formatCurrency(order.total_price || 0, order.currency || 'USD')}`;
+            const customerName = order.customer_name || 'Customer';
+            const totalPrice = formatCurrency(order.total_price || 0, order.currency || 'USD');
+            const message = `${customerName} - ${totalPrice}`;
 
-            // Add to notification panel only (no pop-up)
+            // Show toast pop-up notification
+            showNotification(`New Order #${orderId}`, message, 'info');
+
+            // Add to notification panel
             addNotification(`New Order #${orderId}`, message, 'info', orderId);
 
             // Show browser notification (optional - system notification)
@@ -6621,11 +6641,147 @@ function playNotificationSound() {
     }
 }
 
-// Show notification (now only adds to notification panel, no pop-up)
-function showNotification(title, message, isError = false) {
-    // Add to notification panel instead of showing pop-up
-    const type = isError ? 'error' : 'success';
-    addNotification(title, message, type);
+// Toast notification container
+let toastContainer = null;
+
+// Initialize toast container
+function initToastContainer() {
+    if (!toastContainer) {
+        toastContainer = document.createElement('div');
+        toastContainer.id = 'toastContainer';
+        toastContainer.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            pointer-events: none;
+        `;
+        document.body.appendChild(toastContainer);
+    }
+    return toastContainer;
+}
+
+// Show toast notification (pop-up)
+function showToast(title, message, type = 'info', duration = 5000) {
+    const container = initToastContainer();
+    
+    const toast = document.createElement('div');
+    toast.className = `toast-notification toast-${type}`;
+    toast.style.cssText = `
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        padding: 16px 20px;
+        min-width: 320px;
+        max-width: 400px;
+        border-left: 4px solid;
+        pointer-events: auto;
+        animation: slideInRight 0.3s ease-out;
+        position: relative;
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+    `;
+    
+    // Set border color based on type
+    const colors = {
+        success: '#10b981',
+        error: '#ef4444',
+        info: '#3b82f6',
+        warning: '#f59e0b'
+    };
+    toast.style.borderLeftColor = colors[type] || colors.info;
+    
+    // Icon based on type
+    const icons = {
+        success: '✓',
+        error: '✕',
+        info: 'ℹ',
+        warning: '⚠'
+    };
+    
+    toast.innerHTML = `
+        <div style="flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; background: ${colors[type]}20; display: flex; align-items: center; justify-content: center; color: ${colors[type]}; font-weight: bold; font-size: 14px;">
+            ${icons[type] || icons.info}
+        </div>
+        <div style="flex: 1; min-width: 0;">
+            <div style="font-weight: 600; font-size: 14px; color: #0f172a; margin-bottom: 4px;">${escapeHtml(title)}</div>
+            <div style="font-size: 13px; color: #64748b; line-height: 1.4;">${escapeHtml(message)}</div>
+        </div>
+        <button class="toast-close" style="flex-shrink: 0; background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 18px; line-height: 1; padding: 0; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;" onclick="this.parentElement.remove()">×</button>
+    `;
+    
+    container.appendChild(toast);
+    
+    // Auto-remove after duration
+    setTimeout(() => {
+        if (toast.parentElement) {
+            toast.style.animation = 'slideOutRight 0.3s ease-out';
+            setTimeout(() => toast.remove(), 300);
+        }
+    }, duration);
+    
+    // Add click to dismiss
+    toast.addEventListener('click', (e) => {
+        if (e.target.classList.contains('toast-close') || e.target.closest('.toast-close')) {
+            return;
+        }
+        toast.style.animation = 'slideOutRight 0.3s ease-out';
+        setTimeout(() => toast.remove(), 300);
+    });
+}
+
+// Add CSS animations for toast
+if (!document.getElementById('toastStyles')) {
+    const style = document.createElement('style');
+    style.id = 'toastStyles';
+    style.textContent = `
+        @keyframes slideInRight {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        @keyframes slideOutRight {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+// Show notification (shows toast pop-up AND adds to notification panel)
+function showNotification(title, message, type = 'success') {
+    // Determine type if passed as boolean (backward compatibility)
+    let notificationType = type;
+    if (typeof type === 'boolean') {
+        notificationType = type ? 'error' : 'success';
+    } else if (type === 'error' || type === true) {
+        notificationType = 'error';
+    } else if (type === 'info' || type === 'warning') {
+        notificationType = type;
+    } else {
+        notificationType = 'success';
+    }
+    
+    // Show toast pop-up
+    showToast(title, message, notificationType, notificationType === 'error' ? 7000 : 5000);
+    
+    // Also add to notification panel
+    addNotification(title, message, notificationType);
 }
 
 // Show browser notification
@@ -6804,11 +6960,11 @@ async function assignDriver(orderId) {
         const data = await response.json();
 
         if (data.success) {
-            showNotification('Success', data.message || 'Order sent to DoorDash. Driver will be automatically assigned.', 'success');
+            showNotification('DoorDash Driver Assigned', data.message || `Order sent to DoorDash. Driver will be automatically assigned for Order #${orderId}`, 'success');
             // Reload orders to show updated status
             loadOrders();
         } else {
-            showError(data.error || 'Failed to assign driver');
+            showNotification('DoorDash Error', data.error || 'Failed to assign DoorDash driver', 'error');
         }
     } catch (error) {
         console.error('Error assigning driver:', error);
@@ -7642,6 +7798,12 @@ async function deleteOrder(orderId) {
         const response = await authenticatedFetch(`${API_BASE}/orders/${orderId}`, {
             method: 'DELETE'
         });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            showNotification('Error', `Failed to delete order: ${errorData.error || response.statusText}`, 'error');
+            return;
+        }
 
         const data = await response.json();
 
@@ -7671,7 +7833,11 @@ async function toggleReadyForPickup(orderId, isReady) {
         const orderRow = document.querySelector(`tr[data-order-id="${orderId}"]`);
         if (orderRow) {
             // Visual feedback
-            showNotification('Success', `Order #${orderId} marked as ${isReady ? 'ready' : 'not ready'} for pickup`);
+            if (isReady) {
+                showNotification('Order Ready', `Order #${orderId} marked as ready for pickup. DoorDash driver will be assigned.`, 'success');
+            } else {
+                showNotification('Order Updated', `Order #${orderId} marked as not ready for pickup`, 'info');
+            }
         }
 
         // Try to update via API if endpoint exists
@@ -7680,6 +7846,12 @@ async function toggleReadyForPickup(orderId, isReady) {
                 method: 'PUT',
                 body: JSON.stringify({ ready_for_pickup: isReady })
             });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                showNotification('Error', `Failed to update order: ${errorData.error || response.statusText}`, 'error');
+                return;
+            }
 
             const data = await response.json();
             if (data.success) {
