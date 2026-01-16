@@ -5239,6 +5239,19 @@ function hasScheduledDeliveryTime(order) {
         }
     }
 
+    // PRIORITY CHECK: If order has requested_delivery_time, it's scheduled (regardless of time value)
+    // This ensures orders with "request delivery time" go to scheduled category
+    if (rawData.requested_delivery_time || 
+        rawData.requestedDeliveryTime || 
+        rawData.requested_delivery_time_only ||
+        (rawData.delivery && rawData.delivery.requested_delivery_time) ||
+        (rawData.delivery && rawData.delivery.requestedDeliveryTime) ||
+        (rawData.schedule && rawData.schedule.requested_delivery_time) ||
+        (rawData.schedule && rawData.schedule.requestedDeliveryTime)) {
+        order._isScheduled = true;
+        return true;
+    }
+
     // Reduced debug logging for performance
     const orderId = order.gloriafood_order_id || order.id;
 
