@@ -6650,10 +6650,10 @@ function createOrderRow(order) {
     const moreMenu = `
         <div class="dropdown" style="position: relative; display: inline-block;">
             <button class="btn-icon" onclick="toggleOrderMenu('${escapeHtml(String(orderId))}'); event.stopPropagation();" style="color: #6b7280; position: relative; z-index: 10; display: flex; align-items: center; justify-content: center;">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: block;">
-                    <line x1="3" y1="6" x2="21" y2="6" stroke-linecap="round"></line>
-                    <line x1="3" y1="12" x2="21" y2="12" stroke-linecap="round"></line>
-                    <line x1="3" y1="18" x2="21" y2="18" stroke-linecap="round"></line>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: block; margin: 0 auto;">
+                    <line x1="6" y1="7" x2="18" y2="7" stroke-linecap="round"></line>
+                    <line x1="6" y1="12" x2="18" y2="12" stroke-linecap="round"></line>
+                    <line x1="6" y1="17" x2="18" y2="17" stroke-linecap="round"></line>
                 </svg>
             </button>
             <div id="menu-${escapeHtml(String(orderId))}" class="dropdown-menu" style="display: none; position: absolute; right: 0; bottom: 100%; background: white; border: 1px solid #e5e7eb; border-radius: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 10000; min-width: 150px; margin-bottom: 4px;">
