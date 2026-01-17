@@ -276,7 +276,18 @@ function initializeTheme() {
 }
 
 function setTheme(theme) {
-    // Set theme attribute on document root
+    // Check if we're on the auth/login page - always keep it in light mode
+    const authContainer = document.getElementById('authContainer');
+    const isOnAuthPage = authContainer && !authContainer.classList.contains('hidden');
+    
+    if (isOnAuthPage) {
+        // Force light mode on auth page
+        document.documentElement.setAttribute('data-theme', 'light');
+        // Don't save theme change if on auth page
+        return;
+    }
+    
+    // Set theme attribute on document root for dashboard
     document.documentElement.setAttribute('data-theme', theme);
     
     // Save to localStorage
@@ -296,6 +307,14 @@ function setTheme(theme) {
 }
 
 function toggleTheme() {
+    // Don't allow theme toggle on auth page
+    const authContainer = document.getElementById('authContainer');
+    const isOnAuthPage = authContainer && !authContainer.classList.contains('hidden');
+    
+    if (isOnAuthPage) {
+        return; // Don't toggle theme on login page
+    }
+    
     const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
     const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
     setTheme(newTheme);
