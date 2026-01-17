@@ -877,16 +877,16 @@ function showIntegrationsPage() {
     const webhookUrl = `${API_BASE}/webhook`;
     
     mainContainer.innerHTML = `
-        <div style="display: flex; gap: 20px; padding: 20px;">
+        <div class="integrations-container">
             <!-- Left Sidebar -->
-            <div style="width: 280px; background: #f8f9fa; border-radius: 8px; padding: 20px; height: fit-content;">
-                <h2 style="margin: 0 0 8px 0; font-size: 20px; font-weight: 600;">Integrations</h2>
-                <p style="margin: 0 0 24px 0; color: #666; font-size: 14px; line-height: 1.5;">
+            <div class="integrations-sidebar">
+                <h2 class="integrations-title">Integrations</h2>
+                <p class="integrations-description">
                     Connect your online ordering or POS to automatically sync your orders with the system.
                 </p>
                 
-                <div style="margin-bottom: 32px;">
-                    <button id="apiCredentialsBtn" class="btn-primary" style="width: 100%; padding: 12px; font-weight: 600; display: flex; align-items: center; gap: 8px; justify-content: center;">
+                <div class="integrations-actions">
+                    <button id="apiCredentialsBtn" class="btn-primary integrations-btn">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path>
                         </svg>
@@ -894,44 +894,43 @@ function showIntegrationsPage() {
                     </button>
                 </div>
                 
-                <div style="border-top: 1px solid #e0e0e0; padding-top: 20px;">
-                    <h3 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #333;">Current Integrations</h3>
-                    <div id="integrationStats" style="color: #666; font-size: 13px;">
-                        <div style="margin-bottom: 8px;">All: <strong id="totalIntegrations">0</strong></div>
-                        <div style="margin-bottom: 8px;">Online Ordering: <strong id="onlineOrderingCount">0</strong></div>
-                        <div>Active: <strong id="activeCount">0</strong></div>
+                <div class="integrations-stats-section">
+                    <h3 class="integrations-stats-title">Current Integrations</h3>
+                    <div id="integrationStats" class="integrations-stats">
+                        <div class="stat-item">All: <strong id="totalIntegrations">0</strong></div>
+                        <div class="stat-item">Online Ordering: <strong id="onlineOrderingCount">0</strong></div>
+                        <div class="stat-item">Active: <strong id="activeCount">0</strong></div>
                     </div>
                 </div>
             </div>
             
             <!-- Main Content -->
-            <div style="flex: 1;">
+            <div class="integrations-content">
                 <!-- Direct Integrations Section -->
-                <div style="background: white; border-radius: 8px; padding: 24px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                    <h3 style="margin: 0 0 12px 0; font-size: 18px; font-weight: 600;">Direct integrations</h3>
-                    <p style="margin: 0 0 20px 0; color: #666; font-size: 14px; line-height: 1.6;">
+                <div class="integrations-card">
+                    <h3 class="card-title">Direct integrations</h3>
+                    <p class="card-description">
                         Please use your API key to establish a direct integration with our integration partners.
                     </p>
                     
-                    <div id="merchantApiKeys" style="margin-bottom: 20px;">
+                    <div id="merchantApiKeys" class="merchant-keys-container">
                         <!-- Merchant API keys will be loaded here -->
                     </div>
                 </div>
                 
                 <!-- Webhook Setup Section -->
-                <div style="background: white; border-radius: 8px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                    <h3 style="margin: 0 0 12px 0; font-size: 18px; font-weight: 600;">Webhook Setup</h3>
-                    <p style="margin: 0 0 20px 0; color: #666; font-size: 14px; line-height: 1.6;">
+                <div class="integrations-card">
+                    <h3 class="card-title">Webhook Setup</h3>
+                    <p class="card-description">
                         Provide your webhook URL to receive order status updates from GloriaFood. Configure this URL in your GloriaFood dashboard.
                     </p>
                     
-                    <div style="margin-bottom: 12px;">
-                        <label style="display: block; margin-bottom: 8px; font-weight: 500; color: #333;">Webhook URL:</label>
-                        <div style="display: flex; gap: 8px;">
-                            <input type="text" id="webhookUrl" value="${webhookUrl}" readonly 
-                                   style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px; background: #f8f9fa; font-family: monospace; font-size: 13px;">
-                            <button id="copyWebhookBtn" class="btn-secondary" style="padding: 10px 20px; white-space: nowrap;">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline-block; vertical-align: middle; margin-right: 4px;">
+                    <div class="webhook-input-group">
+                        <label class="input-label">Webhook URL:</label>
+                        <div class="input-with-button">
+                            <input type="text" id="webhookUrl" value="${webhookUrl}" readonly class="webhook-input">
+                            <button id="copyWebhookBtn" class="btn-secondary copy-btn">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="copy-icon">
                                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                                     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                                 </svg>
@@ -1081,14 +1080,13 @@ function displayIntegrations(merchants) {
 
     if (merchants.length === 0) {
         container.innerHTML = `
-            <div style="text-align: center; padding: 40px; color: #666;">
-                <p style="margin: 0 0 16px 0;">No integrations found</p>
-                <button class="btn-primary" onclick="document.getElementById('apiCredentialsBtn').click()" 
-                        style="background: #10b981; border: none; padding: 10px 20px; border-radius: 6px; color: white; cursor: pointer;">
+            <div class="no-integrations">
+                <p>No integrations found</p>
+                <button class="btn-primary" onclick="document.getElementById('apiCredentialsBtn').click()">
                     Add Integration
                 </button>
             </div>
-        `;
+`;
         return;
     }
 
@@ -1097,44 +1095,39 @@ function displayIntegrations(merchants) {
         const apiKeyDisplay = hasApiKey ? merchant.api_key : '';
         
         return `
-            <div style="background: #f8f9fa; border-radius: 6px; padding: 20px; margin-bottom: 16px; border: 1px solid #e0e0e0;">
-                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 16px;">
+            <div class="merchant-card">
+                <div class="merchant-header">
                     <div>
-                        <h3 style="margin: 0 0 4px 0; font-size: 16px; font-weight: 600; color: #333;">${escapeHtml(merchant.merchant_name)}</h3>
-                        <p style="margin: 0; color: #666; font-size: 13px;">Store ID: ${escapeHtml(merchant.store_id)}</p>
+                        <h3 class="merchant-name">${escapeHtml(merchant.merchant_name)}</h3>
+                        <p class="merchant-store-id">Store ID: ${escapeHtml(merchant.store_id)}</p>
                     </div>
-                    <span class="status-badge status-${merchant.is_active ? 'active' : 'inactive'}" 
-                          style="padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 500;">
+                    <span class="status-badge status-${merchant.is_active ? 'active' : 'inactive'}">
                         ${merchant.is_active ? 'Active' : 'Inactive'}
                     </span>
                 </div>
                 
-                <div style="margin-bottom: 16px;">
-                    <label style="display: block; margin-bottom: 8px; font-weight: 500; color: #333;">Your API key:</label>
-                    <div style="display: flex; gap: 8px;">
+                <div class="api-key-section">
+                    <label class="api-key-label">Your API key:</label>
+                    <div class="api-key-input-group">
                         <input type="text" id="apiKey_${escapeHtml(merchant.store_id)}" readonly 
                                value="${hasApiKey ? escapeHtml(apiKeyDisplay) : ''}"
-                               style="flex: 1; background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 12px; color: #333; font-size: 14px; font-family: monospace;">
+                               class="api-key-input">
                         ${hasApiKey ? 
-                            `<button onclick="copyApiKey('${escapeHtml(merchant.store_id)}')" class="btn-secondary" 
-                                     style="padding: 12px 20px; border-radius: 6px; border: 1px solid #ddd; background: #fff; color: #333; cursor: pointer; white-space: nowrap;">
+                            `<button onclick="copyApiKey('${escapeHtml(merchant.store_id)}')" class="btn-secondary copy-api-btn">
                                 Copy API Key
                             </button>` :
-                            `<button onclick="generateApiKey('${escapeHtml(merchant.store_id)}')" class="btn-primary" 
-                                     style="padding: 12px 20px; border-radius: 6px; background: #10b981; border: none; color: #fff; cursor: pointer; white-space: nowrap;">
+                            `<button onclick="generateApiKey('${escapeHtml(merchant.store_id)}')" class="btn-primary generate-api-btn">
                                 Generate API Key
                             </button>`
                         }
                     </div>
                 </div>
                 
-                <div style="display: flex; gap: 8px;">
-                    <button onclick="editMerchant('${escapeHtml(merchant.store_id)}')" class="btn-secondary" 
-                            style="flex: 1; padding: 10px; border-radius: 6px; border: 1px solid #ddd; background: #fff; color: #333; cursor: pointer;">
+                <div class="merchant-actions">
+                    <button onclick="editMerchant('${escapeHtml(merchant.store_id)}')" class="btn-secondary edit-merchant-btn">
                         Edit
                     </button>
-                    <button onclick="deleteMerchant('${escapeHtml(merchant.store_id)}', '${escapeHtml(merchant.merchant_name)}')" 
-                            style="padding: 10px 20px; border-radius: 6px; border: 1px solid #ef4444; background: transparent; color: #ef4444; cursor: pointer;">
+                    <button onclick="deleteMerchant('${escapeHtml(merchant.store_id)}', '${escapeHtml(merchant.merchant_name)}')" class="delete-merchant-btn">
                         Delete
                     </button>
                 </div>

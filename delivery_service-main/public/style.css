@@ -237,6 +237,8 @@ body.on-profile-page .nav-link:hover {
 
 .theme-icon {
     transition: opacity 0.3s ease, transform 0.3s ease;
+    stroke: currentColor;
+    fill: none;
 }
 
 [data-theme="dark"] .sun-icon {
@@ -245,16 +247,30 @@ body.on-profile-page .nav-link:hover {
 
 [data-theme="dark"] .moon-icon {
     display: block !important;
+    stroke: #1e293b;
+    fill: #1e293b;
 }
 
 [data-theme="light"] .sun-icon,
 :not([data-theme]) .sun-icon {
     display: block;
+    stroke: currentColor;
+    fill: none;
 }
 
 [data-theme="light"] .moon-icon,
 :not([data-theme]) .moon-icon {
     display: none !important;
+}
+
+/* Ensure theme button icon is visible in dark mode with white header */
+[data-theme="dark"] .icon-btn .theme-icon {
+    color: #1e293b;
+    stroke: #1e293b;
+}
+
+[data-theme="dark"] .icon-btn .moon-icon {
+    fill: #1e293b;
 }
 
 /* Main Container */
@@ -1375,8 +1391,17 @@ body.on-profile-page .nav-link:hover {
 }
 
 .auth-theme-btn:hover {
-    background: var(--bg-tertiary);
+    background: #f1f5f9;
     color: var(--header-text-hover);
+}
+
+[data-theme="dark"] .auth-theme-btn .theme-icon {
+    color: #1e293b;
+    stroke: #1e293b;
+}
+
+[data-theme="dark"] .auth-theme-btn .moon-icon {
+    fill: #1e293b;
 }
 
 /* Split Layout Container */
@@ -2850,4 +2875,256 @@ body.on-profile-page .nav-link:hover {
 .distance-unit-btn.active {
     background: #22c55e;
     color: white;
+}
+
+/* Integrations Page Styles */
+.integrations-container {
+    display: flex;
+    gap: 20px;
+    padding: 20px;
+}
+
+.integrations-sidebar {
+    width: 280px;
+    background: var(--bg-primary);
+    border-radius: 8px;
+    padding: 20px;
+    height: fit-content;
+    border: 1px solid var(--border-color);
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.integrations-title {
+    margin: 0 0 8px 0;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.integrations-description {
+    margin: 0 0 24px 0;
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.integrations-actions {
+    margin-bottom: 32px;
+}
+
+.integrations-btn {
+    width: 100%;
+    padding: 12px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: center;
+}
+
+.integrations-stats-section {
+    border-top: 1px solid var(--border-color);
+    padding-top: 20px;
+}
+
+.integrations-stats-title {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.integrations-stats {
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.stat-item {
+    margin-bottom: 8px;
+}
+
+.integrations-content {
+    flex: 1;
+}
+
+.integrations-card {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px var(--shadow-sm);
+    border: 1px solid var(--border-color);
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.card-title {
+    margin: 0 0 12px 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.card-description {
+    margin: 0 0 20px 0;
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.merchant-keys-container {
+    margin-bottom: 20px;
+}
+
+.no-integrations {
+    text-align: center;
+    padding: 40px;
+    color: var(--text-secondary);
+}
+
+.no-integrations p {
+    margin: 0 0 16px 0;
+}
+
+.merchant-card {
+    background: var(--bg-primary);
+    border-radius: 6px;
+    padding: 20px;
+    margin-bottom: 16px;
+    border: 1px solid var(--border-color);
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.merchant-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    margin-bottom: 16px;
+}
+
+.merchant-name {
+    margin: 0 0 4px 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.merchant-store-id {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.api-key-section {
+    margin-bottom: 16px;
+}
+
+.api-key-label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.api-key-input-group {
+    display: flex;
+    gap: 8px;
+}
+
+.api-key-input {
+    flex: 1;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 12px;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-family: monospace;
+    transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+}
+
+.copy-api-btn,
+.generate-api-btn {
+    padding: 12px 20px;
+    border-radius: 6px;
+    white-space: nowrap;
+}
+
+.generate-api-btn {
+    background: #10b981;
+    border: none;
+    color: #fff;
+}
+
+.generate-api-btn:hover {
+    background: #059669;
+}
+
+.merchant-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.edit-merchant-btn {
+    flex: 1;
+    padding: 10px;
+    border-radius: 6px;
+}
+
+.delete-merchant-btn {
+    padding: 10px 20px;
+    border-radius: 6px;
+    border: 1px solid #ef4444;
+    background: transparent;
+    color: #ef4444;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.delete-merchant-btn:hover {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.webhook-input-group {
+    margin-bottom: 12px;
+}
+
+.input-label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.input-with-button {
+    display: flex;
+    gap: 8px;
+}
+
+.webhook-input {
+    flex: 1;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    font-family: monospace;
+    font-size: 13px;
+    color: var(--text-primary);
+    transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+}
+
+.copy-btn {
+    padding: 10px 20px;
+    white-space: nowrap;
+}
+
+.copy-icon {
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 4px;
+}
+
+.form-hint {
+    color: var(--text-secondary);
+    font-size: 12px;
 }
