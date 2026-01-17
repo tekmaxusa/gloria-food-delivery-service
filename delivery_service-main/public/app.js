@@ -1558,11 +1558,31 @@ async function loadDashboardData() {
             const statsData = await statsResponse.json();
             if (statsData.success) {
                 const stats = statsData.stats;
-                document.getElementById('totalOrders').textContent = stats.orders?.total || 0;
-                document.getElementById('activeOrders').textContent = stats.orders?.active || 0;
-                document.getElementById('completedOrders').textContent = stats.orders?.completed || 0;
-                document.getElementById('totalRevenue').textContent = formatCurrency(stats.revenue?.total || 0, 'USD');
+                
+                // Check if elements exist before setting textContent
+                const totalOrdersEl = document.getElementById('totalOrders');
+                const activeOrdersEl = document.getElementById('activeOrders');
+                const completedOrdersEl = document.getElementById('completedOrders');
+                const totalRevenueEl = document.getElementById('totalRevenue');
+                
+                if (totalOrdersEl) {
+                    totalOrdersEl.textContent = stats.orders?.total || 0;
+                }
+                if (activeOrdersEl) {
+                    activeOrdersEl.textContent = stats.orders?.active || 0;
+                }
+                if (completedOrdersEl) {
+                    completedOrdersEl.textContent = stats.orders?.completed || 0;
+                }
+                if (totalRevenueEl) {
+                    totalRevenueEl.textContent = formatCurrency(stats.revenue?.total || 0, 'USD');
+                }
             }
+        } else if (statsResponse.status === 401) {
+            // Handle 401 Unauthorized - session expired
+            console.warn('Session expired, redirecting to login');
+            showLogin();
+            return;
         }
 
         // Load recent orders
@@ -1577,13 +1597,22 @@ async function loadDashboardData() {
                 console.error('Orders API returned error:', ordersData);
                 displayDashboardOrders([]);
             }
+        } else if (ordersResponse.status === 401) {
+            // Handle 401 Unauthorized - session expired
+            console.warn('Session expired, redirecting to login');
+            showLogin();
+            return;
         } else {
             console.error('Failed to load orders:', ordersResponse.status);
             displayDashboardOrders([]);
         }
     } catch (error) {
         console.error('Error loading dashboard data:', error);
-        showNotification('Error', 'Failed to load dashboard data: ' + (error.message || 'Unknown error'), 'error');
+        // Only show notification if we're still on dashboard page
+        const dashboardContainer = document.getElementById('dashboardContainer');
+        if (dashboardContainer && !dashboardContainer.classList.contains('hidden')) {
+            showNotification('Error', 'Failed to load dashboard data: ' + (error.message || 'Unknown error'), 'error');
+        }
     }
 }
 
