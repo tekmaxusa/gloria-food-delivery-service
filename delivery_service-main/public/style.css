@@ -264,17 +264,44 @@ body.on-profile-page .nav-link:hover {
 }
 
 /* Ensure theme button icon is visible in dark mode with white header */
-[data-theme="dark"] .icon-btn .theme-icon {
+/* Theme button icon styling for dark mode - ensure visibility on white header */
+[data-theme="dark"] .icon-btn#themeToggleBtn {
+    color: #1e293b !important;
+}
+
+[data-theme="dark"] .icon-btn#themeToggleBtn .theme-icon,
+[data-theme="dark"] .icon-btn#themeToggleBtn svg.theme-icon {
+    color: #1e293b !important;
+    stroke: #1e293b !important;
+    fill: none !important;
+}
+
+[data-theme="dark"] .icon-btn#themeToggleBtn .moon-icon,
+[data-theme="dark"] .icon-btn#themeToggleBtn svg.moon-icon {
+    fill: #1e293b !important;
+    stroke: #1e293b !important;
+    color: #1e293b !important;
+}
+
+[data-theme="dark"] .icon-btn#themeToggleBtn .sun-icon,
+[data-theme="dark"] .icon-btn#themeToggleBtn svg.sun-icon {
+    color: #1e293b !important;
+    stroke: #1e293b !important;
+    fill: none !important;
+}
+
+/* Ensure all SVG elements inside theme button are visible */
+[data-theme="dark"] .icon-btn#themeToggleBtn svg {
     color: #1e293b !important;
     stroke: #1e293b !important;
 }
 
-[data-theme="dark"] .icon-btn .moon-icon {
-    fill: #1e293b !important;
-    stroke: #1e293b !important;
+[data-theme="dark"] .icon-btn#themeToggleBtn:hover {
+    background: #f1f5f9;
+    color: #1e293b !important;
 }
 
-[data-theme="dark"] .icon-btn .sun-icon {
+[data-theme="dark"] .icon-btn#themeToggleBtn:hover svg {
     color: #1e293b !important;
     stroke: #1e293b !important;
 }
