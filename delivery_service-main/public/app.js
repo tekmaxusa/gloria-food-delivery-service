@@ -702,7 +702,7 @@ function showOrdersPage() {
                         </svg>
                         <input type="text" id="searchInput" placeholder="Search" class="search-input">
                     </div>
-                    <button class="btn-secondary" id="exportOrdersBtn" style="display: flex; align-items: center; gap: 8px;">
+                    <button class="btn-secondary" id="exportOrdersBtn">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                             <polyline points="7 10 12 15 17 10"></polyline>
