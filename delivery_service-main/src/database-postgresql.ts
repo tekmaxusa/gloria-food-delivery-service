@@ -119,13 +119,23 @@ export class OrderDatabasePostgreSQL {
         console.log(chalk.blue('   🔒 SSL enabled with rejectUnauthorized: false'));
       }
 
+      // Increase timeout for Render databases (free tier can be slow to wake up)
+      const isRender = databaseUrl.includes('render.com') || databaseUrl.includes('dpg-');
+      const connectionTimeout = isRender ? 60000 : 30000; // 60s for Render, 30s for others
+      
       this.pool = new Pool({
         connectionString: fixedUrl,
         ssl: sslConfig,
         max: 10,
         idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 30000, // Increased timeout for cloud databases
+        connectionTimeoutMillis: connectionTimeout, // Increased timeout for Render databases
+        statement_timeout: 60000, // Query timeout
+        query_timeout: 60000, // Query timeout
       });
+      
+      if (isRender) {
+        console.log(chalk.blue(`   ⏱️  Using extended timeout (60s) for Render database`));
+      }
 
       // Set dummy config for logging
       this.config = {
@@ -180,6 +190,10 @@ export class OrderDatabasePostgreSQL {
         console.log(chalk.blue('   🔒 SSL enabled for Render PostgreSQL connection'));
       }
 
+      // Increase timeout for Render databases (free tier can be slow to wake up)
+      const isRender = this.config.host.includes('render.com') || this.config.host.includes('dpg-');
+      const connectionTimeout = isRender ? 60000 : 30000; // 60s for Render, 30s for others
+      
       // Create connection pool
       this.pool = new Pool({
         host: this.config.host,
@@ -190,11 +204,53 @@ export class OrderDatabasePostgreSQL {
         ssl: this.config.ssl ? { rejectUnauthorized: false } : false,
         max: 10,
         idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 30000, // Increased timeout for cloud databases
+        connectionTimeoutMillis: connectionTimeout, // Increased timeout for Render databases
+        statement_timeout: 60000, // Query timeout
+        query_timeout: 60000, // Query timeout
       });
+      
+      if (isRender) {
+        console.log(chalk.blue(`   ⏱️  Using extended timeout (60s) for Render database`));
+      }
     }
 
     this.initializeTables();
+  }
+
+  /**
+   * Retry helper for database operations with exponential backoff
+   * Especially useful for Render databases that may timeout or be slow to wake up
+   */
+  private async retryQuery<T>(
+    operation: () => Promise<T>,
+    operationName: string,
+    maxRetries: number = 3,
+    initialDelay: number = 1000
+  ): Promise<T> {
+    let lastError: any;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await operation();
+      } catch (error: any) {
+        lastError = error;
+        const isTimeout = error.message?.includes('timeout') || 
+                         error.message?.includes('ETIMEDOUT') ||
+                         error.code === 'ETIMEDOUT';
+        
+        if (isTimeout && attempt < maxRetries) {
+          const delay = initialDelay * Math.pow(2, attempt - 1); // Exponential backoff
+          console.log(chalk.yellow(`   ⚠️  ${operationName} timeout (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms...`));
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        
+        // If not a timeout or last attempt, throw immediately
+        throw error;
+      }
+    }
+    
+    throw lastError;
   }
 
   private async initializeTables(): Promise<void> {
@@ -528,12 +584,15 @@ export class OrderDatabasePostgreSQL {
 
                 // Recreate pool with new URL (no sslmode in URL, use Pool ssl option)
                 this.pool.end().catch(() => { });
+                const retryTimeout1 = newUrl.includes('render.com') || newUrl.includes('dpg-') ? 60000 : 30000;
                 this.pool = new Pool({
                   connectionString: newUrl,
                   ssl: { rejectUnauthorized: false },
                   max: 10,
                   idleTimeoutMillis: 30000,
-                  connectionTimeoutMillis: 30000,
+                  connectionTimeoutMillis: retryTimeout1,
+                  statement_timeout: 60000,
+                  query_timeout: 60000,
                 });
                 continue; // Retry connection
               }
@@ -547,12 +606,15 @@ export class OrderDatabasePostgreSQL {
 
                 // Recreate pool with new URL (no sslmode in URL, use Pool ssl option)
                 this.pool.end().catch(() => { });
+                const retryTimeout2 = newUrl.includes('render.com') || newUrl.includes('dpg-') ? 60000 : 30000;
                 this.pool = new Pool({
                   connectionString: newUrl,
                   ssl: { rejectUnauthorized: false },
                   max: 10,
                   idleTimeoutMillis: 30000,
-                  connectionTimeoutMillis: 30000,
+                  connectionTimeoutMillis: retryTimeout2,
+                  statement_timeout: 60000,
+                  query_timeout: 60000,
                 });
                 continue; // Retry connection
               }
@@ -1330,49 +1392,53 @@ export class OrderDatabasePostgreSQL {
   }
 
   async getOrderByGloriaFoodId(orderId: string, userId?: number): Promise<Order | null> {
-    try {
-      const client = await this.pool.connect();
-      // If userId is provided, filter by it. Otherwise, get any order with this ID (for backward compatibility)
-      let query = 'SELECT * FROM orders WHERE gloriafood_order_id = $1';
-      const params: any[] = [orderId];
-      
-      if (userId !== undefined) {
-        query += ' AND user_id = $2';
-        params.push(userId);
-      }
-      
-      const result = await client.query(query, params);
+    return this.retryQuery(async () => {
+      try {
+        const client = await this.pool.connect();
+        // If userId is provided, filter by it. Otherwise, get any order with this ID (for backward compatibility)
+        let query = 'SELECT * FROM orders WHERE gloriafood_order_id = $1';
+        const params: any[] = [orderId];
+        
+        if (userId !== undefined) {
+          query += ' AND user_id = $2';
+          params.push(userId);
+        }
+        
+        const result = await client.query(query, params);
 
-      client.release();
-      return result.rows.length > 0 ? this.mapRowToOrder(result.rows[0]) : null;
-    } catch (error) {
-      console.error('Error getting order:', error);
-      return null;
-    }
+        client.release();
+        return result.rows.length > 0 ? this.mapRowToOrder(result.rows[0]) : null;
+      } catch (error) {
+        console.error('Error getting order:', error);
+        throw error; // Re-throw to trigger retry
+      }
+    }, `getOrderByGloriaFoodId(${orderId})`, 3, 1000).catch(() => null);
   }
 
   async getAllOrders(limit: number = 50, userId?: number): Promise<Order[]> {
-    try {
-      const client = await this.pool.connect();
-      let query = 'SELECT * FROM orders';
-      const params: any[] = [];
-      
-      if (userId !== undefined) {
-        query += ' WHERE user_id = $1';
-        params.push(userId);
-      }
-      
-      query += ' ORDER BY fetched_at DESC LIMIT $' + (params.length + 1);
-      params.push(limit);
-      
-      const result = await client.query(query, params);
+    return this.retryQuery(async () => {
+      try {
+        const client = await this.pool.connect();
+        let query = 'SELECT * FROM orders';
+        const params: any[] = [];
+        
+        if (userId !== undefined) {
+          query += ' WHERE user_id = $1';
+          params.push(userId);
+        }
+        
+        query += ' ORDER BY fetched_at DESC LIMIT $' + (params.length + 1);
+        params.push(limit);
+        
+        const result = await client.query(query, params);
 
-      client.release();
-      return result.rows.map(row => this.mapRowToOrder(row));
-    } catch (error) {
-      console.error('Error getting all orders:', error);
-      return [];
-    }
+        client.release();
+        return result.rows.map(row => this.mapRowToOrder(row));
+      } catch (error) {
+        console.error('Error getting all orders:', error);
+        throw error; // Re-throw to trigger retry
+      }
+    }, `getAllOrders(limit=${limit})`, 3, 1000).catch(() => []);
   }
 
   async getRecentOrders(minutes: number = 60, userId?: number): Promise<Order[]> {
@@ -1427,31 +1493,33 @@ export class OrderDatabasePostgreSQL {
    * Also checks orders with tracking URLs that might be DoorDash orders
    */
   async getPendingDoorDashOrders(limit: number = 100): Promise<Order[]> {
-    try {
-      const client = await this.pool.connect();
-      // Check for orders that have been sent to DoorDash (by any indicator)
-      // Include orders with doordash_order_id, sent_to_doordash flag, or doordash_tracking_url
-      // Also check for tracking URLs in raw_data that might indicate DoorDash orders
-      const result = await client.query(
-        `SELECT * FROM orders 
-         WHERE (
-           doordash_order_id IS NOT NULL 
-           OR sent_to_doordash = TRUE 
-           OR doordash_tracking_url IS NOT NULL
-           OR (raw_data::text LIKE '%doordash%' OR raw_data::text LIKE '%tracking%')
-         )
-           AND status NOT IN ('CANCELLED', 'CANCELED', 'DELIVERED', 'COMPLETED')
-         ORDER BY fetched_at DESC
-         LIMIT $1`,
-        [limit]
-      );
+    return this.retryQuery(async () => {
+      try {
+        const client = await this.pool.connect();
+        // Check for orders that have been sent to DoorDash (by any indicator)
+        // Include orders with doordash_order_id, sent_to_doordash flag, or doordash_tracking_url
+        // Also check for tracking URLs in raw_data that might indicate DoorDash orders
+        const result = await client.query(
+          `SELECT * FROM orders 
+           WHERE (
+             doordash_order_id IS NOT NULL 
+             OR sent_to_doordash = TRUE 
+             OR doordash_tracking_url IS NOT NULL
+             OR (raw_data::text LIKE '%doordash%' OR raw_data::text LIKE '%tracking%')
+           )
+             AND status NOT IN ('CANCELLED', 'CANCELED', 'DELIVERED', 'COMPLETED')
+           ORDER BY fetched_at DESC
+           LIMIT $1`,
+          [limit]
+        );
 
-      client.release();
-      return result.rows.map(row => this.mapRowToOrder(row));
-    } catch (error) {
-      console.error('Error getting pending DoorDash orders:', error);
-      return [];
-    }
+        client.release();
+        return result.rows.map(row => this.mapRowToOrder(row));
+      } catch (error) {
+        console.error('Error getting pending DoorDash orders:', error);
+        throw error; // Re-throw to trigger retry
+      }
+    }, `getPendingDoorDashOrders(limit=${limit})`, 3, 1000).catch(() => []);
   }
 
   async getOrderCount(userId?: number): Promise<number> {
@@ -1878,71 +1946,75 @@ export class OrderDatabasePostgreSQL {
 
   // Statistics methods
   async getDashboardStats(userId?: number): Promise<any> {
-    try {
-      const client = await this.pool.connect();
+    return this.retryQuery(async () => {
+      try {
+        const client = await this.pool.connect();
 
-      let orderStatsQuery = `
-        SELECT 
-          COUNT(*) as total_orders,
-          SUM(CASE WHEN status = 'DELIVERED' THEN 1 ELSE 0 END) as completed_orders,
-          SUM(CASE WHEN status NOT IN ('DELIVERED', 'CANCELLED', 'CANCELED') THEN 1 ELSE 0 END) as active_orders,
-          SUM(CASE WHEN status IN ('CANCELLED', 'CANCELED') THEN 1 ELSE 0 END) as cancelled_orders,
-          SUM(CASE WHEN status NOT IN ('CANCELLED', 'CANCELED') THEN total_price ELSE 0 END) as total_revenue
-        FROM orders`;
-      const orderParams: any[] = [];
-      
-      if (userId !== undefined) {
-        orderStatsQuery += ' WHERE user_id = $1';
-        orderParams.push(userId);
-      }
-
-      const orderStats = await client.query(orderStatsQuery, orderParams);
-
-      let recentOrdersQuery = `
-        SELECT COUNT(*) as count FROM orders 
-        WHERE fetched_at >= NOW() - INTERVAL '24 hours'`;
-      const recentParams: any[] = [];
-      
-      if (userId !== undefined) {
-        recentOrdersQuery += ' AND user_id = $1';
-        recentParams.push(userId);
-      }
-
-      const recentOrders = await client.query(recentOrdersQuery, recentParams);
-
-      const driverStats = await client.query(`
-        SELECT 
-          COUNT(*) as total_drivers,
-          SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_drivers
-        FROM drivers
-      `);
-
-      client.release();
-
-      return {
-        orders: {
-          total: parseInt(orderStats.rows[0]?.total_orders || '0', 10),
-          completed: parseInt(orderStats.rows[0]?.completed_orders || '0', 10),
-          active: parseInt(orderStats.rows[0]?.active_orders || '0', 10),
-          cancelled: parseInt(orderStats.rows[0]?.cancelled_orders || '0', 10),
-          recent_24h: parseInt(recentOrders.rows[0]?.count || '0', 10)
-        },
-        revenue: {
-          total: parseFloat(orderStats.rows[0]?.total_revenue || '0')
-        },
-        drivers: {
-          total: parseInt(driverStats.rows[0]?.total_drivers || '0', 10),
-          active: parseInt(driverStats.rows[0]?.active_drivers || '0', 10)
+        let orderStatsQuery = `
+          SELECT 
+            COUNT(*) as total_orders,
+            SUM(CASE WHEN status = 'DELIVERED' THEN 1 ELSE 0 END) as completed_orders,
+            SUM(CASE WHEN status NOT IN ('DELIVERED', 'CANCELLED', 'CANCELED') THEN 1 ELSE 0 END) as active_orders,
+            SUM(CASE WHEN status IN ('CANCELLED', 'CANCELED') THEN 1 ELSE 0 END) as cancelled_orders,
+            SUM(CASE WHEN status NOT IN ('CANCELLED', 'CANCELED') THEN total_price ELSE 0 END) as total_revenue
+          FROM orders`;
+        const orderParams: any[] = [];
+        
+        if (userId !== undefined) {
+          orderStatsQuery += ' WHERE user_id = $1';
+          orderParams.push(userId);
         }
-      };
-    } catch (error) {
-      console.error('Error getting dashboard stats:', error);
+
+        const orderStats = await client.query(orderStatsQuery, orderParams);
+
+        let recentOrdersQuery = `
+          SELECT COUNT(*) as count FROM orders 
+          WHERE fetched_at >= NOW() - INTERVAL '24 hours'`;
+        const recentParams: any[] = [];
+        
+        if (userId !== undefined) {
+          recentOrdersQuery += ' AND user_id = $1';
+          recentParams.push(userId);
+        }
+
+        const recentOrders = await client.query(recentOrdersQuery, recentParams);
+
+        const driverStats = await client.query(`
+          SELECT 
+            COUNT(*) as total_drivers,
+            SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_drivers
+          FROM drivers
+        `);
+
+        client.release();
+
+        return {
+          orders: {
+            total: parseInt(orderStats.rows[0]?.total_orders || '0', 10),
+            completed: parseInt(orderStats.rows[0]?.completed_orders || '0', 10),
+            active: parseInt(orderStats.rows[0]?.active_orders || '0', 10),
+            cancelled: parseInt(orderStats.rows[0]?.cancelled_orders || '0', 10),
+            recent_24h: parseInt(recentOrders.rows[0]?.count || '0', 10)
+          },
+          revenue: {
+            total: parseFloat(orderStats.rows[0]?.total_revenue || '0')
+          },
+          drivers: {
+            total: parseInt(driverStats.rows[0]?.total_drivers || '0', 10),
+            active: parseInt(driverStats.rows[0]?.active_drivers || '0', 10)
+          }
+        };
+      } catch (error) {
+        console.error('Error getting dashboard stats:', error);
+        throw error; // Re-throw to trigger retry
+      }
+    }, `getDashboardStats(userId=${userId})`, 3, 1000).catch(() => {
       return {
         orders: { total: 0, completed: 0, active: 0, cancelled: 0, recent_24h: 0 },
         revenue: { total: 0 },
         drivers: { total: 0, active: 0 }
       };
-    }
+    });
   }
 
   // Merchant methods
