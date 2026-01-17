@@ -422,12 +422,12 @@ body.on-profile-page .nav-link:hover {
 
 .btn-secondary {
     padding: 10px 18px;
-    background: var(--bg-secondary);
+    background: var(--bg-tertiary);
     border: 1px solid var(--border-color);
     border-radius: 8px;
     font-size: 14px;
     font-weight: 500;
-    color: var(--text-secondary);
+    color: var(--text-primary);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -436,10 +436,21 @@ body.on-profile-page .nav-link:hover {
     white-space: nowrap;
 }
 
+[data-theme="dark"] .btn-secondary {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    color: #ffffff;
+}
+
 .btn-secondary:hover {
     background: var(--bg-primary);
     border-color: var(--border-color);
     color: var(--text-primary);
+}
+
+[data-theme="dark"] .btn-secondary:hover {
+    background: var(--bg-secondary);
+    color: #ffffff;
 }
 
 .btn-primary {
@@ -467,9 +478,9 @@ body.on-profile-page .nav-link:hover {
 }
 
 .btn-danger {
-    background: #ef4444;
-    color: white;
-    border: none;
+    background: transparent;
+    color: #ef4444;
+    border: 1px solid #ef4444;
     padding: 10px 20px;
     border-radius: 8px;
     font-size: 14px;
@@ -481,14 +492,27 @@ body.on-profile-page .nav-link:hover {
     gap: 8px;
 }
 
+[data-theme="dark"] .btn-danger {
+    background: var(--bg-tertiary);
+    color: #ef4444;
+    border: 1px solid #ef4444;
+}
+
 .btn-danger:hover {
-    background: #dc2626;
+    background: rgba(239, 68, 68, 0.1);
+    border-color: #dc2626;
+    color: #dc2626;
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+[data-theme="dark"] .btn-danger:hover {
+    background: var(--bg-secondary);
+    color: #ef4444;
+    border-color: #ef4444;
 }
 
 .btn-danger:active {
-    background: #b91c1c;
+    background: rgba(239, 68, 68, 0.2);
     transform: translateY(0);
 }
 
@@ -2385,23 +2409,26 @@ body.on-profile-page .nav-link:hover {
 .settings-page-container {
     display: flex;
     min-height: calc(100vh - 80px);
-    background: #ffffff;
+    background: var(--bg-primary);
+    transition: background-color 0.3s ease;
 }
 
 .settings-sidebar {
     width: 280px;
-    background: #f8fafc;
-    border-right: 1px solid #e2e8f0;
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border-color);
     padding: 24px 0;
     flex-shrink: 0;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
 .settings-sidebar-title {
     font-size: 20px;
     font-weight: 600;
-    color: #0f172a;
+    color: var(--text-primary);
     padding: 0 24px;
     margin-bottom: 24px;
+    transition: color 0.3s ease;
 }
 
 .settings-menu {
@@ -2416,7 +2443,7 @@ body.on-profile-page .nav-link:hover {
     align-items: center;
     gap: 12px;
     padding: 12px 16px;
-    color: #475569;
+    color: var(--text-secondary);
     cursor: pointer;
     border-radius: 8px;
     transition: all 0.2s ease;
@@ -2426,28 +2453,28 @@ body.on-profile-page .nav-link:hover {
 }
 
 .settings-menu-item:hover {
-    background: #f1f5f9;
-    color: #0f172a;
+    background: var(--bg-primary);
+    color: var(--text-primary);
 }
 
 .settings-menu-item.active {
-    background: #dcfce7;
-    color: #166534;
+    background: var(--bg-tertiary);
+    color: var(--success-color);
 }
 
 .settings-menu-item.active svg {
-    color: #166534;
+    color: var(--success-color);
 }
 
 .settings-menu-item svg {
-    color: #64748b;
+    color: var(--text-secondary);
     flex-shrink: 0;
     width: 20px;
     height: 20px;
 }
 
 .settings-menu-item:hover svg {
-    color: #0f172a;
+    color: var(--text-primary);
 }
 
 .settings-menu-item span:first-of-type {
@@ -2469,25 +2496,30 @@ body.on-profile-page .nav-link:hover {
     flex: 1;
     padding: 32px;
     overflow-y: auto;
+    background: var(--bg-primary);
+    transition: background-color 0.3s ease;
 }
 
 .settings-content-title {
     font-size: 28px;
     font-weight: 600;
-    color: #0f172a;
+    color: var(--text-primary);
     margin-bottom: 24px;
+    transition: color 0.3s ease;
 }
 
 .settings-content-body {
-    color: #475569;
+    color: var(--text-secondary);
     line-height: 1.6;
+    transition: color 0.3s ease;
 }
 
 /* Business Settings Styles */
 .business-settings-section {
     margin-bottom: 40px;
     padding-bottom: 32px;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid var(--border-color);
+    transition: border-color 0.3s ease;
 }
 
 .business-settings-section:last-child {
@@ -2497,15 +2529,17 @@ body.on-profile-page .nav-link:hover {
 .settings-section-subtitle {
     font-size: 18px;
     font-weight: 600;
-    color: #0f172a;
+    color: var(--text-primary);
     margin-bottom: 16px;
+    transition: color 0.3s ease;
 }
 
 .settings-instruction-text {
     font-size: 14px;
-    color: #64748b;
+    color: var(--text-secondary);
     line-height: 1.6;
     margin-bottom: 24px;
+    transition: color 0.3s ease;
 }
 
 .business-detail-field {
@@ -2515,8 +2549,9 @@ body.on-profile-page .nav-link:hover {
 .business-detail-label {
     font-size: 14px;
     font-weight: 500;
-    color: #475569;
+    color: var(--text-secondary);
     margin-bottom: 8px;
+    transition: color 0.3s ease;
 }
 
 .business-detail-value-container {
@@ -2524,22 +2559,24 @@ body.on-profile-page .nav-link:hover {
     align-items: center;
     justify-content: space-between;
     padding: 12px 16px;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
     border-radius: 8px;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
 .business-detail-value {
     font-size: 15px;
     font-weight: 500;
-    color: #0f172a;
+    color: var(--text-primary);
     flex: 1;
+    transition: color 0.3s ease;
 }
 
 .btn-edit-icon {
     background: transparent;
     border: none;
-    color: #64748b;
+    color: var(--text-secondary);
     cursor: pointer;
     padding: 4px;
     display: flex;
@@ -2550,27 +2587,29 @@ body.on-profile-page .nav-link:hover {
 }
 
 .btn-edit-icon:hover {
-    background: #f1f5f9;
-    color: #0f172a;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
 }
 
 .business-logo-placeholder {
     width: 60px;
     height: 60px;
-    background: #f1f5f9;
-    border: 1px solid #e2e8f0;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #94a3b8;
+    color: var(--text-tertiary);
+    transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
 }
 
 .business-type-tabs {
     display: flex;
     gap: 8px;
     margin-bottom: 32px;
-    border-bottom: 2px solid #e2e8f0;
+    border-bottom: 2px solid var(--border-color);
+    transition: border-color 0.3s ease;
 }
 
 .business-type-tab {
@@ -2581,7 +2620,7 @@ body.on-profile-page .nav-link:hover {
     background: transparent;
     border: none;
     border-bottom: 2px solid transparent;
-    color: #64748b;
+    color: var(--text-secondary);
     font-size: 15px;
     font-weight: 500;
     cursor: pointer;
@@ -2590,7 +2629,7 @@ body.on-profile-page .nav-link:hover {
 }
 
 .business-type-tab:hover {
-    color: #0f172a;
+    color: var(--text-primary);
 }
 
 .business-type-tab.active {
@@ -2616,8 +2655,8 @@ body.on-profile-page .nav-link:hover {
 .business-type-card {
     flex: 1;
     padding: 20px;
-    background: #f8fafc;
-    border: 2px solid #e2e8f0;
+    background: var(--bg-primary);
+    border: 2px solid var(--border-color);
     border-radius: 12px;
     cursor: pointer;
     transition: all 0.2s ease;
@@ -2628,32 +2667,32 @@ body.on-profile-page .nav-link:hover {
 }
 
 .business-type-card:hover {
-    border-color: #cbd5e1;
-    background: #f1f5f9;
+    border-color: var(--border-color);
+    background: var(--bg-tertiary);
 }
 
 .business-type-card.active {
-    background: #dcfce7;
-    border-color: #22c55e;
-    color: #166534;
+    background: var(--bg-tertiary);
+    border-color: var(--success-color);
+    color: var(--success-color);
 }
 
 .business-type-card svg {
-    color: #64748b;
+    color: var(--text-secondary);
 }
 
 .business-type-card.active svg {
-    color: #166534;
+    color: var(--success-color);
 }
 
 .business-type-card span {
     font-size: 15px;
     font-weight: 600;
-    color: #475569;
+    color: var(--text-secondary);
 }
 
 .business-type-card.active span {
-    color: #166534;
+    color: var(--success-color);
 }
 
 .business-input-field {
@@ -2664,24 +2703,25 @@ body.on-profile-page .nav-link:hover {
     display: block;
     font-size: 14px;
     font-weight: 500;
-    color: #475569;
+    color: var(--text-secondary);
     margin-bottom: 8px;
+    transition: color 0.3s ease;
 }
 
 .business-input {
     width: 100%;
     padding: 12px 16px;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     font-size: 15px;
-    color: #0f172a;
-    background: #ffffff;
+    color: var(--text-primary);
+    background: var(--bg-secondary);
     transition: all 0.2s ease;
 }
 
 .business-input:focus {
     outline: none;
-    border-color: #22c55e;
+    border-color: var(--success-color);
     box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
 }
 
@@ -2690,10 +2730,11 @@ body.on-profile-page .nav-link:hover {
     align-items: flex-start;
     justify-content: space-between;
     padding: 20px;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     margin-bottom: 16px;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
 .business-toggle-content {
@@ -2705,23 +2746,26 @@ body.on-profile-page .nav-link:hover {
     display: block;
     font-size: 15px;
     font-weight: 500;
-    color: #0f172a;
+    color: var(--text-primary);
     margin-bottom: 8px;
     cursor: pointer;
+    transition: color 0.3s ease;
 }
 
 .business-toggle-description {
     font-size: 13px;
-    color: #64748b;
+    color: var(--text-secondary);
     line-height: 1.5;
     margin: 0;
+    transition: color 0.3s ease;
 }
 
 /* Driver Settings Styles */
 .driver-settings-section {
     margin-bottom: 40px;
     padding-bottom: 32px;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid var(--border-color);
+    transition: border-color 0.3s ease;
 }
 
 .driver-settings-section:last-child {
@@ -2733,10 +2777,11 @@ body.on-profile-page .nav-link:hover {
     align-items: flex-start;
     justify-content: space-between;
     padding: 20px;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     margin-bottom: 16px;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
 .driver-setting-content {
@@ -2747,15 +2792,17 @@ body.on-profile-page .nav-link:hover {
 .driver-setting-label {
     font-size: 15px;
     font-weight: 500;
-    color: #0f172a;
+    color: var(--text-primary);
     margin-bottom: 8px;
+    transition: color 0.3s ease;
 }
 
 .driver-setting-description {
     font-size: 13px;
-    color: #64748b;
+    color: var(--text-secondary);
     line-height: 1.5;
     margin: 0;
+    transition: color 0.3s ease;
 }
 
 .driver-time-input {
@@ -2767,10 +2814,11 @@ body.on-profile-page .nav-link:hover {
     align-items: center;
     justify-content: space-between;
     padding: 16px 20px;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     margin-bottom: 12px;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
 .driver-payment-content {
@@ -2780,8 +2828,9 @@ body.on-profile-page .nav-link:hover {
 .driver-payment-summary {
     margin-top: 24px;
     padding: 16px;
-    background: #f8fafc;
+    background: var(--bg-primary);
     border-radius: 8px;
+    transition: background-color 0.3s ease;
 }
 
 .btn-upgrade {
@@ -2805,7 +2854,8 @@ body.on-profile-page .nav-link:hover {
     display: flex;
     gap: 8px;
     margin-bottom: 32px;
-    border-bottom: 2px solid #e2e8f0;
+    border-bottom: 2px solid var(--border-color);
+    transition: border-color 0.3s ease;
 }
 
 .third-party-tab {
@@ -2813,7 +2863,7 @@ body.on-profile-page .nav-link:hover {
     background: transparent;
     border: none;
     border-bottom: 2px solid transparent;
-    color: #64748b;
+    color: var(--text-secondary);
     font-size: 15px;
     font-weight: 500;
     cursor: pointer;
@@ -2822,12 +2872,12 @@ body.on-profile-page .nav-link:hover {
 }
 
 .third-party-tab:hover {
-    color: #0f172a;
+    color: var(--text-primary);
 }
 
 .third-party-tab.active {
-    color: #22c55e;
-    border-bottom-color: #22c55e;
+    color: var(--success-color);
+    border-bottom-color: var(--success-color);
 }
 
 .third-party-section {
@@ -2839,10 +2889,11 @@ body.on-profile-page .nav-link:hover {
     align-items: flex-start;
     justify-content: space-between;
     padding: 20px;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     margin-bottom: 16px;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
 .service-card-content {
@@ -2853,15 +2904,17 @@ body.on-profile-page .nav-link:hover {
 .service-name {
     font-size: 16px;
     font-weight: 600;
-    color: #0f172a;
+    color: var(--text-primary);
     margin-bottom: 8px;
+    transition: color 0.3s ease;
 }
 
 .service-description {
     font-size: 14px;
-    color: #64748b;
+    color: var(--text-secondary);
     line-height: 1.5;
     margin: 0;
+    transition: color 0.3s ease;
 }
 
 /* Customer Notification Styles */
@@ -2870,10 +2923,11 @@ body.on-profile-page .nav-link:hover {
     align-items: center;
     justify-content: space-between;
     padding: 16px 20px;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     margin-bottom: 12px;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
 .notification-toggle-content {
@@ -3130,6 +3184,28 @@ body.on-profile-page .nav-link:hover {
     white-space: nowrap;
 }
 
+.copy-api-btn {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .copy-api-btn {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    color: #ffffff;
+}
+
+.copy-api-btn:hover {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .copy-api-btn:hover {
+    background: var(--bg-secondary);
+    color: #ffffff;
+}
+
 .generate-api-btn {
     background: #10b981;
     border: none;
@@ -3149,6 +3225,25 @@ body.on-profile-page .nav-link:hover {
     flex: 1;
     padding: 10px;
     border-radius: 6px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .edit-merchant-btn {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    color: #ffffff;
+}
+
+.edit-merchant-btn:hover {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .edit-merchant-btn:hover {
+    background: var(--bg-secondary);
+    color: #ffffff;
 }
 
 .delete-merchant-btn {
@@ -3161,9 +3256,22 @@ body.on-profile-page .nav-link:hover {
     transition: all 0.2s ease;
 }
 
+[data-theme="dark"] .delete-merchant-btn {
+    background: var(--bg-tertiary);
+    border: 1px solid #ef4444;
+    color: #ef4444;
+}
+
 .delete-merchant-btn:hover {
-    background: #fee2e2;
+    background: rgba(239, 68, 68, 0.1);
     color: #dc2626;
+    border-color: #dc2626;
+}
+
+[data-theme="dark"] .delete-merchant-btn:hover {
+    background: var(--bg-secondary);
+    color: #ef4444;
+    border-color: #ef4444;
 }
 
 .webhook-input-group {
