@@ -31,10 +31,10 @@
     --text-secondary: #cbd5e1;
     --text-tertiary: #94a3b8;
     --border-color: #334155;
-    --header-bg: #0f172a;
-    --header-border: #1e293b;
-    --header-text: #cbd5e1;
-    --header-text-hover: #ffffff;
+    --header-bg: #ffffff;
+    --header-border: #e2e8f0;
+    --header-text: #1e293b;
+    --header-text-hover: #0f172a;
     --accent-color: #60a5fa;
     --accent-hover: #3b82f6;
     --success-color: #22c55e;
@@ -157,13 +157,18 @@ body {
 }
 
 .nav-link:hover {
-    background: var(--bg-tertiary);
+    background: var(--bg-primary);
+    color: var(--header-text-hover);
+}
+
+[data-theme="dark"] .nav-link:hover {
+    background: #f1f5f9;
     color: var(--header-text-hover);
 }
 
 .nav-link.active {
     color: #84cc16;
-    background: #1e293b;
+    background: transparent;
     font-weight: 600;
 }
 
@@ -221,7 +226,12 @@ body.on-profile-page .nav-link:hover {
 }
 
 .icon-btn:hover {
-    background: var(--bg-tertiary);
+    background: var(--bg-primary);
+    color: var(--header-text-hover);
+}
+
+[data-theme="dark"] .icon-btn:hover {
+    background: #f1f5f9;
     color: var(--header-text-hover);
 }
 
