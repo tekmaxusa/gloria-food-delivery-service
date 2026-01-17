@@ -242,13 +242,14 @@ body.on-profile-page .nav-link:hover {
 }
 
 [data-theme="dark"] .sun-icon {
-    display: none;
+    display: none !important;
 }
 
 [data-theme="dark"] .moon-icon {
     display: block !important;
-    stroke: #1e293b;
-    fill: #1e293b;
+    stroke: #1e293b !important;
+    fill: #1e293b !important;
+    color: #1e293b !important;
 }
 
 [data-theme="light"] .sun-icon,
@@ -285,9 +286,16 @@ body.on-profile-page .nav-link:hover {
 
 [data-theme="dark"] .icon-btn#themeToggleBtn .sun-icon,
 [data-theme="dark"] .icon-btn#themeToggleBtn svg.sun-icon {
-    color: #1e293b !important;
+    display: none !important;
+}
+
+/* Ensure moon icon is visible in dark mode */
+[data-theme="dark"] .icon-btn#themeToggleBtn .moon-icon,
+[data-theme="dark"] .icon-btn#themeToggleBtn svg.moon-icon {
+    display: block !important;
+    fill: #1e293b !important;
     stroke: #1e293b !important;
-    fill: none !important;
+    color: #1e293b !important;
 }
 
 /* Ensure all SVG elements inside theme button are visible */

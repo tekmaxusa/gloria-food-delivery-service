@@ -298,11 +298,26 @@ function setTheme(theme) {
     const moonIcons = document.querySelectorAll('.moon-icon');
     
     if (theme === 'dark') {
-        sunIcons.forEach(icon => icon.style.display = 'none');
-        moonIcons.forEach(icon => icon.style.display = 'block');
+        sunIcons.forEach(icon => {
+            icon.style.display = 'none';
+            icon.style.visibility = 'hidden';
+        });
+        moonIcons.forEach(icon => {
+            icon.style.display = 'block';
+            icon.style.visibility = 'visible';
+            icon.style.color = '#1e293b';
+            icon.style.stroke = '#1e293b';
+            icon.style.fill = '#1e293b';
+        });
     } else {
-        sunIcons.forEach(icon => icon.style.display = 'block');
-        moonIcons.forEach(icon => icon.style.display = 'none');
+        sunIcons.forEach(icon => {
+            icon.style.display = 'block';
+            icon.style.visibility = 'visible';
+        });
+        moonIcons.forEach(icon => {
+            icon.style.display = 'none';
+            icon.style.visibility = 'hidden';
+        });
     }
 }
 
