@@ -3,6 +3,7 @@ const API_BASE = window.location.origin;
 const REFRESH_INTERVAL = 5000; // 5 seconds
 let autoRefreshInterval = null;
 let lastOrderIds = new Set();
+let isInitialLoad = true; // Track if this is the first load
 let allOrders = [];
 let currentStatusFilter = '';
 let searchQuery = '';
@@ -2986,6 +2987,8 @@ function handleNewOrder() {
 
 // Notification storage
 let notifications = [];
+// Track which notifications have been shown as popups (to avoid showing old notifications)
+let shownNotificationIds = new Set();
 
 // Handle Profile button
 function handleProfile() {
@@ -6643,14 +6646,14 @@ function createOrderRow(order) {
         </svg>
     ` : '';
 
-    // Three dots menu
+    // Three horizontal lines menu (hamburger icon)
     const moreMenu = `
         <div class="dropdown" style="position: relative; display: inline-block;">
-            <button class="btn-icon" onclick="toggleOrderMenu('${escapeHtml(String(orderId))}'); event.stopPropagation();" style="color: #6b7280; position: relative; z-index: 10;">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="1"></circle>
-                    <circle cx="12" cy="5" r="1"></circle>
-                    <circle cx="12" cy="19" r="1"></circle>
+            <button class="btn-icon" onclick="toggleOrderMenu('${escapeHtml(String(orderId))}'); event.stopPropagation();" style="color: #6b7280; position: relative; z-index: 10; display: flex; align-items: center; justify-content: center;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: block;">
+                    <line x1="3" y1="6" x2="21" y2="6" stroke-linecap="round"></line>
+                    <line x1="3" y1="12" x2="21" y2="12" stroke-linecap="round"></line>
+                    <line x1="3" y1="18" x2="21" y2="18" stroke-linecap="round"></line>
                 </svg>
             </button>
             <div id="menu-${escapeHtml(String(orderId))}" class="dropdown-menu" style="display: none; position: absolute; right: 0; bottom: 100%; background: white; border: 1px solid #e5e7eb; border-radius: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 10000; min-width: 150px; margin-bottom: 4px;">
@@ -6694,6 +6697,13 @@ function checkForNewOrders(orders) {
     
     const currentOrderIds = new Set(orders.map(o => o.gloriafood_order_id || o.id));
 
+    // On initial load, just populate lastOrderIds without showing notifications
+    if (isInitialLoad) {
+        lastOrderIds = new Set(currentOrderIds);
+        isInitialLoad = false;
+        return;
+    }
+
     // Find new orders
     const newOrders = orders.filter(order => {
         const orderId = order.gloriafood_order_id || order.id;
@@ -6711,17 +6721,18 @@ function checkForNewOrders(orders) {
             const totalPrice = formatCurrency(order.total_price || 0, order.currency || 'USD');
             const message = `${customerName} - ${totalPrice}`;
 
-            // Show toast pop-up notification (will check if on dashboard internally)
-            showNotification(`New Order #${orderId}`, message, 'info');
-
-            // Add to notification panel
-            addNotification(`New Order #${orderId}`, message, 'info', orderId);
+            // Show toast pop-up notification only for new notifications (will check if on dashboard internally)
+            // Pass orderId as notificationId to track which notifications have been shown
+            showNotification(`New Order #${orderId}`, message, 'info', `order-${orderId}`);
 
             // Show browser notification (optional - system notification)
             showBrowserNotification(order);
         });
 
         // Update last order IDs
+        lastOrderIds = currentOrderIds;
+    } else {
+        // Update last order IDs even if no new orders (in case orders were removed)
         lastOrderIds = currentOrderIds;
     }
 }
@@ -6894,7 +6905,7 @@ function isOnDashboard() {
 }
 
 // Show notification (shows toast pop-up AND adds to notification panel)
-function showNotification(title, message, type = 'success') {
+function showNotification(title, message, type = 'success', notificationId = null) {
     // Determine type if passed as boolean (backward compatibility)
     let notificationType = type;
     if (typeof type === 'boolean') {
@@ -6907,9 +6918,14 @@ function showNotification(title, message, type = 'success') {
         notificationType = 'success';
     }
     
-    // Only show toast pop-up if user is on dashboard (not login page)
-    if (isOnDashboard()) {
+    // Generate notification ID if not provided
+    const id = notificationId || `${title}-${message}-${Date.now()}`;
+    
+    // Only show toast pop-up if this is a new notification (not already shown)
+    // and user is on dashboard (not login page)
+    if (isOnDashboard() && !shownNotificationIds.has(id)) {
         showToast(title, message, notificationType, notificationType === 'error' ? 7000 : 5000);
+        shownNotificationIds.add(id);
     }
     
     // Always add to notification panel (will be visible when user logs in)

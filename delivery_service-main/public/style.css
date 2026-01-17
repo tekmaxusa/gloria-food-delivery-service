@@ -821,6 +821,11 @@ body.on-profile-page .nav-link:hover {
     transition: all 0.2s ease;
 }
 
+.btn-icon svg {
+    display: block;
+    margin: 0 auto;
+}
+
 .btn-icon:hover {
     background: #f1f5f9;
     color: #334155;
