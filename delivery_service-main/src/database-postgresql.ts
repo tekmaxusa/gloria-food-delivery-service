@@ -1061,12 +1061,13 @@ export class OrderDatabasePostgreSQL {
                          currentStatus?.toUpperCase() !== 'ACCEPTED';
       
       // Update status and set accepted_at if status is changing to ACCEPTED
+      // Cast status parameter to VARCHAR to match column type and avoid type mismatch errors
       const result = await client.query(
         `UPDATE orders
-         SET status = $1,
+         SET status = $1::VARCHAR(50),
              updated_at = NOW(),
              accepted_at = CASE 
-               WHEN $1 = 'ACCEPTED' AND accepted_at IS NULL THEN NOW()
+               WHEN $1::VARCHAR(50) = 'ACCEPTED' AND accepted_at IS NULL THEN NOW()
                ELSE accepted_at
              END
          WHERE gloriafood_order_id = $2`,
