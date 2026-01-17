@@ -232,6 +232,9 @@ async function initializeSettings() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+    // Initialize theme first
+    initializeTheme();
+    
     // Load settings from backend
     await initializeSettings();
     // Ensure login form is active on page load
@@ -253,8 +256,60 @@ document.addEventListener('DOMContentLoaded', async () => {
     checkAuth();
 });
 
+// Theme Management
+function initializeTheme() {
+    // Get saved theme from localStorage or default to 'light'
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    setTheme(savedTheme);
+    
+    // Setup theme toggle buttons (both dashboard and auth page)
+    const themeToggleBtn = document.getElementById('themeToggleBtn');
+    const authThemeToggleBtn = document.getElementById('authThemeToggleBtn');
+    
+    if (themeToggleBtn) {
+        themeToggleBtn.addEventListener('click', toggleTheme);
+    }
+    
+    if (authThemeToggleBtn) {
+        authThemeToggleBtn.addEventListener('click', toggleTheme);
+    }
+}
+
+function setTheme(theme) {
+    // Set theme attribute on document root
+    document.documentElement.setAttribute('data-theme', theme);
+    
+    // Save to localStorage
+    localStorage.setItem('theme', theme);
+    
+    // Update icon visibility for all theme icons
+    const sunIcons = document.querySelectorAll('.sun-icon');
+    const moonIcons = document.querySelectorAll('.moon-icon');
+    
+    if (theme === 'dark') {
+        sunIcons.forEach(icon => icon.style.display = 'none');
+        moonIcons.forEach(icon => icon.style.display = 'block');
+    } else {
+        sunIcons.forEach(icon => icon.style.display = 'block');
+        moonIcons.forEach(icon => icon.style.display = 'none');
+    }
+}
+
+function toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
+}
+
 // Setup header buttons (profile, notifications, logout)
 function setupHeaderButtons() {
+    // Theme toggle button
+    const themeToggleBtn = document.getElementById('themeToggleBtn');
+    if (themeToggleBtn && !themeToggleBtn.hasAttribute('data-listener-attached')) {
+        themeToggleBtn.setAttribute('data-listener-attached', 'true');
+        themeToggleBtn.addEventListener('click', toggleTheme);
+    }
+    
     // Profile button
     const profileBtn = document.getElementById('profileBtn');
     if (profileBtn) {
