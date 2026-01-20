@@ -1959,22 +1959,26 @@ async function handleLocationSubmit(e, merchantId, locationId) {
 }
 
 // Edit location
-function editLocation(locationId, merchantId) {
-    // Get location details and open modal
-    fetch(`${API_BASE}/merchants/${merchantId}/locations`)
-        .then(res => res.json())
-        .then(data => {
-            if (data.success) {
-                const location = data.locations.find(l => l.id == locationId);
-                if (location) {
-                    openAddLocationModal(merchantId, location);
-                }
+async function editLocation(locationId, merchantId) {
+    try {
+        // Get location details and open modal
+        const response = await authenticatedFetch(`${API_BASE}/merchants/${merchantId}/locations`);
+        const data = await response.json();
+        
+        if (data.success) {
+            const location = data.locations.find(l => l.id == locationId);
+            if (location) {
+                openAddLocationModal(merchantId, location);
+            } else {
+                showNotification('Error', 'Location not found', 'error');
             }
-        })
-        .catch(err => {
-            console.error('Error loading location:', err);
-            showNotification('Error', 'Failed to load location details', 'error');
-        });
+        } else {
+            showNotification('Error', data.error || 'Failed to load location details', 'error');
+        }
+    } catch (error) {
+        console.error('Error loading location:', error);
+        showNotification('Error', 'Failed to load location details: ' + error.message, 'error');
+    }
 }
 
 // Delete location
