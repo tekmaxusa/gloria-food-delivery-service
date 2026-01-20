@@ -1848,14 +1848,14 @@ function openAddLocationModal(merchantId, location = null) {
                 <div class="form-group">
                     <label>Location Name <span style="color: red;">*</span></label>
                     <input type="text" id="locationName" required placeholder="Enter Location Name" value="${location ? escapeHtml(location.location_name) : ''}">
-                    <small style="color: #666; font-size: 12px;">Name of this location (e.g., Makati Branch, Main Store)</small>
+                    <small style="color: #666; font-size: 12px;">Name of this location</small>
                 </div>
                 <div class="form-group">
                     <label>Store ID <span style="color: red;">*</span></label>
                     <input type="text" id="locationStoreId" required placeholder="Enter Store ID" 
                            pattern="[A-Za-z0-9_-]+" value="${location ? escapeHtml(location.store_id) : ''}"
                            ${location ? 'readonly' : ''}>
-                    <small style="color: #666; font-size: 12px;">${location ? 'Store ID cannot be changed after creation. This is the Store ID from GloriaFood.' : 'This is the Store ID from GloriaFood. Orders will be matched using this ID.'}</small>
+                    <small style="color: #666; font-size: 12px;">This is the Store ID from GloriaFood. Orders will be matched using this ID.</small>
                 </div>
                 <div class="form-group">
                     <label>Address</label>
