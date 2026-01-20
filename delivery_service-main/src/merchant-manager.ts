@@ -1,5 +1,5 @@
 import * as dotenv from 'dotenv';
-import { IDatabase, Merchant } from './database-factory';
+import { IDatabase, Merchant, Location } from './database-factory';
 import chalk from 'chalk';
 
 dotenv.config();
@@ -136,22 +136,57 @@ export class MerchantManager {
 
   /**
    * Get merchant by store ID
+   * Note: This now finds merchant via location (store_id is in locations table)
    */
   getMerchantByStoreId(storeId: string): Merchant | null {
-    return this.merchants.get(storeId) || null;
+    // First try in-memory cache
+    const cached = this.merchants.get(storeId);
+    if (cached) return cached;
+    
+    // If not in cache, try to find via database (location lookup)
+    // This will be handled by database.getMerchantByStoreId which now uses locations
+    return null;
   }
 
   /**
-   * Find merchant by store ID from order data (tries multiple fields)
+   * Get location by store ID (for finding location from order data)
    */
-  findMerchantForOrder(orderData: any): Merchant | null {
+  async getLocationByStoreId(storeId: string, userId?: number): Promise<Location | null> {
+    if (this.database && typeof (this.database as any).getLocationByStoreId === 'function') {
+      return await (this.database as any).getLocationByStoreId(storeId, userId);
+    }
+    return null;
+  }
+
+  /**
+   * Find location by store ID from order data (tries multiple fields)
+   */
+  async findLocationForOrder(orderData: any, userId?: number): Promise<Location | null> {
     const storeId = orderData.store_id || 
                    orderData.restaurant_id || 
                    orderData.restaurantId ||
                    orderData.storeId;
     
     if (storeId) {
-      return this.getMerchantByStoreId(String(storeId));
+      return await this.getLocationByStoreId(String(storeId), userId);
+    }
+    
+    return null;
+  }
+
+  /**
+   * Find merchant by store ID from order data (tries multiple fields)
+   * Updated to work with locations
+   */
+  async findMerchantForOrder(orderData: any, userId?: number): Promise<Merchant | null> {
+    const storeId = orderData.store_id || 
+                   orderData.restaurant_id || 
+                   orderData.restaurantId ||
+                   orderData.storeId;
+    
+    if (storeId && this.database) {
+      // Use database method which now handles locations
+      return await this.database.getMerchantByStoreId(String(storeId), userId);
     }
     
     return null;

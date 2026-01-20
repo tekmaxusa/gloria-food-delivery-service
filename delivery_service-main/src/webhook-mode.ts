@@ -1105,9 +1105,11 @@ class GloriaFoodWebhookServer {
         }
         
         // Fallback: Try to find merchant by store_id (for backward compatibility)
+        // Now uses location lookup which is async
         if (!merchant) {
           try {
-            merchant = this.merchantManager.findMerchantForOrder(orderData);
+            const user = getCurrentUser(req);
+            merchant = await this.merchantManager.findMerchantForOrder(orderData, user?.userId);
           } catch (error: any) {
             console.log(chalk.yellow(`   ⚠️  Could not lookup merchant by store_id: ${error.message}`));
             // Continue without merchant
@@ -1426,7 +1428,9 @@ class GloriaFoodWebhookServer {
       try {
         const user = getCurrentUser(req);
         if (!user) {
-          return res.status(401).json({ success: false, error: 'Not authenticated' });
+          console.log(chalk.yellow('⚠️  /merchants: No user session found'));
+          console.log(chalk.gray(`   Headers: ${JSON.stringify(req.headers)}`));
+          return res.status(401).json({ success: false, error: 'Not authenticated. Please login first.' });
         }
         
         // Get merchants for current user only
@@ -1437,6 +1441,7 @@ class GloriaFoodWebhookServer {
           merchants 
         });
       } catch (error: any) {
+        console.error(chalk.red(`❌ Error in /merchants: ${error.message}`));
         res.status(500).json({ success: false, error: error.message });
       }
     });
@@ -1625,6 +1630,158 @@ class GloriaFoodWebhookServer {
           res.json({ success: true, message: 'Merchant deleted successfully' });
         } else {
           res.status(404).json({ success: false, error: 'Merchant not found' });
+        }
+      } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    // Location management endpoints
+    // Get all locations for a merchant
+    this.app.get('/merchants/:merchantId/locations', async (req: Request, res: Response) => {
+      try {
+        const user = getCurrentUser(req);
+        if (!user) {
+          return res.status(401).json({ success: false, error: 'Not authenticated' });
+        }
+        
+        const merchantId = parseInt(req.params.merchantId);
+        if (isNaN(merchantId)) {
+          return res.status(400).json({ success: false, error: 'Invalid merchant ID' });
+        }
+
+        const db = this.database as any;
+        if (typeof db.getAllLocations === 'function') {
+          const locations = await this.handleAsync(db.getAllLocations(merchantId, user.userId));
+          res.json({ success: true, locations });
+        } else {
+          res.status(500).json({ success: false, error: 'Location management not available' });
+        }
+      } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    // Create a new location
+    this.app.post('/merchants/:merchantId/locations', async (req: Request, res: Response) => {
+      try {
+        const user = getCurrentUser(req);
+        if (!user) {
+          return res.status(401).json({ success: false, error: 'Not authenticated' });
+        }
+        
+        const merchantId = parseInt(req.params.merchantId);
+        if (isNaN(merchantId)) {
+          return res.status(400).json({ success: false, error: 'Invalid merchant ID' });
+        }
+
+        const { location_name, store_id, address, phone, latitude, longitude, is_active } = req.body;
+        
+        if (!location_name || !store_id) {
+          return res.status(400).json({ 
+            success: false, 
+            error: 'location_name and store_id are required' 
+          });
+        }
+
+        const db = this.database as any;
+        if (typeof db.insertOrUpdateLocation === 'function') {
+          const location = await this.handleAsync(db.insertOrUpdateLocation({
+            merchant_id: merchantId,
+            location_name,
+            store_id,
+            address,
+            phone,
+            latitude,
+            longitude,
+            is_active: is_active !== false
+          }));
+
+          if (location) {
+            res.json({ success: true, location });
+          } else {
+            res.status(500).json({ success: false, error: 'Failed to create location' });
+          }
+        } else {
+          res.status(500).json({ success: false, error: 'Location management not available' });
+        }
+      } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    // Update a location
+    this.app.put('/locations/:locationId', async (req: Request, res: Response) => {
+      try {
+        const user = getCurrentUser(req);
+        if (!user) {
+          return res.status(401).json({ success: false, error: 'Not authenticated' });
+        }
+        
+        const locationId = parseInt(req.params.locationId);
+        if (isNaN(locationId)) {
+          return res.status(400).json({ success: false, error: 'Invalid location ID' });
+        }
+
+        const { location_name, store_id, address, phone, latitude, longitude, is_active } = req.body;
+
+        const db = this.database as any;
+        if (typeof db.getLocationById === 'function' && typeof db.insertOrUpdateLocation === 'function') {
+          // Get existing location to preserve merchant_id
+          const existing = await this.handleAsync(db.getLocationById(locationId, user.userId));
+          if (!existing) {
+            return res.status(404).json({ success: false, error: 'Location not found' });
+          }
+
+          const location = await this.handleAsync(db.insertOrUpdateLocation({
+            id: locationId,
+            merchant_id: existing.merchant_id,
+            location_name: location_name || existing.location_name,
+            store_id: store_id || existing.store_id,
+            address: address !== undefined ? address : existing.address,
+            phone: phone !== undefined ? phone : existing.phone,
+            latitude: latitude !== undefined ? latitude : existing.latitude,
+            longitude: longitude !== undefined ? longitude : existing.longitude,
+            is_active: is_active !== undefined ? is_active : existing.is_active
+          }));
+
+          if (location) {
+            res.json({ success: true, location });
+          } else {
+            res.status(500).json({ success: false, error: 'Failed to update location' });
+          }
+        } else {
+          res.status(500).json({ success: false, error: 'Location management not available' });
+        }
+      } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    // Delete a location
+    this.app.delete('/locations/:locationId', async (req: Request, res: Response) => {
+      try {
+        const user = getCurrentUser(req);
+        if (!user) {
+          return res.status(401).json({ success: false, error: 'Not authenticated' });
+        }
+        
+        const locationId = parseInt(req.params.locationId);
+        if (isNaN(locationId)) {
+          return res.status(400).json({ success: false, error: 'Invalid location ID' });
+        }
+
+        const db = this.database as any;
+        if (typeof db.deleteLocation === 'function') {
+          const deleted = await this.handleAsync(db.deleteLocation(locationId, user.userId));
+          
+          if (deleted) {
+            res.json({ success: true, message: 'Location deleted successfully' });
+          } else {
+            res.status(404).json({ success: false, error: 'Location not found' });
+          }
+        } else {
+          res.status(500).json({ success: false, error: 'Location management not available' });
         }
       } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });

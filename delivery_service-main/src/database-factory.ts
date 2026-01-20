@@ -13,18 +13,32 @@ export interface User {
   created_at: string;
 }
 
+// Location interface for multiple locations per merchant
+export interface Location {
+  id: number;
+  merchant_id: number;
+  location_name: string;
+  store_id: string;
+  address?: string;
+  phone?: string;
+  latitude?: number;
+  longitude?: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 // Merchant interface for multi-merchant support
+// Note: store_id, address, phone are now in locations table
 export interface Merchant {
   id: number;
   user_id?: number;
-  store_id: string;
-  merchant_name: string;
+  merchant_name: string;  // Company name (e.g., "Jollibee")
   api_key?: string;
   api_url?: string;
   master_key?: string;
-  phone?: string;
-  address?: string;
   is_active: number | boolean;
+  locations?: Location[];  // Multiple locations per merchant
   created_at: string;
   updated_at: string;
 }

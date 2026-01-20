@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS orders (
   id SERIAL PRIMARY KEY,
   gloriafood_order_id VARCHAR(255) UNIQUE NOT NULL,
   store_id VARCHAR(255),
+  location_id INTEGER,
+  location_name VARCHAR(255),
   merchant_name VARCHAR(255),
   customer_name VARCHAR(255) NOT NULL,
   customer_phone VARCHAR(100),
@@ -34,6 +36,7 @@ CREATE TABLE IF NOT EXISTS orders (
 -- Create indexes
 CREATE INDEX IF NOT EXISTS idx_gloriafood_order_id ON orders(gloriafood_order_id);
 CREATE INDEX IF NOT EXISTS idx_store_id ON orders(store_id);
+CREATE INDEX IF NOT EXISTS idx_location_id ON orders(location_id);
 CREATE INDEX IF NOT EXISTS idx_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_fetched_at ON orders(fetched_at);
 
@@ -90,9 +93,10 @@ ALTER TABLE reviews
   FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL;
 
 -- Create merchants table for multi-merchant support
+-- Note: store_id, address, phone are now in locations table
 CREATE TABLE IF NOT EXISTS merchants (
   id SERIAL PRIMARY KEY,
-  store_id VARCHAR(255) UNIQUE NOT NULL,
+  user_id INTEGER,
   merchant_name VARCHAR(255) NOT NULL,
   api_key VARCHAR(500),
   api_url VARCHAR(500),
@@ -102,8 +106,34 @@ CREATE TABLE IF NOT EXISTS merchants (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_store_id ON merchants(store_id);
+CREATE INDEX IF NOT EXISTS idx_merchants_user_id ON merchants(user_id);
 CREATE INDEX IF NOT EXISTS idx_is_active ON merchants(is_active);
+
+-- Create locations table for multiple locations per merchant
+CREATE TABLE IF NOT EXISTS locations (
+  id SERIAL PRIMARY KEY,
+  merchant_id INTEGER NOT NULL REFERENCES merchants(id) ON DELETE CASCADE,
+  location_name VARCHAR(255) NOT NULL,
+  store_id VARCHAR(255) NOT NULL,
+  address TEXT,
+  phone VARCHAR(100),
+  latitude DECIMAL(10, 8),
+  longitude DECIMAL(11, 8),
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(merchant_id, store_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_locations_merchant_id ON locations(merchant_id);
+CREATE INDEX IF NOT EXISTS idx_locations_store_id ON locations(store_id);
+CREATE INDEX IF NOT EXISTS idx_locations_is_active ON locations(is_active);
+
+-- Add foreign key for location_id in orders
+ALTER TABLE orders 
+  ADD COLUMN IF NOT EXISTS location_id INTEGER REFERENCES locations(id) ON DELETE SET NULL;
+ALTER TABLE orders 
+  ADD COLUMN IF NOT EXISTS location_name VARCHAR(255);
 
 -- Create settings table for application settings
 CREATE TABLE IF NOT EXISTS settings (
@@ -147,6 +177,12 @@ CREATE TRIGGER update_drivers_updated_at
 DROP TRIGGER IF EXISTS update_merchants_updated_at ON merchants;
 CREATE TRIGGER update_merchants_updated_at
   BEFORE UPDATE ON merchants
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_locations_updated_at ON locations;
+CREATE TRIGGER update_locations_updated_at
+  BEFORE UPDATE ON locations
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
 

@@ -1,11 +1,13 @@
 import { Pool, PoolClient } from 'pg';
 import chalk from 'chalk';
-import { Merchant, User } from './database-factory';
+import { Merchant, User, Location } from './database-factory';
 
 export interface Order {
   id: string;
   gloriafood_order_id: string;
-  store_id: string;
+  store_id: string;  // Keep for backward compatibility
+  location_id?: number;  // New: link to location
+  location_name?: string;  // Denormalized for display
   merchant_name?: string; // Store merchant name with order for historical accuracy
   customer_name: string;
   customer_phone: string;
@@ -523,6 +525,111 @@ export class OrderDatabasePostgreSQL {
           CREATE INDEX IF NOT EXISTS idx_merchants_user_id ON merchants(user_id)
         `);
 
+        // Create locations table for multiple locations per merchant
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS locations (
+            id SERIAL PRIMARY KEY,
+            merchant_id INTEGER NOT NULL REFERENCES merchants(id) ON DELETE CASCADE,
+            location_name VARCHAR(255) NOT NULL,
+            store_id VARCHAR(255) NOT NULL,
+            address TEXT,
+            phone VARCHAR(100),
+            latitude DECIMAL(10, 8),
+            longitude DECIMAL(11, 8),
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(merchant_id, store_id)
+          )
+        `);
+
+        // Create indexes for locations
+        await client.query(`
+          CREATE INDEX IF NOT EXISTS idx_locations_merchant_id ON locations(merchant_id)
+        `);
+        await client.query(`
+          CREATE INDEX IF NOT EXISTS idx_locations_store_id ON locations(store_id)
+        `);
+        await client.query(`
+          CREATE INDEX IF NOT EXISTS idx_locations_is_active ON locations(is_active)
+        `);
+
+        // Add location_id to orders table if it doesn't exist
+        try {
+          await client.query(`
+            ALTER TABLE orders 
+            ADD COLUMN IF NOT EXISTS location_id INTEGER REFERENCES locations(id) ON DELETE SET NULL
+          `);
+          console.log('✅ Added location_id column to orders table');
+        } catch (e: any) {
+          if (e.code !== '42701') {
+            console.log('   Note: location_id column may already exist');
+          }
+        }
+
+        // Add location_name to orders table if it doesn't exist (denormalized for display)
+        try {
+          await client.query(`
+            ALTER TABLE orders 
+            ADD COLUMN IF NOT EXISTS location_name VARCHAR(255)
+          `);
+          console.log('✅ Added location_name column to orders table');
+        } catch (e: any) {
+          if (e.code !== '42701') {
+            console.log('   Note: location_name column may already exist');
+          }
+        }
+
+        // Create index for location_id in orders
+        await client.query(`
+          CREATE INDEX IF NOT EXISTS idx_orders_location_id ON orders(location_id)
+        `);
+
+        // Create trigger for locations updated_at
+        await client.query(`
+          DROP TRIGGER IF EXISTS update_locations_updated_at ON locations;
+          CREATE TRIGGER update_locations_updated_at
+            BEFORE UPDATE ON locations
+            FOR EACH ROW
+            EXECUTE FUNCTION update_updated_at_column()
+        `);
+
+        // Migration: Create locations from existing merchants (one-time migration)
+        // This creates one location per existing merchant for backward compatibility
+        try {
+          const migrationCheck = await client.query(`
+            SELECT COUNT(*) as count FROM locations
+          `);
+          if (parseInt(migrationCheck.rows[0].count) === 0) {
+            // Only migrate if no locations exist yet
+            const merchantsResult = await client.query(`
+              SELECT id, store_id, merchant_name, address, phone, is_active 
+              FROM merchants
+            `);
+            
+            if (merchantsResult.rows.length > 0) {
+              console.log(chalk.cyan(`   🔄 Migrating ${merchantsResult.rows.length} merchant(s) to locations...`));
+              for (const merchant of merchantsResult.rows) {
+                await client.query(`
+                  INSERT INTO locations (merchant_id, location_name, store_id, address, phone, is_active)
+                  VALUES ($1, $2, $3, $4, $5, $6)
+                  ON CONFLICT (merchant_id, store_id) DO NOTHING
+                `, [
+                  merchant.id,
+                  merchant.merchant_name || `Location ${merchant.store_id}`,
+                  merchant.store_id,
+                  merchant.address || null,
+                  merchant.phone || null,
+                  merchant.is_active !== false
+                ]);
+              }
+              console.log(chalk.green(`   ✅ Migration complete: Created ${merchantsResult.rows.length} location(s)`));
+            }
+          }
+        } catch (e: any) {
+          console.log(chalk.yellow(`   ⚠️  Migration note: ${e.message}`));
+        }
+
         // Create index for orders user_id
         await client.query(`
           CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id)
@@ -749,37 +856,59 @@ export class OrderDatabasePostgreSQL {
         }
       }
       
-      // If user_id is still not set, look it up from merchants table
-      if (!orderUserId) {
-        const storeId = orderData.store_id?.toString() || orderData.restaurant_id?.toString();
-        if (storeId) {
-          try {
-            // Try to find merchant by API key first (for webhooks)
+      // Find location and merchant by store_id
+      let locationId: number | undefined = undefined;
+      let locationName: string | undefined = undefined;
+      const storeId = orderData.store_id?.toString() || orderData.restaurant_id?.toString();
+      
+      if (storeId) {
+        try {
+          // First, try to find location by store_id
+          const location = await this.getLocationByStoreId(storeId, orderUserId);
+          if (location) {
+            locationId = location.id;
+            locationName = location.location_name;
+            
+            // Get merchant from location to set user_id and merchant_name
+            const merchant = await this.getMerchantByStoreId(storeId, orderUserId);
+            if (merchant) {
+              if (!orderUserId && merchant.user_id) {
+                orderUserId = merchant.user_id;
+              }
+              if (!merchantName && merchant.merchant_name) {
+                merchantName = merchant.merchant_name;
+              }
+            }
+          } else {
+            // Fallback: try to find merchant directly (for backward compatibility)
             let merchant = null;
             if (orderData.api_key) {
               merchant = await this.getMerchantByApiKey(orderData.api_key);
             }
-            // Fallback to store_id lookup (without user_id filter for backward compatibility)
             if (!merchant) {
               merchant = await this.getMerchantByStoreId(storeId);
             }
-            if (merchant && merchant.user_id) {
-              orderUserId = merchant.user_id;
+            if (merchant) {
+              if (!orderUserId && merchant.user_id) {
+                orderUserId = merchant.user_id;
+              }
+              if (!merchantName && merchant.merchant_name) {
+                merchantName = merchant.merchant_name;
+              }
             }
-            if (!merchantName && merchant && merchant.merchant_name) {
-              merchantName = merchant.merchant_name;
-            }
-          } catch (error) {
-            // If lookup fails, continue without merchant_name
-            console.log(`Could not lookup merchant for store_id ${storeId}: ${error}`);
           }
+        } catch (error) {
+          // If lookup fails, continue without location/merchant info
+          console.log(`Could not lookup location/merchant for store_id ${storeId}: ${error}`);
         }
       }
 
       const order: Order = {
         id: '',
         gloriafood_order_id: orderData.id?.toString() || orderData.order_id?.toString() || '',
-        store_id: orderData.store_id?.toString() || orderData.restaurant_id?.toString() || '',
+        store_id: storeId || '',
+        location_id: locationId,
+        location_name: locationName,
         merchant_name: merchantName || undefined,
         customer_name: customerName,
         customer_phone: customerPhone,
@@ -859,6 +988,8 @@ export class OrderDatabasePostgreSQL {
             updated_at = $10,
             fetched_at = $11,
             raw_data = $12,
+            location_id = $13,
+            location_name = $14,
             merchant_name = CASE 
               WHEN orders.merchant_name IS NOT NULL 
                    AND orders.merchant_name != ''
@@ -867,17 +998,17 @@ export class OrderDatabasePostgreSQL {
                    AND orders.merchant_name != 'Unknown Merchant'
                    AND orders.merchant_name != 'N/A'
               THEN orders.merchant_name
-              WHEN $13::text IS NOT NULL 
-                   AND $13::text != ''
-                   AND $13::text != $14::text
-                   AND $13::text NOT LIKE 'Merchant %'
-                   AND $13::text != 'Unknown Merchant'
-                   AND $13::text != 'N/A'
-              THEN $13::text
-              ELSE COALESCE(orders.merchant_name, $13::text)
+              WHEN $15::text IS NOT NULL 
+                   AND $15::text != ''
+                   AND $15::text != $16::text
+                   AND $15::text NOT LIKE 'Merchant %'
+                   AND $15::text != 'Unknown Merchant'
+                   AND $15::text != 'N/A'
+              THEN $15::text
+              ELSE COALESCE(orders.merchant_name, $15::text)
             END,
-            store_id = $14
-          WHERE gloriafood_order_id = $15 AND user_id IS NULL
+            store_id = $16
+          WHERE gloriafood_order_id = $17 AND user_id IS NULL
           RETURNING *
         `, [
           order.customer_name,
@@ -892,6 +1023,8 @@ export class OrderDatabasePostgreSQL {
           order.updated_at,
           order.fetched_at,
           order.raw_data,
+          order.location_id || null,
+          order.location_name || null,
           merchantNameParam,
           storeIdParam,
           order.gloriafood_order_id
@@ -902,15 +1035,17 @@ export class OrderDatabasePostgreSQL {
         try {
           result = await client.query(`
             INSERT INTO orders (
-              user_id, gloriafood_order_id, store_id, merchant_name, customer_name, customer_phone,
+              user_id, gloriafood_order_id, store_id, location_id, location_name, merchant_name, customer_name, customer_phone,
               customer_email, delivery_address, total_price, currency,
               status, order_type, items, raw_data, scheduled_delivery_time, created_at, updated_at, fetched_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
             RETURNING *
           `, [
             orderUserId,
             order.gloriafood_order_id,
             order.store_id,
+            order.location_id || null,
+            order.location_name || null,
             order.merchant_name || null,
             order.customer_name,
             order.customer_phone || null,
@@ -947,7 +1082,9 @@ export class OrderDatabasePostgreSQL {
                   scheduled_delivery_time = $9, 
                   updated_at = $10, 
                   fetched_at = $11, 
-                  raw_data = $12, 
+                  raw_data = $12,
+                  location_id = $13,
+                  location_name = $14,
                   merchant_name = CASE 
                     WHEN orders.merchant_name IS NOT NULL 
                          AND orders.merchant_name != ''
@@ -956,17 +1093,17 @@ export class OrderDatabasePostgreSQL {
                          AND orders.merchant_name != 'Unknown Merchant'
                          AND orders.merchant_name != 'N/A'
                     THEN orders.merchant_name
-                    WHEN $13::text IS NOT NULL 
-                         AND $13::text != ''
-                         AND $13::text != $14::text
-                         AND $13::text NOT LIKE 'Merchant %'
-                         AND $13::text != 'Unknown Merchant'
-                         AND $13::text != 'N/A'
-                    THEN $13::text
-                    ELSE COALESCE(orders.merchant_name, $13::text)
+                    WHEN $15::text IS NOT NULL 
+                         AND $15::text != ''
+                         AND $15::text != $16::text
+                         AND $15::text NOT LIKE 'Merchant %'
+                         AND $15::text != 'Unknown Merchant'
+                         AND $15::text != 'N/A'
+                    THEN $15::text
+                    ELSE COALESCE(orders.merchant_name, $15::text)
                   END, 
-                  store_id = $14 
-                  WHERE gloriafood_order_id = $15 AND user_id = $16 
+                  store_id = $16 
+                  WHERE gloriafood_order_id = $17 AND user_id = $18 
                   RETURNING *`
               : `UPDATE orders SET 
                   customer_name = $1, 
@@ -980,7 +1117,9 @@ export class OrderDatabasePostgreSQL {
                   scheduled_delivery_time = $9, 
                   updated_at = $10, 
                   fetched_at = $11, 
-                  raw_data = $12, 
+                  raw_data = $12,
+                  location_id = $13,
+                  location_name = $14,
                   merchant_name = CASE 
                     WHEN orders.merchant_name IS NOT NULL 
                          AND orders.merchant_name != ''
@@ -989,22 +1128,22 @@ export class OrderDatabasePostgreSQL {
                          AND orders.merchant_name != 'Unknown Merchant'
                          AND orders.merchant_name != 'N/A'
                     THEN orders.merchant_name
-                    WHEN $13::text IS NOT NULL 
-                         AND $13::text != ''
-                         AND $13::text != $14::text
-                         AND $13::text NOT LIKE 'Merchant %'
-                         AND $13::text != 'Unknown Merchant'
-                         AND $13::text != 'N/A'
-                    THEN $13::text
-                    ELSE COALESCE(orders.merchant_name, $13::text)
+                    WHEN $15::text IS NOT NULL 
+                         AND $15::text != ''
+                         AND $15::text != $16::text
+                         AND $15::text NOT LIKE 'Merchant %'
+                         AND $15::text != 'Unknown Merchant'
+                         AND $15::text != 'N/A'
+                    THEN $15::text
+                    ELSE COALESCE(orders.merchant_name, $15::text)
                   END, 
-                  store_id = $14 
-                  WHERE gloriafood_order_id = $15 AND user_id IS NULL 
+                  store_id = $16 
+                  WHERE gloriafood_order_id = $17 AND user_id IS NULL 
                   RETURNING *`;
             
             const updateParams = orderUserId
-              ? [order.customer_name, order.customer_phone || null, order.customer_email || null, order.delivery_address || null, order.status, order.total_price, order.order_type, order.items, order.scheduled_delivery_time || null, order.updated_at, order.fetched_at, order.raw_data, merchantNameParam, storeIdParam, order.gloriafood_order_id, orderUserId]
-              : [order.customer_name, order.customer_phone || null, order.customer_email || null, order.delivery_address || null, order.status, order.total_price, order.order_type, order.items, order.scheduled_delivery_time || null, order.updated_at, order.fetched_at, order.raw_data, merchantNameParam, storeIdParam, order.gloriafood_order_id];
+              ? [order.customer_name, order.customer_phone || null, order.customer_email || null, order.delivery_address || null, order.status, order.total_price, order.order_type, order.items, order.scheduled_delivery_time || null, order.updated_at, order.fetched_at, order.raw_data, order.location_id || null, order.location_name || null, merchantNameParam, storeIdParam, order.gloriafood_order_id, orderUserId]
+              : [order.customer_name, order.customer_phone || null, order.customer_email || null, order.delivery_address || null, order.status, order.total_price, order.order_type, order.items, order.scheduled_delivery_time || null, order.updated_at, order.fetched_at, order.raw_data, order.location_id || null, order.location_name || null, merchantNameParam, storeIdParam, order.gloriafood_order_id];
             
             result = await client.query(updateQuery, updateParams);
           } else {
@@ -1549,6 +1688,8 @@ export class OrderDatabasePostgreSQL {
       id: row.id?.toString() || '',
       gloriafood_order_id: row.gloriafood_order_id || '',
       store_id: row.store_id || '',
+      location_id: row.location_id ? parseInt(row.location_id) : undefined,
+      location_name: row.location_name || undefined,
       merchant_name: row.merchant_name || undefined,
       customer_name: row.customer_name || '',
       customer_phone: row.customer_phone || '',
@@ -2038,22 +2179,53 @@ export class OrderDatabasePostgreSQL {
       query += ` ORDER BY merchant_name`;
       
       const result = await client.query(query, params);
+      
+      // Get locations for each merchant
+      const merchantsWithLocations = await Promise.all(
+        result.rows.map(async (m) => {
+          const locationsQuery = `SELECT * FROM locations WHERE merchant_id = $1 AND is_active = TRUE ORDER BY location_name`;
+          const locationsResult = await client.query(locationsQuery, [m.id]);
+          
+          const locations = locationsResult.rows.map(l => ({
+            id: l.id,
+            merchant_id: l.merchant_id,
+            location_name: l.location_name,
+            store_id: l.store_id,
+            address: l.address || undefined,
+            phone: l.phone || undefined,
+            latitude: l.latitude ? parseFloat(l.latitude) : undefined,
+            longitude: l.longitude ? parseFloat(l.longitude) : undefined,
+            is_active: l.is_active === true,
+            created_at: l.created_at,
+            updated_at: l.updated_at
+          }));
+          
+          // For backward compatibility: use first location's store_id, address, phone
+          // This allows frontend code that expects merchant.store_id to still work
+          const firstLocation = locations.length > 0 ? locations[0] : null;
+          
+          return {
+            id: m.id,
+            user_id: m.user_id || undefined,
+            merchant_name: m.merchant_name,
+            api_key: m.api_key,
+            api_url: m.api_url,
+            master_key: m.master_key,
+            is_active: m.is_active === true,
+            // Backward compatibility fields (from first location)
+            store_id: firstLocation?.store_id || m.store_id || undefined, // Keep old store_id if exists
+            address: firstLocation?.address || m.address || undefined,
+            phone: firstLocation?.phone || m.phone || undefined,
+            // New locations array
+            locations: locations,
+            created_at: m.created_at,
+            updated_at: m.updated_at
+          };
+        })
+      );
+      
       client.release();
-
-      return result.rows.map(m => ({
-        id: m.id,
-        user_id: m.user_id || undefined,
-        store_id: m.store_id,
-        merchant_name: m.merchant_name,
-        api_key: m.api_key,
-        api_url: m.api_url,
-        master_key: m.master_key,
-        phone: m.phone || null,
-        address: m.address || null,
-        is_active: m.is_active === true,
-        created_at: m.created_at,
-        updated_at: m.updated_at
-      }));
+      return merchantsWithLocations;
     } catch (error) {
       console.error('Error getting merchants:', error);
       return [];
@@ -2063,35 +2235,94 @@ export class OrderDatabasePostgreSQL {
   async getMerchantByStoreId(storeId: string, userId?: number): Promise<Merchant | null> {
     try {
       const client = await this.pool.connect();
-      let query = `SELECT * FROM merchants WHERE store_id = $1`;
-      const params: any[] = [storeId];
+      
+      // First, find location by store_id
+      let locationQuery = `
+        SELECT l.*, m.user_id as merchant_user_id 
+        FROM locations l
+        INNER JOIN merchants m ON l.merchant_id = m.id
+        WHERE l.store_id = $1 AND l.is_active = TRUE
+      `;
+      const locationParams: any[] = [storeId];
       
       if (userId !== undefined) {
-        // Strict per-user isolation - only return merchant if it belongs to this user
-        query += ` AND user_id = $2`;
-        params.push(userId);
+        locationQuery += ` AND m.user_id = $2`;
+        locationParams.push(userId);
       } else {
-        // If no userId provided, only return merchants with NULL user_id (for admin/system use)
-        query += ` AND user_id IS NULL`;
+        locationQuery += ` AND m.user_id IS NULL`;
       }
       
-      const result = await client.query(query, params);
+      const locationResult = await client.query(locationQuery, locationParams);
+      
+      if (!locationResult.rows || locationResult.rows.length === 0) {
+        // Fallback: try old merchant table directly (for backward compatibility)
+        let query = `SELECT * FROM merchants WHERE store_id = $1`;
+        const params: any[] = [storeId];
+        
+        if (userId !== undefined) {
+          query += ` AND user_id = $2`;
+          params.push(userId);
+        } else {
+          query += ` AND user_id IS NULL`;
+        }
+        
+        const result = await client.query(query, params);
+        client.release();
+
+        if (!result.rows || result.rows.length === 0) return null;
+
+        const merchant = result.rows[0];
+        return {
+          id: merchant.id,
+          user_id: merchant.user_id || undefined,
+          merchant_name: merchant.merchant_name,
+          api_key: merchant.api_key,
+          api_url: merchant.api_url,
+          master_key: merchant.master_key,
+          is_active: merchant.is_active === true,
+          created_at: merchant.created_at,
+          updated_at: merchant.updated_at
+        };
+      }
+      
+      // Get merchant from location
+      const location = locationResult.rows[0];
+      const merchantQuery = `SELECT * FROM merchants WHERE id = $1`;
+      const merchantResult = await client.query(merchantQuery, [location.merchant_id]);
+      
+      if (!merchantResult.rows || merchantResult.rows.length === 0) {
+        client.release();
+        return null;
+      }
+      
+      // Get all locations for this merchant
+      const locationsQuery = `SELECT * FROM locations WHERE merchant_id = $1 AND is_active = TRUE ORDER BY location_name`;
+      const locationsResult = await client.query(locationsQuery, [location.merchant_id]);
+      
       client.release();
-
-      if (!result.rows || result.rows.length === 0) return null;
-
-      const merchant = result.rows[0];
+      
+      const merchant = merchantResult.rows[0];
       return {
         id: merchant.id,
         user_id: merchant.user_id || undefined,
-        store_id: merchant.store_id,
         merchant_name: merchant.merchant_name,
         api_key: merchant.api_key,
         api_url: merchant.api_url,
         master_key: merchant.master_key,
-        phone: merchant.phone || null,
-        address: merchant.address || null,
         is_active: merchant.is_active === true,
+        locations: locationsResult.rows.map(l => ({
+          id: l.id,
+          merchant_id: l.merchant_id,
+          location_name: l.location_name,
+          store_id: l.store_id,
+          address: l.address || undefined,
+          phone: l.phone || undefined,
+          latitude: l.latitude ? parseFloat(l.latitude) : undefined,
+          longitude: l.longitude ? parseFloat(l.longitude) : undefined,
+          is_active: l.is_active === true,
+          created_at: l.created_at,
+          updated_at: l.updated_at
+        })),
         created_at: merchant.created_at,
         updated_at: merchant.updated_at
       };
@@ -2231,8 +2462,16 @@ export class OrderDatabasePostgreSQL {
   async deleteMerchant(storeId: string, userId?: number): Promise<boolean> {
     try {
       const client = await this.pool.connect();
-      let query = `DELETE FROM merchants WHERE store_id = $1`;
-      const params: any[] = [storeId];
+      // Find merchant by store_id (via location or directly)
+      const merchant = await this.getMerchantByStoreId(storeId, userId);
+      if (!merchant) {
+        client.release();
+        return false;
+      }
+      
+      // Delete merchant (locations will be cascade deleted)
+      let query = `DELETE FROM merchants WHERE id = $1`;
+      const params: any[] = [merchant.id];
       
       if (userId !== undefined) {
         query += ` AND user_id = $2`;
@@ -2245,6 +2484,253 @@ export class OrderDatabasePostgreSQL {
       return (result.rowCount || 0) > 0;
     } catch (error) {
       console.error('Error deleting merchant:', error);
+      return false;
+    }
+  }
+
+  // Location methods
+  async getAllLocations(merchantId: number, userId?: number): Promise<Location[]> {
+    try {
+      const client = await this.pool.connect();
+      
+      // Verify merchant belongs to user
+      let merchantQuery = `SELECT id FROM merchants WHERE id = $1`;
+      const merchantParams: any[] = [merchantId];
+      
+      if (userId !== undefined) {
+        merchantQuery += ` AND user_id = $2`;
+        merchantParams.push(userId);
+      } else {
+        merchantQuery += ` AND user_id IS NULL`;
+      }
+      
+      const merchantCheck = await client.query(merchantQuery, merchantParams);
+      if (!merchantCheck.rows || merchantCheck.rows.length === 0) {
+        client.release();
+        return [];
+      }
+      
+      const result = await client.query(
+        `SELECT * FROM locations WHERE merchant_id = $1 ORDER BY location_name`,
+        [merchantId]
+      );
+      
+      client.release();
+      
+      return result.rows.map(l => ({
+        id: l.id,
+        merchant_id: l.merchant_id,
+        location_name: l.location_name,
+        store_id: l.store_id,
+        address: l.address || undefined,
+        phone: l.phone || undefined,
+        latitude: l.latitude ? parseFloat(l.latitude) : undefined,
+        longitude: l.longitude ? parseFloat(l.longitude) : undefined,
+        is_active: l.is_active === true,
+        created_at: l.created_at,
+        updated_at: l.updated_at
+      }));
+    } catch (error) {
+      console.error('Error getting locations:', error);
+      return [];
+    }
+  }
+
+  async getLocationByStoreId(storeId: string, userId?: number): Promise<Location | null> {
+    try {
+      const client = await this.pool.connect();
+      
+      let query = `
+        SELECT l.* 
+        FROM locations l
+        INNER JOIN merchants m ON l.merchant_id = m.id
+        WHERE l.store_id = $1 AND l.is_active = TRUE
+      `;
+      const params: any[] = [storeId];
+      
+      if (userId !== undefined) {
+        query += ` AND m.user_id = $2`;
+        params.push(userId);
+      } else {
+        query += ` AND m.user_id IS NULL`;
+      }
+      
+      const result = await client.query(query, params);
+      client.release();
+
+      if (!result.rows || result.rows.length === 0) return null;
+
+      const location = result.rows[0];
+      return {
+        id: location.id,
+        merchant_id: location.merchant_id,
+        location_name: location.location_name,
+        store_id: location.store_id,
+        address: location.address || undefined,
+        phone: location.phone || undefined,
+        latitude: location.latitude ? parseFloat(location.latitude) : undefined,
+        longitude: location.longitude ? parseFloat(location.longitude) : undefined,
+        is_active: location.is_active === true,
+        created_at: location.created_at,
+        updated_at: location.updated_at
+      };
+    } catch (error) {
+      console.error('Error getting location:', error);
+      return null;
+    }
+  }
+
+  async getLocationById(locationId: number, userId?: number): Promise<Location | null> {
+    try {
+      const client = await this.pool.connect();
+      
+      let query = `
+        SELECT l.* 
+        FROM locations l
+        INNER JOIN merchants m ON l.merchant_id = m.id
+        WHERE l.id = $1
+      `;
+      const params: any[] = [locationId];
+      
+      if (userId !== undefined) {
+        query += ` AND m.user_id = $2`;
+        params.push(userId);
+      } else {
+        query += ` AND m.user_id IS NULL`;
+      }
+      
+      const result = await client.query(query, params);
+      client.release();
+
+      if (!result.rows || result.rows.length === 0) return null;
+
+      const location = result.rows[0];
+      return {
+        id: location.id,
+        merchant_id: location.merchant_id,
+        location_name: location.location_name,
+        store_id: location.store_id,
+        address: location.address || undefined,
+        phone: location.phone || undefined,
+        latitude: location.latitude ? parseFloat(location.latitude) : undefined,
+        longitude: location.longitude ? parseFloat(location.longitude) : undefined,
+        is_active: location.is_active === true,
+        created_at: location.created_at,
+        updated_at: location.updated_at
+      };
+    } catch (error) {
+      console.error('Error getting location by id:', error);
+      return null;
+    }
+  }
+
+  async insertOrUpdateLocation(location: Partial<Location>): Promise<Location | null> {
+    try {
+      if (!location.merchant_id) {
+        throw new Error('merchant_id is required');
+      }
+      if (!location.store_id) {
+        throw new Error('store_id is required');
+      }
+      if (!location.location_name) {
+        throw new Error('location_name is required');
+      }
+
+      const client = await this.pool.connect();
+      
+      // Check if location already exists
+      const existing = await client.query(
+        `SELECT * FROM locations WHERE merchant_id = $1 AND store_id = $2`,
+        [location.merchant_id, location.store_id]
+      );
+
+      if (existing.rows && existing.rows.length > 0) {
+        // Update existing location
+        const updates: string[] = [];
+        const values: any[] = [];
+        let paramIndex = 1;
+
+        if (location.location_name !== undefined) {
+          updates.push(`location_name = $${paramIndex++}`);
+          values.push(location.location_name.trim());
+        }
+        if (location.address !== undefined) {
+          updates.push(`address = $${paramIndex++}`);
+          values.push(location.address || null);
+        }
+        if (location.phone !== undefined) {
+          updates.push(`phone = $${paramIndex++}`);
+          values.push(location.phone || null);
+        }
+        if (location.latitude !== undefined) {
+          updates.push(`latitude = $${paramIndex++}`);
+          values.push(location.latitude || null);
+        }
+        if (location.longitude !== undefined) {
+          updates.push(`longitude = $${paramIndex++}`);
+          values.push(location.longitude || null);
+        }
+        if (location.is_active !== undefined) {
+          updates.push(`is_active = $${paramIndex++}`);
+          values.push(location.is_active);
+        }
+
+        updates.push(`updated_at = NOW()`);
+
+        if (updates.length > 1) {
+          values.push(location.merchant_id);
+          values.push(location.store_id);
+          await client.query(`
+            UPDATE locations 
+            SET ${updates.join(', ')}
+            WHERE merchant_id = $${paramIndex++} AND store_id = $${paramIndex}
+          `, values);
+        }
+      } else {
+        // Insert new location
+        await client.query(`
+          INSERT INTO locations (merchant_id, location_name, store_id, address, phone, latitude, longitude, is_active)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `, [
+          location.merchant_id,
+          location.location_name.trim(),
+          location.store_id,
+          location.address || null,
+          location.phone || null,
+          location.latitude || null,
+          location.longitude || null,
+          location.is_active !== undefined ? location.is_active : true
+        ]);
+      }
+
+      client.release();
+      return await this.getLocationByStoreId(location.store_id);
+    } catch (error) {
+      console.error('Error inserting/updating location:', error);
+      return null;
+    }
+  }
+
+  async deleteLocation(locationId: number, userId?: number): Promise<boolean> {
+    try {
+      const client = await this.pool.connect();
+      
+      // Verify location belongs to user's merchant
+      const location = await this.getLocationById(locationId, userId);
+      if (!location) {
+        client.release();
+        return false;
+      }
+      
+      const result = await client.query(
+        `DELETE FROM locations WHERE id = $1`,
+        [locationId]
+      );
+      
+      client.release();
+      return (result.rowCount || 0) > 0;
+    } catch (error) {
+      console.error('Error deleting location:', error);
       return false;
     }
   }
