@@ -1912,7 +1912,15 @@ async function deleteLocation(locationId, merchantId) {
         
         if (data.success) {
             showNotification('Success', 'Location deleted successfully', 'success');
-            manageLocations(merchantId); // Refresh locations list
+            // Refresh merchant modal if open, otherwise refresh locations list
+            const merchantModal = document.getElementById('merchantModal');
+            const editingMerchantId = document.getElementById('merchantForm')?.dataset.editingMerchantId;
+            if (merchantModal && !merchantModal.classList.contains('hidden') && editingMerchantId == merchantId) {
+                // Reload merchant with locations
+                editMerchant(parseInt(merchantId));
+            } else {
+                manageLocations(merchantId); // Refresh locations list
+            }
         } else {
             showNotification('Error', data.error || 'Failed to delete location', 'error');
         }
