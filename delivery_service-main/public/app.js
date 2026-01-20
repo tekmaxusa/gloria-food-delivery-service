@@ -988,13 +988,7 @@ function showIntegrationsPage() {
                     <div class="form-group">
                         <label>Merchant Name <span style="color: red;">*</span></label>
                         <input type="text" id="merchantName" required placeholder="Enter Merchant Name (e.g., Jollibee)">
-                        <small style="color: #666; font-size: 12px;">Company or business name. Add locations with Store IDs after creating the merchant.</small>
-                    </div>
-                    <div class="form-group">
-                        <label>Store ID (Optional - Legacy)</label>
-                        <input type="text" id="merchantStoreId" placeholder="Enter Store ID (optional)" 
-                               pattern="[A-Za-z0-9_-]+" title="Store ID should contain only letters, numbers, hyphens, and underscores">
-                        <small style="color: #666; font-size: 12px;">Optional: For backward compatibility. New merchants should add locations instead.</small>
+                        <small style="color: #666; font-size: 12px;">Company or business name. You can add locations with Store IDs after creating the merchant.</small>
                     </div>
                     <div class="form-group">
                         <label>API Key</label>
@@ -1131,12 +1125,24 @@ function displayIntegrations(merchants) {
         const hasApiKey = merchant.api_key && merchant.api_key.length > 0;
         const apiKeyDisplay = hasApiKey ? merchant.api_key : '';
         
+        const locations = merchant.locations || [];
+        const locationsCount = locations.length;
+        const locationsList = locations.slice(0, 3).map(loc => 
+            `<span class="location-tag">${escapeHtml(loc.location_name)} (${escapeHtml(loc.store_id)})</span>`
+        ).join('');
+        const moreLocations = locationsCount > 3 ? `<span class="location-tag">+${locationsCount - 3} more</span>` : '';
+        
         return `
             <div class="merchant-card">
                 <div class="merchant-header">
                     <div>
                         <h3 class="merchant-name">${escapeHtml(merchant.merchant_name)}</h3>
-                        <p class="merchant-store-id">Store ID: ${escapeHtml(merchant.store_id)}</p>
+                        <div class="merchant-locations">
+                            ${locationsCount > 0 ? 
+                                `<div class="locations-list">${locationsList}${moreLocations}</div>` :
+                                `<p class="no-locations">No locations yet. <button onclick="manageLocations(${merchant.id})" class="link-btn">Add Location</button></p>`
+                            }
+                        </div>
                     </div>
                     <span class="status-badge status-${merchant.is_active ? 'active' : 'inactive'}">
                         ${merchant.is_active ? 'Active' : 'Inactive'}
@@ -1146,14 +1152,14 @@ function displayIntegrations(merchants) {
                 <div class="api-key-section">
                     <label class="api-key-label">Your API key:</label>
                     <div class="api-key-input-group">
-                        <input type="text" id="apiKey_${escapeHtml(merchant.store_id)}" readonly 
+                        <input type="text" id="apiKey_${merchant.id}" readonly 
                                value="${hasApiKey ? escapeHtml(apiKeyDisplay) : ''}"
                                class="api-key-input">
                         ${hasApiKey ? 
-                            `<button onclick="copyApiKey('${escapeHtml(merchant.store_id)}')" class="btn-secondary copy-api-btn">
+                            `<button onclick="copyApiKey('${merchant.id}')" class="btn-secondary copy-api-btn">
                                 Copy API Key
                             </button>` :
-                            `<button onclick="generateApiKey('${escapeHtml(merchant.store_id)}')" class="btn-primary generate-api-btn">
+                            `<button onclick="generateApiKey('${merchant.id}')" class="btn-primary generate-api-btn">
                                 Generate API Key
                             </button>`
                         }
@@ -1161,10 +1167,13 @@ function displayIntegrations(merchants) {
                 </div>
                 
                 <div class="merchant-actions">
-                    <button onclick="editMerchant('${escapeHtml(merchant.store_id)}')" class="btn-secondary edit-merchant-btn">
+                    <button onclick="manageLocations(${merchant.id})" class="btn-secondary">
+                        Manage Locations
+                    </button>
+                    <button onclick="editMerchant(${merchant.id})" class="btn-secondary edit-merchant-btn">
                         Edit
                     </button>
-                    <button onclick="deleteMerchant('${escapeHtml(merchant.store_id)}', '${escapeHtml(merchant.merchant_name)}')" class="delete-merchant-btn">
+                    <button onclick="deleteMerchant(${merchant.id}, '${escapeHtml(merchant.merchant_name)}')" class="delete-merchant-btn">
                         Delete
                     </button>
                 </div>
@@ -1188,8 +1197,8 @@ function updateIntegrationStats(merchants) {
 }
 
 // Copy API key
-async function copyApiKey(storeId) {
-    const apiKeyInput = document.getElementById(`apiKey_${storeId}`);
+async function copyApiKey(merchantId) {
+    const apiKeyInput = document.getElementById(`apiKey_${merchantId}`);
     if (apiKeyInput && apiKeyInput.value) {
         apiKeyInput.select();
         document.execCommand('copy');
@@ -1198,9 +1207,22 @@ async function copyApiKey(storeId) {
 }
 
 // Generate API key
-async function generateApiKey(storeId) {
+async function generateApiKey(merchantId) {
     try {
-        const response = await authenticatedFetch(`${API_BASE}/merchants/${storeId}/generate-api-key`, {
+        // First get merchant to find store_id (for backward compatibility) or use merchant id
+        const merchantResponse = await authenticatedFetch(`${API_BASE}/merchants`);
+        const merchantData = await merchantResponse.json();
+        const merchant = merchantData.merchants?.find(m => m.id == merchantId);
+        
+        if (!merchant) {
+            showNotification('Error', 'Merchant not found', 'error');
+            return;
+        }
+        
+        // Use store_id if available, otherwise use merchant id
+        const identifier = merchant.store_id || merchant.id;
+        
+        const response = await authenticatedFetch(`${API_BASE}/merchants/${identifier}/generate-api-key`, {
             method: 'POST'
         });
         const data = await response.json();
@@ -1272,10 +1294,17 @@ function displayMerchants(merchants) {
         return;
     }
 
-    tbody.innerHTML = merchants.map(merchant => `
-        <tr data-store-id="${escapeHtml(merchant.store_id)}">
-            <td><strong>${escapeHtml(merchant.store_id)}</strong></td>
-            <td>${escapeHtml(merchant.merchant_name)}</td>
+    tbody.innerHTML = merchants.map(merchant => {
+        const locations = merchant.locations || [];
+        const locationsCount = locations.length;
+        const locationsDisplay = locationsCount > 0 
+            ? locations.slice(0, 2).map(l => `${l.location_name} (${l.store_id})`).join(', ') + (locationsCount > 2 ? ` +${locationsCount - 2}` : '')
+            : 'No locations';
+        
+        return `
+        <tr data-merchant-id="${merchant.id}">
+            <td><strong>${escapeHtml(merchant.merchant_name)}</strong></td>
+            <td>${escapeHtml(locationsDisplay)}</td>
             <td>${escapeHtml(merchant.api_url || 'Default')}</td>
             <td>
                 <span class="status-badge status-${merchant.is_active ? 'active' : 'inactive'}">
@@ -1283,13 +1312,19 @@ function displayMerchants(merchants) {
                 </span>
             </td>
             <td>
-                <button class="btn-icon" onclick="editMerchant('${escapeHtml(merchant.store_id)}')" title="Edit">
+                <button class="btn-icon" onclick="manageLocations(${merchant.id})" title="Manage Locations">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                        <circle cx="12" cy="10" r="3"></circle>
+                    </svg>
+                </button>
+                <button class="btn-icon" onclick="editMerchant(${merchant.id})" title="Edit">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                     </svg>
                 </button>
-                <button class="btn-icon" onclick="deleteMerchant('${escapeHtml(merchant.store_id)}', '${escapeHtml(merchant.merchant_name)}')" title="Delete" style="color: #ef4444;">
+                <button class="btn-icon" onclick="deleteMerchant(${merchant.id}, '${escapeHtml(merchant.merchant_name)}')" title="Delete" style="color: #ef4444;">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polyline points="3 6 5 6 21 6"></polyline>
                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -1297,7 +1332,8 @@ function displayMerchants(merchants) {
                 </button>
             </td>
         </tr>
-    `).join('');
+    `;
+    }).join('');
 }
 
 // Open merchant modal for adding or editing merchant
@@ -1316,19 +1352,14 @@ function openMerchantModal(merchant) {
     if (merchant) {
         // Editing existing merchant
         title.textContent = 'Edit Integration';
-        storeIdInput.value = merchant.store_id || '';
-        storeIdInput.disabled = false; // Can edit store_id (for backward compatibility)
         document.getElementById('merchantName').value = merchant.merchant_name || '';
         document.getElementById('merchantApiUrl').value = merchant.api_url || '';
         document.getElementById('merchantIsActive').checked = merchant.is_active !== false;
         // Don't populate API key and master key for security
         form.dataset.editingMerchantId = merchant.id;
-        form.dataset.editingStoreId = merchant.store_id || '';
     } else {
         // Adding new merchant
         title.textContent = 'Add Integration';
-        storeIdInput.value = '';
-        storeIdInput.disabled = false; // Optional field
         document.getElementById('merchantIsActive').checked = true; // Default to active
     }
 
@@ -1349,31 +1380,24 @@ async function handleMerchantSubmit(e) {
     e.preventDefault();
 
     const form = e.target;
-    const storeId = document.getElementById('merchantStoreId').value.trim();
     const merchantName = document.getElementById('merchantName').value.trim();
     const apiKey = document.getElementById('merchantApiKey').value.trim();
     const apiUrl = document.getElementById('merchantApiUrl').value.trim();
     const masterKey = document.getElementById('merchantMasterKey').value.trim();
     const isActive = document.getElementById('merchantIsActive').checked;
 
-    // Only merchant_name is required now
+    // Only merchant_name is required
     if (!merchantName) {
         showError('Merchant Name is required');
         return;
     }
 
     const editingMerchantId = form.dataset.editingMerchantId;
-    const editingStoreId = form.dataset.editingStoreId;
     const merchantData = {
         merchant_name: merchantName,
         api_url: apiUrl || undefined,
         is_active: isActive
     };
-
-    // Only include store_id if provided (optional)
-    if (storeId) {
-        merchantData.store_id = storeId;
-    }
 
     // Only include API key and master key if provided (for security)
     if (apiKey) merchantData.api_key = apiKey;
@@ -1381,10 +1405,9 @@ async function handleMerchantSubmit(e) {
 
     try {
         let response;
-        if (editingMerchantId || editingStoreId) {
-            // Update existing merchant - use store_id if available, otherwise use merchant id
-            const identifier = editingStoreId || editingMerchantId;
-            response = await authenticatedFetch(`${API_BASE}/merchants/${identifier}`, {
+        if (editingMerchantId) {
+            // Update existing merchant - use merchant id
+            response = await authenticatedFetch(`${API_BASE}/merchants/${editingMerchantId}`, {
                 method: 'PUT',
                 body: JSON.stringify(merchantData)
             });
@@ -1412,15 +1435,21 @@ async function handleMerchantSubmit(e) {
 }
 
 // Edit merchant
-async function editMerchant(storeId) {
+async function editMerchant(merchantId) {
     try {
-        const response = await authenticatedFetch(`${API_BASE}/merchants/${storeId}`);
+        // Get all merchants and find by id
+        const response = await authenticatedFetch(`${API_BASE}/merchants`);
         const data = await response.json();
 
-        if (data.success && data.merchant) {
-            openMerchantModal(data.merchant);
+        if (data.success && data.merchants) {
+            const merchant = data.merchants.find(m => m.id == merchantId);
+            if (merchant) {
+                openMerchantModal(merchant);
+            } else {
+                showError('Merchant not found');
+            }
         } else {
-            showError('Failed to load merchant: ' + (data.error || 'Unknown error'));
+            showError('Failed to load merchants: ' + (data.error || 'Unknown error'));
         }
     } catch (error) {
         console.error('Error loading merchant:', error);
@@ -1428,28 +1457,292 @@ async function editMerchant(storeId) {
     }
 }
 
+// Manage locations for a merchant
+async function manageLocations(merchantId) {
+    try {
+        const response = await authenticatedFetch(`${API_BASE}/merchants/${merchantId}/locations`);
+        const data = await response.json();
+        
+        if (data.success) {
+            openLocationModal(merchantId, data.locations || []);
+        } else {
+            showNotification('Error', data.error || 'Failed to load locations', 'error');
+        }
+    } catch (error) {
+        console.error('Error loading locations:', error);
+        showNotification('Error', 'Error loading locations: ' + error.message, 'error');
+    }
+}
+
+// Open location management modal
+function openLocationModal(merchantId, locations = []) {
+    // Create or get modal
+    let modal = document.getElementById('locationModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'locationModal';
+        modal.className = 'modal hidden';
+        document.body.appendChild(modal);
+    }
+    
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h2>Manage Locations</h2>
+                <button class="modal-close" onclick="closeLocationModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 20px;">
+                    <button onclick="openAddLocationModal(${merchantId})" class="btn-primary">Add Location</button>
+                </div>
+                <div id="locationsList">
+                    ${locations.length === 0 ? 
+                        '<p style="color: #666; text-align: center; padding: 40px;">No locations yet. Click "Add Location" to create one.</p>' :
+                        locations.map(loc => `
+                            <div class="location-item" style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+                                <div style="display: flex; justify-content: space-between; align-items: start;">
+                                    <div style="flex: 1;">
+                                        <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600;">${escapeHtml(loc.location_name)}</h3>
+                                        <p style="margin: 4px 0; color: #64748b; font-size: 14px;"><strong>Store ID:</strong> ${escapeHtml(loc.store_id)}</p>
+                                        ${loc.address ? `<p style="margin: 4px 0; color: #64748b; font-size: 14px;"><strong>Address:</strong> ${escapeHtml(loc.address)}</p>` : ''}
+                                        ${loc.phone ? `<p style="margin: 4px 0; color: #64748b; font-size: 14px;"><strong>Phone:</strong> ${escapeHtml(loc.phone)}</p>` : ''}
+                                        <span class="status-badge status-${loc.is_active ? 'active' : 'inactive'}" style="margin-top: 8px; display: inline-block;">
+                                            ${loc.is_active ? 'Active' : 'Inactive'}
+                                        </span>
+                                    </div>
+                                    <div style="display: flex; gap: 8px;">
+                                        <button onclick="editLocation(${loc.id}, ${merchantId})" class="btn-secondary" style="padding: 6px 12px; font-size: 14px;">Edit</button>
+                                        <button onclick="deleteLocation(${loc.id}, ${merchantId})" class="btn-secondary" style="padding: 6px 12px; font-size: 14px; color: #ef4444;">Delete</button>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')
+                    }
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" onclick="closeLocationModal()">Close</button>
+            </div>
+        </div>
+    `;
+    
+    modal.classList.remove('hidden');
+}
+
+// Close location modal
+function closeLocationModal() {
+    const modal = document.getElementById('locationModal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+}
+
+// Open add/edit location modal
+function openAddLocationModal(merchantId, location = null) {
+    let modal = document.getElementById('addLocationModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'addLocationModal';
+        modal.className = 'modal hidden';
+        document.body.appendChild(modal);
+    }
+    
+    modal.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>${location ? 'Edit Location' : 'Add Location'}</h2>
+                <button class="modal-close" onclick="closeAddLocationModal()">&times;</button>
+            </div>
+            <form id="locationForm" class="modal-body" onsubmit="handleLocationSubmit(event, ${merchantId}, ${location ? location.id : 'null'})">
+                <div class="form-group">
+                    <label>Location Name <span style="color: red;">*</span></label>
+                    <input type="text" id="locationName" required placeholder="e.g., Makati Branch" value="${location ? escapeHtml(location.location_name) : ''}">
+                </div>
+                <div class="form-group">
+                    <label>Store ID <span style="color: red;">*</span></label>
+                    <input type="text" id="locationStoreId" required placeholder="Enter Store ID" 
+                           pattern="[A-Za-z0-9_-]+" value="${location ? escapeHtml(location.store_id) : ''}"
+                           ${location ? 'readonly' : ''}>
+                    <small style="color: #666; font-size: 12px;">This is the Store ID from GloriaFood. Orders will be matched using this ID.</small>
+                </div>
+                <div class="form-group">
+                    <label>Address</label>
+                    <textarea id="locationAddress" rows="2" placeholder="Enter address">${location ? escapeHtml(location.address || '') : ''}</textarea>
+                </div>
+                <div class="form-group">
+                    <label>Phone</label>
+                    <input type="text" id="locationPhone" placeholder="Enter phone number" value="${location ? escapeHtml(location.phone || '') : ''}">
+                </div>
+                <div class="form-group checkbox-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="locationIsActive" ${location ? (location.is_active ? 'checked' : '') : 'checked'}> Active
+                    </label>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" onclick="closeAddLocationModal()">Cancel</button>
+                    <button type="submit" class="btn-primary">${location ? 'Update' : 'Add'} Location</button>
+                </div>
+            </form>
+        </div>
+    `;
+    
+    modal.classList.remove('hidden');
+}
+
+// Close add location modal
+function closeAddLocationModal() {
+    const modal = document.getElementById('addLocationModal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+}
+
+// Handle location form submission
+async function handleLocationSubmit(e, merchantId, locationId) {
+    e.preventDefault();
+    
+    const locationName = document.getElementById('locationName').value.trim();
+    const storeId = document.getElementById('locationStoreId').value.trim();
+    const address = document.getElementById('locationAddress').value.trim();
+    const phone = document.getElementById('locationPhone').value.trim();
+    const isActive = document.getElementById('locationIsActive').checked;
+    
+    if (!locationName || !storeId) {
+        showNotification('Error', 'Location Name and Store ID are required', 'error');
+        return;
+    }
+    
+    try {
+        let response;
+        if (locationId) {
+            // Update location
+            response = await authenticatedFetch(`${API_BASE}/locations/${locationId}`, {
+                method: 'PUT',
+                body: JSON.stringify({
+                    location_name: locationName,
+                    store_id: storeId,
+                    address: address || undefined,
+                    phone: phone || undefined,
+                    is_active: isActive
+                })
+            });
+        } else {
+            // Create location
+            response = await authenticatedFetch(`${API_BASE}/merchants/${merchantId}/locations`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    location_name: locationName,
+                    store_id: storeId,
+                    address: address || undefined,
+                    phone: phone || undefined,
+                    is_active: isActive
+                })
+            });
+        }
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showNotification('Success', locationId ? 'Location updated successfully' : 'Location added successfully', 'success');
+            closeAddLocationModal();
+            manageLocations(merchantId); // Refresh locations list
+        } else {
+            showNotification('Error', data.error || 'Failed to save location', 'error');
+        }
+    } catch (error) {
+        console.error('Error saving location:', error);
+        showNotification('Error', 'Error saving location: ' + error.message, 'error');
+    }
+}
+
+// Edit location
+function editLocation(locationId, merchantId) {
+    // Get location details and open modal
+    fetch(`${API_BASE}/merchants/${merchantId}/locations`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                const location = data.locations.find(l => l.id == locationId);
+                if (location) {
+                    openAddLocationModal(merchantId, location);
+                }
+            }
+        })
+        .catch(err => {
+            console.error('Error loading location:', err);
+            showNotification('Error', 'Failed to load location details', 'error');
+        });
+}
+
+// Delete location
+async function deleteLocation(locationId, merchantId) {
+    if (!confirm('Are you sure you want to delete this location? Orders linked to this location will not be affected.')) {
+        return;
+    }
+    
+    try {
+        const response = await authenticatedFetch(`${API_BASE}/locations/${locationId}`, {
+            method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showNotification('Success', 'Location deleted successfully', 'success');
+            manageLocations(merchantId); // Refresh locations list
+        } else {
+            showNotification('Error', data.error || 'Failed to delete location', 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting location:', error);
+        showNotification('Error', 'Error deleting location: ' + error.message, 'error');
+    }
+}
+
+// Make functions globally available
+window.manageLocations = manageLocations;
+window.openAddLocationModal = openAddLocationModal;
+window.closeAddLocationModal = closeAddLocationModal;
+window.closeLocationModal = closeLocationModal;
+window.handleLocationSubmit = handleLocationSubmit;
+window.editLocation = editLocation;
+window.deleteLocation = deleteLocation;
+
 // Delete merchant
-async function deleteMerchant(storeId, merchantName) {
-    if (!confirm(`Are you sure you want to delete merchant "${merchantName}" (${storeId})?\n\nThis action cannot be undone.`)) {
+async function deleteMerchant(merchantId, merchantName) {
+    if (!confirm(`Are you sure you want to delete merchant "${merchantName}"?\n\nThis will also delete all locations for this merchant. This action cannot be undone.`)) {
         return;
     }
 
     try {
-        const response = await authenticatedFetch(`${API_BASE}/merchants/${storeId}`, {
+        // Get merchant to find store_id for backward compatibility, or use merchant id
+        const merchantsResponse = await authenticatedFetch(`${API_BASE}/merchants`);
+        const merchantsData = await merchantsResponse.json();
+        const merchant = merchantsData.merchants?.find(m => m.id == merchantId);
+        
+        if (!merchant) {
+            showNotification('Error', 'Merchant not found', 'error');
+            return;
+        }
+        
+        // Use store_id if available (backward compatibility), otherwise use merchant id
+        const identifier = merchant.store_id || merchant.id;
+        
+        const response = await authenticatedFetch(`${API_BASE}/merchants/${identifier}`, {
             method: 'DELETE'
         });
 
         const data = await response.json();
 
         if (data.success) {
-            showNotification('Success', 'Merchant deleted successfully');
-            loadMerchants();
+            showNotification('Success', 'Merchant deleted successfully', 'success');
+            loadIntegrations();
         } else {
-            showError(data.error || 'Failed to delete merchant');
+            showNotification('Error', data.error || 'Failed to delete merchant', 'error');
         }
     } catch (error) {
         console.error('Error deleting merchant:', error);
-        showError('Error deleting merchant: ' + error.message);
+        showNotification('Error', 'Error deleting merchant: ' + error.message, 'error');
     }
 }
 
