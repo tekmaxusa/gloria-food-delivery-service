@@ -1472,16 +1472,17 @@ class GloriaFoodWebhookServer {
         
         const { store_id, merchant_name, api_key, api_url, master_key, is_active } = req.body;
         
-        if (!store_id || !merchant_name) {
+        // merchant_name is required, but store_id is optional (should be in locations)
+        if (!merchant_name) {
           return res.status(400).json({ 
             success: false, 
-            error: 'store_id and merchant_name are required' 
+            error: 'merchant_name is required' 
           });
         }
 
         const merchant = await this.handleAsync(this.database.insertOrUpdateMerchant({
           user_id: user.userId,
-          store_id,
+          store_id: store_id || undefined, // Optional - store_id should be in locations
           merchant_name,
           api_key,
           api_url,
@@ -1557,43 +1558,94 @@ class GloriaFoodWebhookServer {
       }
     });
 
-    this.app.put('/merchants/:storeId', async (req: Request, res: Response) => {
+    this.app.put('/merchants/:identifier', async (req: Request, res: Response) => {
       try {
         const user = getCurrentUser(req);
         if (!user) {
           return res.status(401).json({ success: false, error: 'Not authenticated' });
         }
         
-        const { merchant_name, api_key, api_url, master_key, is_active, phone, address } = req.body;
-        const storeId = req.params.storeId;
+        const { merchant_name, api_key, api_url, master_key, is_active, phone, address, store_id } = req.body;
+        const identifier = req.params.identifier;
 
         // Ensure merchant_name is provided and not empty
         if (merchant_name !== undefined && (!merchant_name || merchant_name.trim() === '')) {
           return res.status(400).json({ success: false, error: 'merchant_name cannot be empty' });
         }
 
+        // Try to find merchant by store_id first (for backward compatibility), then by id
+        let existingMerchant = null;
+        const merchantId = parseInt(identifier);
+        if (!isNaN(merchantId)) {
+          // Try by ID - query directly
+          const client = await (this.database as any).pool?.connect();
+          if (client) {
+            try {
+              const result = await client.query(
+                `SELECT * FROM merchants WHERE id = $1 AND user_id = $2`,
+                [merchantId, user.userId]
+              );
+              if (result.rows.length > 0) {
+                const merchantRow = result.rows[0];
+                // Get locations for this merchant
+                const locationsQuery = `SELECT * FROM locations WHERE merchant_id = $1 AND is_active = TRUE ORDER BY location_name LIMIT 1`;
+                const locationsResult = await client.query(locationsQuery, [merchantRow.id]);
+                const firstLocation = locationsResult.rows.length > 0 ? locationsResult.rows[0] : null;
+                
+                existingMerchant = {
+                  id: merchantRow.id,
+                  user_id: merchantRow.user_id || undefined,
+                  merchant_name: merchantRow.merchant_name,
+                  api_key: merchantRow.api_key,
+                  api_url: merchantRow.api_url,
+                  master_key: merchantRow.master_key,
+                  is_active: merchantRow.is_active === true,
+                  store_id: firstLocation?.store_id || merchantRow.store_id || undefined,
+                  address: firstLocation?.address || merchantRow.address || undefined,
+                  phone: firstLocation?.phone || merchantRow.phone || undefined,
+                  created_at: merchantRow.created_at,
+                  updated_at: merchantRow.updated_at
+                };
+              }
+              client.release();
+            } catch (e) {
+              if (client) client.release();
+            }
+          }
+        }
+        
+        if (!existingMerchant) {
+          // Try by store_id (backward compatibility)
+          existingMerchant = await this.handleAsync(this.database.getMerchantByStoreId(identifier, user.userId));
+        }
+
+        if (!existingMerchant) {
+          return res.status(404).json({ success: false, error: 'Merchant not found' });
+        }
+
         const merchant = await this.handleAsync(this.database.insertOrUpdateMerchant({
+          id: existingMerchant.id,
           user_id: user.userId,
-          store_id: storeId,
-          merchant_name: merchant_name ? merchant_name.trim() : undefined,
-          api_key,
-          api_url,
-          master_key,
-          is_active,
-          phone,
-          address
+          store_id: store_id || existingMerchant.store_id, // Use provided store_id or keep existing
+          merchant_name: merchant_name ? merchant_name.trim() : existingMerchant.merchant_name,
+          api_key: api_key !== undefined ? api_key : existingMerchant.api_key,
+          api_url: api_url !== undefined ? api_url : existingMerchant.api_url,
+          master_key: master_key !== undefined ? master_key : existingMerchant.master_key,
+          is_active: is_active !== undefined ? is_active : existingMerchant.is_active,
+          phone: phone !== undefined ? phone : (existingMerchant as any).phone,
+          address: address !== undefined ? address : (existingMerchant as any).address
         } as any));
 
         if (merchant) {
           // Reload merchants in manager to reflect changes
           await this.merchantManager.reload();
-          console.log(`Merchant ${storeId} updated: merchant_name = ${merchant.merchant_name}`);
+          console.log(`Merchant ${merchant.id} (${merchant.store_id || 'no store_id'}) updated: merchant_name = ${merchant.merchant_name}`);
           
-          // If merchant_name was updated, update existing orders with fallback merchant names
-          if (merchant_name !== undefined && merchant.merchant_name) {
+          // If merchant_name was updated and we have a store_id, update existing orders with fallback merchant names
+          if (merchant_name !== undefined && merchant.merchant_name && merchant.store_id) {
             try {
               const updatedCount = await this.handleAsync(
-                (this.database as any).updateOrdersMerchantName(storeId, merchant.merchant_name)
+                (this.database as any).updateOrdersMerchantName(merchant.store_id, merchant.merchant_name)
               );
               if (updatedCount > 0) {
                 console.log(`  ✅ Updated ${updatedCount} existing order(s) with new merchant name "${merchant.merchant_name}"`);

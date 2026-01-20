@@ -986,13 +986,15 @@ function showIntegrationsPage() {
                 </div>
                 <form id="merchantForm" class="modal-body">
                     <div class="form-group">
-                        <label>Store ID <span style="color: red;">*</span></label>
-                        <input type="text" id="merchantStoreId" required placeholder="Enter Store ID" 
-                               pattern="[A-Za-z0-9_-]+" title="Store ID should contain only letters, numbers, hyphens, and underscores">
+                        <label>Merchant Name <span style="color: red;">*</span></label>
+                        <input type="text" id="merchantName" required placeholder="Enter Merchant Name (e.g., Jollibee)">
+                        <small style="color: #666; font-size: 12px;">Company or business name. Add locations with Store IDs after creating the merchant.</small>
                     </div>
                     <div class="form-group">
-                        <label>Merchant Name <span style="color: red;">*</span></label>
-                        <input type="text" id="merchantName" required placeholder="Enter Merchant Name">
+                        <label>Store ID (Optional - Legacy)</label>
+                        <input type="text" id="merchantStoreId" placeholder="Enter Store ID (optional)" 
+                               pattern="[A-Za-z0-9_-]+" title="Store ID should contain only letters, numbers, hyphens, and underscores">
+                        <small style="color: #666; font-size: 12px;">Optional: For backward compatibility. New merchants should add locations instead.</small>
                     </div>
                     <div class="form-group">
                         <label>API Key</label>
@@ -1314,17 +1316,19 @@ function openMerchantModal(merchant) {
     if (merchant) {
         // Editing existing merchant
         title.textContent = 'Edit Integration';
-        storeIdInput.value = merchant.store_id;
-        storeIdInput.disabled = true; // Can't change store_id when editing
+        storeIdInput.value = merchant.store_id || '';
+        storeIdInput.disabled = false; // Can edit store_id (for backward compatibility)
         document.getElementById('merchantName').value = merchant.merchant_name || '';
         document.getElementById('merchantApiUrl').value = merchant.api_url || '';
         document.getElementById('merchantIsActive').checked = merchant.is_active !== false;
         // Don't populate API key and master key for security
-        form.dataset.editingStoreId = merchant.store_id;
+        form.dataset.editingMerchantId = merchant.id;
+        form.dataset.editingStoreId = merchant.store_id || '';
     } else {
         // Adding new merchant
         title.textContent = 'Add Integration';
-        storeIdInput.disabled = false; // Can enter store_id when adding
+        storeIdInput.value = '';
+        storeIdInput.disabled = false; // Optional field
         document.getElementById('merchantIsActive').checked = true; // Default to active
     }
 
@@ -1352,18 +1356,24 @@ async function handleMerchantSubmit(e) {
     const masterKey = document.getElementById('merchantMasterKey').value.trim();
     const isActive = document.getElementById('merchantIsActive').checked;
 
-    if (!storeId || !merchantName) {
-        showError('Store ID and Merchant Name are required');
+    // Only merchant_name is required now
+    if (!merchantName) {
+        showError('Merchant Name is required');
         return;
     }
 
+    const editingMerchantId = form.dataset.editingMerchantId;
     const editingStoreId = form.dataset.editingStoreId;
     const merchantData = {
-        store_id: storeId,
         merchant_name: merchantName,
         api_url: apiUrl || undefined,
         is_active: isActive
     };
+
+    // Only include store_id if provided (optional)
+    if (storeId) {
+        merchantData.store_id = storeId;
+    }
 
     // Only include API key and master key if provided (for security)
     if (apiKey) merchantData.api_key = apiKey;
@@ -1371,9 +1381,10 @@ async function handleMerchantSubmit(e) {
 
     try {
         let response;
-        if (editingStoreId) {
-            // Update existing merchant
-            response = await authenticatedFetch(`${API_BASE}/merchants/${editingStoreId}`, {
+        if (editingMerchantId || editingStoreId) {
+            // Update existing merchant - use store_id if available, otherwise use merchant id
+            const identifier = editingStoreId || editingMerchantId;
+            response = await authenticatedFetch(`${API_BASE}/merchants/${identifier}`, {
                 method: 'PUT',
                 body: JSON.stringify(merchantData)
             });
