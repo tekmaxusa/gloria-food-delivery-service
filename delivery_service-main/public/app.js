@@ -1077,6 +1077,11 @@ function initializeIntegrationsPage() {
             openMerchantModal(null);
         });
     }
+    
+    // Make sure functions are available globally for onclick handlers
+    window.editMerchant = editMerchant;
+    window.manageLocations = manageLocations;
+    window.deleteMerchant = deleteMerchant;
 }
 
 // Initialize Merchants page (legacy)
@@ -1128,7 +1133,7 @@ function displayIntegrations(merchants) {
         const locations = merchant.locations || [];
         const locationsCount = locations.length;
         const locationsList = locations.slice(0, 3).map(loc => 
-            `<span class="location-tag">${escapeHtml(loc.location_name)} (${escapeHtml(loc.store_id)})</span>`
+            `<span class="location-tag">${escapeHtml(loc.location_name)}</span>`
         ).join('');
         const moreLocations = locationsCount > 3 ? `<span class="location-tag">+${locationsCount - 3} more</span>` : '';
         
@@ -1298,7 +1303,7 @@ function displayMerchants(merchants) {
         const locations = merchant.locations || [];
         const locationsCount = locations.length;
         const locationsDisplay = locationsCount > 0 
-            ? locations.slice(0, 2).map(l => `${l.location_name} (${l.store_id})`).join(', ') + (locationsCount > 2 ? ` +${locationsCount - 2}` : '')
+            ? locations.slice(0, 2).map(l => l.location_name).join(', ') + (locationsCount > 2 ? ` +${locationsCount - 2}` : '')
             : 'No locations';
         
         return `
@@ -1503,7 +1508,7 @@ function openLocationModal(merchantId, locations = []) {
                                 <div style="display: flex; justify-content: space-between; align-items: start;">
                                     <div style="flex: 1;">
                                         <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600;">${escapeHtml(loc.location_name)}</h3>
-                                        <p style="margin: 4px 0; color: #64748b; font-size: 14px;"><strong>Store ID:</strong> ${escapeHtml(loc.store_id)}</p>
+                                        <p style="margin: 4px 0; color: #64748b; font-size: 12px;"><strong>Store ID:</strong> <code style="background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 11px;">${escapeHtml(loc.store_id)}</code></p>
                                         ${loc.address ? `<p style="margin: 4px 0; color: #64748b; font-size: 14px;"><strong>Address:</strong> ${escapeHtml(loc.address)}</p>` : ''}
                                         ${loc.phone ? `<p style="margin: 4px 0; color: #64748b; font-size: 14px;"><strong>Phone:</strong> ${escapeHtml(loc.phone)}</p>` : ''}
                                         <span class="status-badge status-${loc.is_active ? 'active' : 'inactive'}" style="margin-top: 8px; display: inline-block;">

@@ -1694,7 +1694,8 @@ class GloriaFoodWebhookServer {
       try {
         const user = getCurrentUser(req);
         if (!user) {
-          return res.status(401).json({ success: false, error: 'Not authenticated' });
+          console.log(chalk.yellow(`⚠️  /merchants/${req.params.merchantId}/locations: No user session found`));
+          return res.status(401).json({ success: false, error: 'Not authenticated. Please login first.' });
         }
         
         const merchantId = parseInt(req.params.merchantId);
@@ -1710,6 +1711,7 @@ class GloriaFoodWebhookServer {
           res.status(500).json({ success: false, error: 'Location management not available' });
         }
       } catch (error: any) {
+        console.error(chalk.red(`❌ Error in /merchants/${req.params.merchantId}/locations: ${error.message}`));
         res.status(500).json({ success: false, error: error.message });
       }
     });
