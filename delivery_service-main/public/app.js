@@ -1070,11 +1070,64 @@ function initializeIntegrationsPage() {
         });
     }
     
-    // Add Integration button
-    const apiCredentialsBtn = document.getElementById('apiCredentialsBtn');
-    if (apiCredentialsBtn) {
-        apiCredentialsBtn.addEventListener('click', () => {
-            openMerchantModal(null);
+    // Setup API Credentials button - use both direct listener and global function
+    function setupApiCredentialsButton() {
+        const apiCredentialsBtn = document.getElementById('apiCredentialsBtn');
+        if (apiCredentialsBtn) {
+            // Remove existing listeners to avoid duplicates
+            const newBtn = apiCredentialsBtn.cloneNode(true);
+            apiCredentialsBtn.parentNode.replaceChild(newBtn, apiCredentialsBtn);
+            
+            newBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('API Credentials button clicked');
+                if (typeof openMerchantModal === 'function') {
+                    openMerchantModal(null);
+                } else {
+                    console.error('openMerchantModal function not found');
+                }
+            });
+        }
+    }
+    
+    // Setup API Credentials button immediately
+    setupApiCredentialsButton();
+    
+    // Also setup after a short delay in case DOM isn't ready
+    setTimeout(setupApiCredentialsButton, 100);
+    
+    // Setup Add Integration button in no-integrations section
+    function setupAddIntegrationButton() {
+        const addIntegrationBtn = document.getElementById('addIntegrationBtn');
+        if (addIntegrationBtn) {
+            const newBtn = addIntegrationBtn.cloneNode(true);
+            addIntegrationBtn.parentNode.replaceChild(newBtn, addIntegrationBtn);
+            newBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('Add Integration button clicked');
+                if (typeof openMerchantModal === 'function') {
+                    openMerchantModal(null);
+                } else {
+                    const apiBtn = document.getElementById('apiCredentialsBtn');
+                    if (apiBtn) apiBtn.click();
+                }
+            });
+        }
+    }
+    
+    // Setup Add Integration button with delegation
+    const merchantApiKeysContainer = document.getElementById('merchantApiKeys');
+    if (merchantApiKeysContainer) {
+        merchantApiKeysContainer.addEventListener('click', (e) => {
+            if (e.target.id === 'addIntegrationBtn' || e.target.closest('#addIntegrationBtn')) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (typeof openMerchantModal === 'function') {
+                    openMerchantModal(null);
+                }
+            }
         });
     }
     
@@ -1083,81 +1136,117 @@ function initializeIntegrationsPage() {
     if (merchantApiKeysContainer) {
         merchantApiKeysContainer.addEventListener('click', (e) => {
             const target = e.target;
+            let handled = false;
             
-            // Handle Edit button
-            if (target.classList.contains('edit-merchant-btn') || target.closest('.edit-merchant-btn')) {
-                const btn = target.classList.contains('edit-merchant-btn') ? target : target.closest('.edit-merchant-btn');
-                const merchantCard = btn.closest('.merchant-card');
+            // Handle Edit button - check multiple ways
+            const editBtn = target.closest('.edit-merchant-btn');
+            if (editBtn) {
+                const merchantCard = editBtn.closest('.merchant-card');
                 if (merchantCard) {
                     const merchantId = merchantCard.dataset.merchantId;
                     if (merchantId) {
                         e.preventDefault();
-                        editMerchant(parseInt(merchantId));
+                        e.stopPropagation();
+                        console.log('Edit button clicked for merchant:', merchantId);
+                        if (typeof editMerchant === 'function') {
+                            editMerchant(parseInt(merchantId));
+                        } else {
+                            console.error('editMerchant function not found');
+                        }
+                        handled = true;
                     }
                 }
             }
             
             // Handle Manage Locations button
-            if (target.textContent === 'Manage Locations' || target.closest('button')?.textContent === 'Manage Locations') {
-                const btn = target.tagName === 'BUTTON' ? target : target.closest('button');
-                const merchantCard = btn.closest('.merchant-card');
-                if (merchantCard) {
-                    const merchantId = merchantCard.dataset.merchantId;
-                    if (merchantId) {
-                        e.preventDefault();
-                        manageLocations(parseInt(merchantId));
+            if (!handled) {
+                const manageBtn = target.closest('button');
+                if (manageBtn && manageBtn.textContent.trim() === 'Manage Locations') {
+                    const merchantCard = manageBtn.closest('.merchant-card');
+                    if (merchantCard) {
+                        const merchantId = merchantCard.dataset.merchantId;
+                        if (merchantId) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            console.log('Manage Locations clicked for merchant:', merchantId);
+                            if (typeof manageLocations === 'function') {
+                                manageLocations(parseInt(merchantId));
+                            }
+                            handled = true;
+                        }
                     }
                 }
             }
             
             // Handle Delete button
-            if (target.classList.contains('delete-merchant-btn') || target.closest('.delete-merchant-btn')) {
-                const btn = target.classList.contains('delete-merchant-btn') ? target : target.closest('.delete-merchant-btn');
-                const merchantCard = btn.closest('.merchant-card');
-                if (merchantCard) {
-                    const merchantName = merchantCard.querySelector('.merchant-name')?.textContent || '';
-                    const merchantId = merchantCard.dataset.merchantId;
-                    if (merchantId) {
-                        e.preventDefault();
-                        deleteMerchant(parseInt(merchantId), merchantName);
+            if (!handled) {
+                const deleteBtn = target.closest('.delete-merchant-btn');
+                if (deleteBtn) {
+                    const merchantCard = deleteBtn.closest('.merchant-card');
+                    if (merchantCard) {
+                        const merchantName = merchantCard.querySelector('.merchant-name')?.textContent || '';
+                        const merchantId = merchantCard.dataset.merchantId;
+                        if (merchantId) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (typeof deleteMerchant === 'function') {
+                                deleteMerchant(parseInt(merchantId), merchantName);
+                            }
+                            handled = true;
+                        }
                     }
                 }
             }
             
             // Handle Copy API Key button
-            if (target.classList.contains('copy-api-btn') || target.closest('.copy-api-btn')) {
-                const btn = target.classList.contains('copy-api-btn') ? target : target.closest('.copy-api-btn');
-                const merchantCard = btn.closest('.merchant-card');
-                if (merchantCard) {
-                    const merchantId = merchantCard.dataset.merchantId;
-                    if (merchantId) {
-                        e.preventDefault();
-                        copyApiKey(merchantId);
+            if (!handled) {
+                const copyBtn = target.closest('.copy-api-btn');
+                if (copyBtn) {
+                    const merchantCard = copyBtn.closest('.merchant-card');
+                    if (merchantCard) {
+                        const merchantId = merchantCard.dataset.merchantId;
+                        if (merchantId) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (typeof copyApiKey === 'function') {
+                                copyApiKey(merchantId);
+                            }
+                            handled = true;
+                        }
                     }
                 }
             }
             
             // Handle Generate API Key button
-            if (target.classList.contains('generate-api-btn') || target.closest('.generate-api-btn')) {
-                const btn = target.classList.contains('generate-api-btn') ? target : target.closest('.generate-api-btn');
-                const merchantCard = btn.closest('.merchant-card');
-                if (merchantCard) {
-                    const merchantId = merchantCard.dataset.merchantId;
-                    if (merchantId) {
-                        e.preventDefault();
-                        generateApiKey(merchantId);
+            if (!handled) {
+                const generateBtn = target.closest('.generate-api-btn');
+                if (generateBtn) {
+                    const merchantCard = generateBtn.closest('.merchant-card');
+                    if (merchantCard) {
+                        const merchantId = merchantCard.dataset.merchantId;
+                        if (merchantId) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (typeof generateApiKey === 'function') {
+                                generateApiKey(merchantId);
+                            }
+                            handled = true;
+                        }
                     }
                 }
             }
             
             // Handle Add Location link
-            if (target.classList.contains('link-btn') && target.textContent.includes('Add Location')) {
+            if (!handled && target.classList.contains('link-btn') && target.textContent.includes('Add Location')) {
                 const merchantCard = target.closest('.merchant-card');
                 if (merchantCard) {
                     const merchantId = merchantCard.dataset.merchantId;
                     if (merchantId) {
                         e.preventDefault();
-                        manageLocations(parseInt(merchantId));
+                        e.stopPropagation();
+                        if (typeof manageLocations === 'function') {
+                            manageLocations(parseInt(merchantId));
+                        }
                     }
                 }
             }
@@ -1170,6 +1259,7 @@ function initializeIntegrationsPage() {
     window.deleteMerchant = deleteMerchant;
     window.copyApiKey = copyApiKey;
     window.generateApiKey = generateApiKey;
+    window.openMerchantModal = openMerchantModal;
 }
 
 // Initialize Merchants page (legacy)
@@ -1206,7 +1296,7 @@ function displayIntegrations(merchants) {
         container.innerHTML = `
             <div class="no-integrations">
                 <p>No integrations found</p>
-                <button class="btn-primary" onclick="document.getElementById('apiCredentialsBtn').click()">
+                <button class="btn-primary" id="addIntegrationBtn">
                     Add Integration
                 </button>
             </div>
