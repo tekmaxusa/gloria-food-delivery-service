@@ -1158,25 +1158,6 @@ function initializeIntegrationsPage() {
                 }
             }
             
-            // Handle Manage Locations button
-            if (!handled) {
-                const manageBtn = target.closest('button');
-                if (manageBtn && manageBtn.textContent.trim() === 'Manage Locations') {
-                    const merchantCard = manageBtn.closest('.merchant-card');
-                    if (merchantCard) {
-                        const merchantId = merchantCard.dataset.merchantId;
-                        if (merchantId) {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            console.log('Manage Locations clicked for merchant:', merchantId);
-                            if (typeof manageLocations === 'function') {
-                                manageLocations(parseInt(merchantId));
-                            }
-                            handled = true;
-                        }
-                    }
-                }
-            }
             
             // Handle Delete button
             if (!handled) {
@@ -1350,8 +1331,7 @@ function displayIntegrations(merchants) {
                 </div>
                 
                 <div class="merchant-actions">
-                    <button class="btn-secondary">Manage Locations</button>
-                    <button class="btn-secondary edit-merchant-btn">Edit</button>
+                    <button class="btn-secondary edit-merchant-btn">Edit & Manage Locations</button>
                     <button class="delete-merchant-btn">Delete</button>
                 </div>
             </div>
@@ -1518,26 +1498,74 @@ function openMerchantModal(merchant) {
     const modal = document.getElementById('merchantModal');
     const form = document.getElementById('merchantForm');
     const title = document.getElementById('merchantModalTitle');
-    const storeIdInput = document.getElementById('merchantStoreId');
 
-    if (!modal || !form || !title || !storeIdInput) return;
+    if (!modal || !form || !title) return;
 
     // Reset form
     form.reset();
-    form.dataset.editingStoreId = '';
+    form.dataset.editingMerchantId = '';
+
+    // Get or create locations container
+    let locationsContainer = document.getElementById('merchantLocationsContainer');
+    if (!locationsContainer) {
+        // Create locations section after the form
+        locationsContainer = document.createElement('div');
+        locationsContainer.id = 'merchantLocationsContainer';
+        locationsContainer.className = 'merchant-locations-section';
+        locationsContainer.style.cssText = 'margin-top: 20px; padding-top: 20px; border-top: 1px solid #e2e8f0;';
+        form.parentNode.insertBefore(locationsContainer, form.nextSibling);
+    }
 
     if (merchant) {
         // Editing existing merchant
-        title.textContent = 'Edit Integration';
+        title.textContent = 'Edit Integration & Manage Locations';
         document.getElementById('merchantName').value = merchant.merchant_name || '';
         document.getElementById('merchantApiUrl').value = merchant.api_url || '';
         document.getElementById('merchantIsActive').checked = merchant.is_active !== false;
         // Don't populate API key and master key for security
         form.dataset.editingMerchantId = merchant.id;
+
+        // Show locations section
+        const locations = merchant.locations || [];
+        locationsContainer.innerHTML = `
+            <h3 style="margin: 0 0 16px 0; font-size: 18px; font-weight: 600;">Locations</h3>
+            <div style="margin-bottom: 16px;">
+                <button type="button" onclick="openAddLocationModal(${merchant.id})" class="btn-primary" style="padding: 8px 16px;">
+                    Add Location
+                </button>
+            </div>
+            <div id="merchantLocationsList">
+                ${locations.length === 0 ? 
+                    '<p style="color: #666; text-align: center; padding: 20px;">No locations yet. Click "Add Location" to create one.</p>' :
+                    locations.map(loc => `
+                        <div class="location-item" style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 12px; background: #fff;">
+                            <div style="display: flex; justify-content: space-between; align-items: start;">
+                                <div style="flex: 1;">
+                                    <h4 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600;">${escapeHtml(loc.location_name)}</h4>
+                                    <p style="margin: 4px 0; color: #64748b; font-size: 12px;"><strong>Store ID:</strong> <code style="background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 11px;">${escapeHtml(loc.store_id)}</code></p>
+                                    ${loc.address ? `<p style="margin: 4px 0; color: #64748b; font-size: 14px;"><strong>Address:</strong> ${escapeHtml(loc.address)}</p>` : ''}
+                                    ${loc.phone ? `<p style="margin: 4px 0; color: #64748b; font-size: 14px;"><strong>Phone:</strong> ${escapeHtml(loc.phone)}</p>` : ''}
+                                    <span class="status-badge status-${loc.is_active ? 'active' : 'inactive'}" style="margin-top: 8px; display: inline-block;">
+                                        ${loc.is_active ? 'Active' : 'Inactive'}
+                                    </span>
+                                </div>
+                                <div style="display: flex; gap: 8px;">
+                                    <button onclick="editLocation(${loc.id}, ${merchant.id})" class="btn-secondary" style="padding: 6px 12px; font-size: 14px;">Edit</button>
+                                    <button onclick="deleteLocation(${loc.id}, ${merchant.id})" class="btn-secondary" style="padding: 6px 12px; font-size: 14px; color: #ef4444;">Delete</button>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')
+                }
+            </div>
+        `;
+        locationsContainer.style.display = 'block';
     } else {
         // Adding new merchant
         title.textContent = 'Add Integration';
         document.getElementById('merchantIsActive').checked = true; // Default to active
+        // Hide locations section for new merchants
+        locationsContainer.style.display = 'none';
     }
 
     // Show modal
@@ -1614,19 +1642,29 @@ async function handleMerchantSubmit(e) {
 // Edit merchant
 async function editMerchant(merchantId) {
     try {
-        // Get all merchants and find by id
-        const response = await authenticatedFetch(`${API_BASE}/merchants`);
-        const data = await response.json();
+        // Get merchant and locations in parallel
+        const [merchantResponse, locationsResponse] = await Promise.all([
+            authenticatedFetch(`${API_BASE}/merchants`),
+            authenticatedFetch(`${API_BASE}/merchants/${merchantId}/locations`).catch(err => {
+                console.warn('Failed to load locations, continuing without them:', err);
+                return { json: async () => ({ success: false, locations: [] }) };
+            })
+        ]);
+        
+        const merchantData = await merchantResponse.json();
+        const locationsData = await locationsResponse.json();
 
-        if (data.success && data.merchants) {
-            const merchant = data.merchants.find(m => m.id == merchantId);
+        if (merchantData.success && merchantData.merchants) {
+            const merchant = merchantData.merchants.find(m => m.id == merchantId);
             if (merchant) {
+                // Add locations to merchant object
+                merchant.locations = locationsData.success ? (locationsData.locations || []) : [];
                 openMerchantModal(merchant);
             } else {
                 showError('Merchant not found');
             }
         } else {
-            showError('Failed to load merchants: ' + (data.error || 'Unknown error'));
+            showError('Failed to load merchants: ' + (merchantData.error || 'Unknown error'));
         }
     } catch (error) {
         console.error('Error loading merchant:', error);
@@ -1822,7 +1860,15 @@ async function handleLocationSubmit(e, merchantId, locationId) {
         if (data.success) {
             showNotification('Success', locationId ? 'Location updated successfully' : 'Location added successfully', 'success');
             closeAddLocationModal();
-            manageLocations(merchantId); // Refresh locations list
+            // Refresh merchant modal if open, otherwise refresh locations list
+            const merchantModal = document.getElementById('merchantModal');
+            const editingMerchantId = document.getElementById('merchantForm')?.dataset.editingMerchantId;
+            if (merchantModal && !merchantModal.classList.contains('hidden') && editingMerchantId == merchantId) {
+                // Reload merchant with locations
+                editMerchant(parseInt(merchantId));
+            } else {
+                manageLocations(merchantId); // Refresh locations list
+            }
         } else {
             showNotification('Error', data.error || 'Failed to save location', 'error');
         }
