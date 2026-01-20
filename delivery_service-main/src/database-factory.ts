@@ -29,7 +29,7 @@ export interface Location {
 }
 
 // Merchant interface for multi-merchant support
-// Note: store_id, address, phone are now in locations table
+// Note: store_id, address, phone are now in locations table, but kept here for backward compatibility
 export interface Merchant {
   id: number;
   user_id?: number;
@@ -39,6 +39,10 @@ export interface Merchant {
   master_key?: string;
   is_active: number | boolean;
   locations?: Location[];  // Multiple locations per merchant
+  // Backward compatibility fields (populated from first location)
+  store_id?: string;  // From first location for backward compatibility
+  address?: string;  // From first location for backward compatibility
+  phone?: string;  // From first location for backward compatibility
   created_at: string;
   updated_at: string;
 }

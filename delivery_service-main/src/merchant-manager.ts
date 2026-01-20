@@ -103,8 +103,10 @@ export class MerchantManager {
       });
 
       if (merchant) {
-        this.merchants.set(merchant.store_id, merchant);
-        console.log(chalk.green(`   ✅ Merchant "${merchant.merchant_name}" (${merchant.store_id}) configured`));
+        // Use store_id if available, otherwise use merchant id as key
+        const key = merchant.store_id || `merchant_${merchant.id}`;
+        this.merchants.set(key, merchant);
+        console.log(chalk.green(`   ✅ Merchant "${merchant.merchant_name}" (${merchant.store_id || 'no store_id'}) configured`));
       }
     } catch (error: any) {
       console.error(chalk.red(`   ❌ Error upserting merchant ${config.store_id}: ${error.message}`));
@@ -120,7 +122,9 @@ export class MerchantManager {
       this.merchants.clear();
       
       for (const merchant of merchants) {
-        this.merchants.set(merchant.store_id, merchant);
+        // Use store_id if available, otherwise use merchant id as key
+        const key = merchant.store_id || `merchant_${merchant.id}`;
+        this.merchants.set(key, merchant);
       }
     } catch (error: any) {
       console.error(chalk.red(`   ❌ Error loading merchants from database: ${error.message}`));

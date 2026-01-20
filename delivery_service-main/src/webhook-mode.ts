@@ -1169,7 +1169,7 @@ class GloriaFoodWebhookServer {
         console.log(chalk.green(`   ✅ Connected to GloriaFood - Order received!`));
         
         if (merchant) {
-          console.log(chalk.cyan(`   🏪 Merchant: ${merchant.merchant_name} (${merchant.store_id})`));
+          console.log(chalk.cyan(`   🏪 Merchant: ${merchant.merchant_name} (${merchant.store_id || 'no store_id'})`));
           // Add merchant name to orderData
           orderData.merchant_name = merchant.merchant_name;
         } else {
@@ -1803,7 +1803,7 @@ class GloriaFoodWebhookServer {
             if (nullUserOrder && (nullUserOrder as any).user_id === null && nullUserOrder.store_id) {
               // Check if this order's store_id matches one of the user's merchants
               const userMerchants = await this.handleAsync(this.database.getAllMerchants(user.userId));
-              const userStoreIds = userMerchants.map(m => m.store_id).filter(Boolean);
+              const userStoreIds = userMerchants.map(m => m.store_id).filter((id): id is string => !!id);
               
               if (userStoreIds.includes(nullUserOrder.store_id)) {
                 order = nullUserOrder;
@@ -1842,7 +1842,7 @@ class GloriaFoodWebhookServer {
             
             if (nullUserOrder && (nullUserOrder as any).user_id === null && nullUserOrder.store_id) {
               const userMerchants = await this.handleAsync(this.database.getAllMerchants(user.userId));
-              const userStoreIds = userMerchants.map(m => m.store_id).filter(Boolean);
+              const userStoreIds = userMerchants.map(m => m.store_id).filter((id): id is string => !!id);
               
               if (userStoreIds.includes(nullUserOrder.store_id)) {
                 order = nullUserOrder;

@@ -2272,6 +2272,11 @@ export class OrderDatabasePostgreSQL {
         if (!result.rows || result.rows.length === 0) return null;
 
         const merchant = result.rows[0];
+        // Get first location for backward compatibility fields
+        const locationsQuery = `SELECT * FROM locations WHERE merchant_id = $1 AND is_active = TRUE ORDER BY location_name LIMIT 1`;
+        const locationsResult = await client.query(locationsQuery, [merchant.id]);
+        const firstLocation = locationsResult.rows.length > 0 ? locationsResult.rows[0] : null;
+        
         return {
           id: merchant.id,
           user_id: merchant.user_id || undefined,
@@ -2280,6 +2285,10 @@ export class OrderDatabasePostgreSQL {
           api_url: merchant.api_url,
           master_key: merchant.master_key,
           is_active: merchant.is_active === true,
+          // Backward compatibility fields
+          store_id: firstLocation?.store_id || merchant.store_id || undefined,
+          address: firstLocation?.address || merchant.address || undefined,
+          phone: firstLocation?.phone || merchant.phone || undefined,
           created_at: merchant.created_at,
           updated_at: merchant.updated_at
         };
@@ -2302,6 +2311,23 @@ export class OrderDatabasePostgreSQL {
       client.release();
       
       const merchant = merchantResult.rows[0];
+      const locations = locationsResult.rows.map(l => ({
+        id: l.id,
+        merchant_id: l.merchant_id,
+        location_name: l.location_name,
+        store_id: l.store_id,
+        address: l.address || undefined,
+        phone: l.phone || undefined,
+        latitude: l.latitude ? parseFloat(l.latitude) : undefined,
+        longitude: l.longitude ? parseFloat(l.longitude) : undefined,
+        is_active: l.is_active === true,
+        created_at: l.created_at,
+        updated_at: l.updated_at
+      }));
+      
+      // Get first location for backward compatibility
+      const firstLocation = locations.length > 0 ? locations[0] : null;
+      
       return {
         id: merchant.id,
         user_id: merchant.user_id || undefined,
@@ -2310,19 +2336,11 @@ export class OrderDatabasePostgreSQL {
         api_url: merchant.api_url,
         master_key: merchant.master_key,
         is_active: merchant.is_active === true,
-        locations: locationsResult.rows.map(l => ({
-          id: l.id,
-          merchant_id: l.merchant_id,
-          location_name: l.location_name,
-          store_id: l.store_id,
-          address: l.address || undefined,
-          phone: l.phone || undefined,
-          latitude: l.latitude ? parseFloat(l.latitude) : undefined,
-          longitude: l.longitude ? parseFloat(l.longitude) : undefined,
-          is_active: l.is_active === true,
-          created_at: l.created_at,
-          updated_at: l.updated_at
-        })),
+        locations: locations,
+        // Backward compatibility fields (from first location)
+        store_id: firstLocation?.store_id || undefined,
+        address: firstLocation?.address || undefined,
+        phone: firstLocation?.phone || undefined,
         created_at: merchant.created_at,
         updated_at: merchant.updated_at
       };
@@ -2344,17 +2362,23 @@ export class OrderDatabasePostgreSQL {
       if (!result.rows || result.rows.length === 0) return null;
 
       const merchant = result.rows[0];
+      // Get first location for backward compatibility fields
+      const locationsQuery = `SELECT * FROM locations WHERE merchant_id = $1 AND is_active = TRUE ORDER BY location_name LIMIT 1`;
+      const locationsResult = await client.query(locationsQuery, [merchant.id]);
+      const firstLocation = locationsResult.rows.length > 0 ? locationsResult.rows[0] : null;
+      
       return {
         id: merchant.id,
         user_id: merchant.user_id || undefined,
-        store_id: merchant.store_id,
         merchant_name: merchant.merchant_name,
         api_key: merchant.api_key,
         api_url: merchant.api_url,
         master_key: merchant.master_key,
-        phone: merchant.phone || null,
-        address: merchant.address || null,
         is_active: merchant.is_active === true,
+        // Backward compatibility fields (from first location or merchant table)
+        store_id: firstLocation?.store_id || merchant.store_id || undefined,
+        address: firstLocation?.address || merchant.address || undefined,
+        phone: firstLocation?.phone || merchant.phone || undefined,
         created_at: merchant.created_at,
         updated_at: merchant.updated_at
       };
@@ -2366,24 +2390,33 @@ export class OrderDatabasePostgreSQL {
 
   async insertOrUpdateMerchant(merchant: Partial<Merchant>): Promise<Merchant | null> {
     try {
-      if (!merchant.store_id) {
-        throw new Error('store_id is required');
-      }
+      // store_id is optional now (should be in locations), but keep for backward compatibility
+      // If store_id is provided, we'll use it for lookup/creation
       if (merchant.user_id === undefined || merchant.user_id === null) {
         throw new Error('user_id is required');
       }
 
-      // For updates, merchant_name is optional (can update other fields without changing name)
       // For inserts, merchant_name is required
-      const existing = await this.getMerchantByStoreId(merchant.store_id, merchant.user_id);
-      if (!existing && !merchant.merchant_name) {
+      if (!merchant.merchant_name && !merchant.id) {
         throw new Error('merchant_name is required for new merchants');
       }
 
       const client = await this.pool.connect();
 
+      // Check if merchant exists (by id if provided, or by store_id for backward compatibility)
+      let existing: Merchant | null = null;
+      if (merchant.id) {
+        const existingQuery = `SELECT * FROM merchants WHERE id = $1 AND user_id = $2`;
+        const existingResult = await client.query(existingQuery, [merchant.id, merchant.user_id]);
+        if (existingResult.rows.length > 0) {
+          existing = await this.getMerchantByStoreId(existingResult.rows[0].store_id || '', merchant.user_id);
+        }
+      } else if (merchant.store_id) {
+        existing = await this.getMerchantByStoreId(merchant.store_id, merchant.user_id);
+      }
+
       if (existing) {
-        // Update existing merchant - only update fields that are provided
+        // Update existing merchant - use id for WHERE clause
         const updates: string[] = [];
         const values: any[] = [];
         let paramIndex = 1;
@@ -2421,22 +2454,22 @@ export class OrderDatabasePostgreSQL {
         updates.push(`updated_at = NOW()`);
 
         if (updates.length > 1) { // More than just updated_at
-          values.push(merchant.store_id);
+          values.push(existing.id);
           values.push(merchant.user_id);
           await client.query(`
             UPDATE merchants 
             SET ${updates.join(', ')}
-            WHERE store_id = $${paramIndex++} AND user_id = $${paramIndex}
+            WHERE id = $${paramIndex++} AND user_id = $${paramIndex}
           `, values);
         }
       } else {
-        // Insert new merchant
+        // Insert new merchant (store_id is optional now)
         await client.query(`
           INSERT INTO merchants (user_id, store_id, merchant_name, api_key, api_url, master_key, phone, address, is_active)
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         `, [
           merchant.user_id,
-          merchant.store_id,
+          merchant.store_id || null,
           merchant.merchant_name!.trim(),
           merchant.api_key || null,
           merchant.api_url || null,
@@ -2448,9 +2481,43 @@ export class OrderDatabasePostgreSQL {
       }
 
       client.release();
-      const updated = await this.getMerchantByStoreId(merchant.store_id, merchant.user_id);
+      
+      // Get updated merchant (by id if we have it, or by store_id)
+      let updated: Merchant | null = null;
+      if (existing) {
+        updated = await this.getMerchantByStoreId(existing.store_id || '', merchant.user_id);
+      } else if (merchant.store_id) {
+        updated = await this.getMerchantByStoreId(merchant.store_id, merchant.user_id);
+      } else {
+        // Get by user_id and merchant_name (for new merchants without store_id)
+        const getQuery = `SELECT * FROM merchants WHERE user_id = $1 AND merchant_name = $2 ORDER BY id DESC LIMIT 1`;
+        const getResult = await client.query(getQuery, [merchant.user_id, merchant.merchant_name!.trim()]);
+        if (getResult.rows.length > 0) {
+          const newMerchant = getResult.rows[0];
+          // Get locations for this merchant
+          const locationsQuery = `SELECT * FROM locations WHERE merchant_id = $1 ORDER BY location_name LIMIT 1`;
+          const locationsResult = await client.query(locationsQuery, [newMerchant.id]);
+          const firstLocation = locationsResult.rows.length > 0 ? locationsResult.rows[0] : null;
+          
+          updated = {
+            id: newMerchant.id,
+            user_id: newMerchant.user_id || undefined,
+            merchant_name: newMerchant.merchant_name,
+            api_key: newMerchant.api_key,
+            api_url: newMerchant.api_url,
+            master_key: newMerchant.master_key,
+            is_active: newMerchant.is_active === true,
+            store_id: firstLocation?.store_id || newMerchant.store_id || undefined,
+            address: firstLocation?.address || newMerchant.address || undefined,
+            phone: firstLocation?.phone || newMerchant.phone || undefined,
+            created_at: newMerchant.created_at,
+            updated_at: newMerchant.updated_at
+          };
+        }
+      }
+      
       if (updated) {
-        console.log(`Merchant ${merchant.store_id} saved: merchant_name="${updated.merchant_name}", store_id="${updated.store_id}", user_id="${updated.user_id}"`);
+        console.log(`Merchant ${updated.id} saved: merchant_name="${updated.merchant_name}", store_id="${updated.store_id || 'N/A'}", user_id="${updated.user_id}"`);
       }
       return updated;
     } catch (error) {

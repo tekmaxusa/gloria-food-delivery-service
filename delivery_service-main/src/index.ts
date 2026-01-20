@@ -47,7 +47,13 @@ class GloriaFoodOrderFetcher {
     const merchants = this.merchantManager.getAllMerchants();
     for (const merchant of merchants) {
       if (!merchant.api_key) {
-        console.warn(chalk.yellow(`⚠️  Merchant "${merchant.merchant_name}" (${merchant.store_id}) has no API key, skipping`));
+        console.warn(chalk.yellow(`⚠️  Merchant "${merchant.merchant_name}" (${merchant.store_id || 'no store_id'}) has no API key, skipping`));
+        continue;
+      }
+      
+      // Skip merchants without store_id (they should use locations instead)
+      if (!merchant.store_id) {
+        console.warn(chalk.yellow(`⚠️  Merchant "${merchant.merchant_name}" has no store_id, skipping. Add a location with store_id first.`));
         continue;
       }
 
@@ -68,7 +74,7 @@ class GloriaFoodOrderFetcher {
     console.log(chalk.gray('Configuration:'));
     console.log(chalk.gray(`  Active Merchants: ${this.merchantClients.size}`));
     this.merchantClients.forEach((mc) => {
-      console.log(chalk.gray(`    • ${mc.merchant.merchant_name} (${mc.merchant.store_id})`));
+      console.log(chalk.gray(`    • ${mc.merchant.merchant_name} (${mc.merchant.store_id || 'no store_id'})`));
     });
     console.log(chalk.gray(`  Database: ${this.config.databasePath}`));
     console.log(chalk.gray(`  Poll Interval: ${this.config.pollIntervalMs / 1000}s\n`));
@@ -107,7 +113,7 @@ class GloriaFoodOrderFetcher {
     
     // Update merchant clients to include any newly added merchants
     const currentMerchants = this.merchantManager.getAllMerchants();
-    const currentStoreIds = new Set(currentMerchants.map(m => m.store_id));
+    const currentStoreIds = new Set(currentMerchants.map(m => m.store_id).filter((id): id is string => !!id));
     
     // Remove merchants that are no longer active
     for (const [storeId] of this.merchantClients.entries()) {
@@ -119,6 +125,9 @@ class GloriaFoodOrderFetcher {
     
     // Add new merchants that aren't in the clients map
     for (const merchant of currentMerchants) {
+      // Skip merchants without store_id
+      if (!merchant.store_id) continue;
+      
       if (!this.merchantClients.has(merchant.store_id)) {
         if (!merchant.api_key) {
           console.warn(chalk.yellow(`⚠️  Merchant "${merchant.merchant_name}" (${merchant.store_id}) has no API key, skipping`));
