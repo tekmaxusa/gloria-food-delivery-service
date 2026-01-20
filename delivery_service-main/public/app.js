@@ -1117,26 +1117,26 @@ function initializeIntegrationsPage() {
         }
     }
     
-    // Setup Add Integration button with delegation
-    const merchantApiKeysContainer = document.getElementById('merchantApiKeys');
-    if (merchantApiKeysContainer) {
-        merchantApiKeysContainer.addEventListener('click', (e) => {
-            if (e.target.id === 'addIntegrationBtn' || e.target.closest('#addIntegrationBtn')) {
-                e.preventDefault();
-                e.stopPropagation();
-                if (typeof openMerchantModal === 'function') {
-                    openMerchantModal(null);
-                }
-            }
-        });
-    }
-    
     // Use event delegation for dynamically created buttons
     const merchantApiKeysContainer = document.getElementById('merchantApiKeys');
     if (merchantApiKeysContainer) {
         merchantApiKeysContainer.addEventListener('click', (e) => {
             const target = e.target;
             let handled = false;
+            
+            // Handle Add Integration button in no-integrations section
+            if (target.id === 'addIntegrationBtn' || target.closest('#addIntegrationBtn')) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('Add Integration button clicked');
+                if (typeof openMerchantModal === 'function') {
+                    openMerchantModal(null);
+                } else {
+                    const apiBtn = document.getElementById('apiCredentialsBtn');
+                    if (apiBtn) apiBtn.click();
+                }
+                handled = true;
+            }
             
             // Handle Edit button - check multiple ways
             const editBtn = target.closest('.edit-merchant-btn');
