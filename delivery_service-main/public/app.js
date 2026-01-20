@@ -1528,30 +1528,106 @@ function openMerchantModal(merchant) {
         // Show locations section
         const locations = merchant.locations || [];
         locationsContainer.innerHTML = `
-            <h3 style="margin: 0 0 16px 0; font-size: 18px; font-weight: 600;">Locations</h3>
-            <div style="margin-bottom: 16px;">
-                <button type="button" onclick="openAddLocationModal(${merchant.id})" class="btn-primary" style="padding: 8px 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 2px solid #e2e8f0;">
+                <h3 style="margin: 0; font-size: 20px; font-weight: 700; color: #1e293b; display: flex; align-items: center; gap: 8px;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: #3b82f6;">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                        <circle cx="12" cy="10" r="3"></circle>
+                    </svg>
+                    Locations
+                    <span style="font-size: 14px; font-weight: 500; color: #64748b; margin-left: 8px;">(${locations.length})</span>
+                </h3>
+                <button type="button" onclick="openAddLocationModal(${merchant.id})" class="btn-primary" style="padding: 10px 20px; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
                     Add Location
                 </button>
             </div>
-            <div id="merchantLocationsList">
+            <div id="merchantLocationsList" style="max-height: 400px; overflow-y: auto; padding-right: 4px;">
                 ${locations.length === 0 ? 
-                    '<p style="color: #666; text-align: center; padding: 20px;">No locations yet. Click "Add Location" to create one.</p>' :
+                    `<div style="text-align: center; padding: 48px 24px; background: linear-gradient(to bottom, #f8fafc, #ffffff); border: 2px dashed #e2e8f0; border-radius: 12px; margin-top: 16px;">
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" style="margin: 0 auto 16px; opacity: 0.5;">
+                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                            <circle cx="12" cy="10" r="3"></circle>
+                        </svg>
+                        <p style="color: #64748b; font-size: 15px; font-weight: 500; margin: 0 0 8px 0;">No locations yet</p>
+                        <p style="color: #94a3b8; font-size: 13px; margin: 0;">Click "Add Location" above to create your first location</p>
+                    </div>` :
                     locations.map(loc => `
-                        <div class="location-item" style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 12px; background: #fff;">
-                            <div style="display: flex; justify-content: space-between; align-items: start;">
-                                <div style="flex: 1;">
-                                    <h4 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600;">${escapeHtml(loc.location_name)}</h4>
-                                    <p style="margin: 4px 0; color: #64748b; font-size: 12px;"><strong>Store ID:</strong> <code style="background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 11px;">${escapeHtml(loc.store_id)}</code></p>
-                                    ${loc.address ? `<p style="margin: 4px 0; color: #64748b; font-size: 14px;"><strong>Address:</strong> ${escapeHtml(loc.address)}</p>` : ''}
-                                    ${loc.phone ? `<p style="margin: 4px 0; color: #64748b; font-size: 14px;"><strong>Phone:</strong> ${escapeHtml(loc.phone)}</p>` : ''}
-                                    <span class="status-badge status-${loc.is_active ? 'active' : 'inactive'}" style="margin-top: 8px; display: inline-block;">
-                                        ${loc.is_active ? 'Active' : 'Inactive'}
-                                    </span>
+                        <div class="location-item" style="border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 16px; background: #ffffff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05); transition: all 0.2s ease; position: relative; overflow: hidden;">
+                            <div style="position: absolute; top: 0; left: 0; right: 0; height: 4px; background: ${loc.is_active ? 'linear-gradient(90deg, #22c55e, #16a34a)' : 'linear-gradient(90deg, #94a3b8, #64748b)'};"></div>
+                            <div style="display: flex; justify-content: space-between; align-items: start; margin-top: 4px;">
+                                <div style="flex: 1; min-width: 0;">
+                                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                                        <div style="width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, #3b82f6, #2563eb); display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);">
+                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
+                                                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                                                <circle cx="12" cy="10" r="3"></circle>
+                                            </svg>
+                                        </div>
+                                        <div style="flex: 1; min-width: 0;">
+                                            <h4 style="margin: 0 0 4px 0; font-size: 17px; font-weight: 700; color: #1e293b; line-height: 1.3;">${escapeHtml(loc.location_name)}</h4>
+                                            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                                                <span class="status-badge status-${loc.is_active ? 'active' : 'inactive'}" style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                                                    <span style="width: 6px; height: 6px; border-radius: 50%; background: ${loc.is_active ? '#22c55e' : '#94a3b8'}; display: inline-block;"></span>
+                                                    ${loc.is_active ? 'Active' : 'Inactive'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 16px; padding-top: 16px; border-top: 1px solid #f1f5f9;">
+                                        <div style="display: flex; align-items: start; gap: 8px;">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" style="margin-top: 2px; flex-shrink: 0;">
+                                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                                <line x1="9" y1="3" x2="9" y2="21"></line>
+                                            </svg>
+                                            <div>
+                                                <p style="margin: 0 0 2px 0; color: #94a3b8; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Store ID</p>
+                                                <code style="background: linear-gradient(135deg, #f1f5f9, #e2e8f0); padding: 6px 10px; border-radius: 6px; font-size: 13px; font-weight: 600; color: #1e293b; display: inline-block; border: 1px solid #e2e8f0; font-family: 'SF Mono', 'Monaco', 'Cascadia Code', 'Roboto Mono', monospace;">${escapeHtml(loc.store_id)}</code>
+                                            </div>
+                                        </div>
+                                        ${loc.address ? `
+                                            <div style="display: flex; align-items: start; gap: 8px;">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" style="margin-top: 2px; flex-shrink: 0;">
+                                                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                                                    <circle cx="12" cy="10" r="3"></circle>
+                                                </svg>
+                                                <div style="flex: 1; min-width: 0;">
+                                                    <p style="margin: 0 0 2px 0; color: #94a3b8; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Address</p>
+                                                    <p style="margin: 0; color: #475569; font-size: 13px; line-height: 1.4; word-break: break-word;">${escapeHtml(loc.address)}</p>
+                                                </div>
+                                            </div>
+                                        ` : ''}
+                                        ${loc.phone ? `
+                                            <div style="display: flex; align-items: start; gap: 8px;">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" style="margin-top: 2px; flex-shrink: 0;">
+                                                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+                                                </svg>
+                                                <div>
+                                                    <p style="margin: 0 0 2px 0; color: #94a3b8; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Phone</p>
+                                                    <p style="margin: 0; color: #475569; font-size: 13px; font-weight: 500;">${escapeHtml(loc.phone)}</p>
+                                                </div>
+                                            </div>
+                                        ` : ''}
+                                    </div>
                                 </div>
-                                <div style="display: flex; gap: 8px;">
-                                    <button onclick="editLocation(${loc.id}, ${merchant.id})" class="btn-secondary" style="padding: 6px 12px; font-size: 14px;">Edit</button>
-                                    <button onclick="deleteLocation(${loc.id}, ${merchant.id})" class="btn-secondary" style="padding: 6px 12px; font-size: 14px; color: #ef4444;">Delete</button>
+                                <div style="display: flex; gap: 8px; margin-left: 16px; flex-shrink: 0;">
+                                    <button onclick="editLocation(${loc.id}, ${merchant.id})" class="btn-secondary" style="padding: 10px 16px; font-size: 13px; font-weight: 600; border-radius: 8px; display: flex; align-items: center; gap: 6px; transition: all 0.2s ease; border: 1.5px solid #e2e8f0; background: #ffffff; color: #475569;">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                        </svg>
+                                        Edit
+                                    </button>
+                                    <button onclick="deleteLocation(${loc.id}, ${merchant.id})" style="padding: 10px 16px; font-size: 13px; font-weight: 600; border-radius: 8px; display: flex; align-items: center; gap: 6px; transition: all 0.2s ease; border: 1.5px solid #fee2e2; background: #fef2f2; color: #dc2626; cursor: pointer;">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <polyline points="3 6 5 6 21 6"></polyline>
+                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                        </svg>
+                                        Delete
+                                    </button>
                                 </div>
                             </div>
                         </div>
