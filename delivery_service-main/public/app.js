@@ -1847,27 +1847,31 @@ function openAddLocationModal(merchantId, location = null) {
             <form id="locationForm" class="modal-body" onsubmit="handleLocationSubmit(event, ${merchantId}, ${location ? location.id : 'null'})">
                 <div class="form-group">
                     <label>Location Name <span style="color: red;">*</span></label>
-                    <input type="text" id="locationName" required placeholder="Makati Branch" value="${location ? escapeHtml(location.location_name) : ''}">
+                    <input type="text" id="locationName" required placeholder="Enter Location Name" value="${location ? escapeHtml(location.location_name) : ''}">
+                    <small style="color: #666; font-size: 12px;">Name of this location (e.g., Makati Branch, Main Store)</small>
                 </div>
                 <div class="form-group">
                     <label>Store ID <span style="color: red;">*</span></label>
                     <input type="text" id="locationStoreId" required placeholder="Enter Store ID" 
                            pattern="[A-Za-z0-9_-]+" value="${location ? escapeHtml(location.store_id) : ''}"
                            ${location ? 'readonly' : ''}>
-                    <small style="color: #666; font-size: 12px;">This is the Store ID from GloriaFood. Orders will be matched using this ID.</small>
+                    <small style="color: #666; font-size: 12px;">${location ? 'Store ID cannot be changed after creation. This is the Store ID from GloriaFood.' : 'This is the Store ID from GloriaFood. Orders will be matched using this ID.'}</small>
                 </div>
                 <div class="form-group">
                     <label>Address</label>
                     <textarea id="locationAddress" rows="2" placeholder="Enter address">${location ? escapeHtml(location.address || '') : ''}</textarea>
+                    <small style="color: #666; font-size: 12px;">Optional: Physical address of this location</small>
                 </div>
                 <div class="form-group">
                     <label>Phone</label>
                     <input type="text" id="locationPhone" placeholder="Enter phone number" value="${location ? escapeHtml(location.phone || '') : ''}">
+                    <small style="color: #666; font-size: 12px;">Optional: Contact phone number for this location</small>
                 </div>
                 <div class="form-group checkbox-group">
                     <label class="checkbox-label">
                         <input type="checkbox" id="locationIsActive" ${location ? (location.is_active ? 'checked' : '') : 'checked'}> Active
                     </label>
+                    <small style="color: #666; font-size: 12px; display: block; margin-top: 4px;">Inactive locations will not receive orders</small>
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn-secondary" onclick="closeAddLocationModal()">Cancel</button>
