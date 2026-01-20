@@ -987,7 +987,7 @@ function showIntegrationsPage() {
                 <form id="merchantForm" class="modal-body">
                     <div class="form-group">
                         <label>Merchant Name <span style="color: red;">*</span></label>
-                        <input type="text" id="merchantName" required placeholder="Enter Merchant Name (e.g., Jollibee)">
+                        <input type="text" id="merchantName" required placeholder="Enter Merchant Name">
                         <small style="color: #666; font-size: 12px;">Company or business name. You can add locations with Store IDs after creating the merchant.</small>
                     </div>
                     <div class="form-group">
@@ -1078,10 +1078,98 @@ function initializeIntegrationsPage() {
         });
     }
     
-    // Make sure functions are available globally for onclick handlers
+    // Use event delegation for dynamically created buttons
+    const merchantApiKeysContainer = document.getElementById('merchantApiKeys');
+    if (merchantApiKeysContainer) {
+        merchantApiKeysContainer.addEventListener('click', (e) => {
+            const target = e.target;
+            
+            // Handle Edit button
+            if (target.classList.contains('edit-merchant-btn') || target.closest('.edit-merchant-btn')) {
+                const btn = target.classList.contains('edit-merchant-btn') ? target : target.closest('.edit-merchant-btn');
+                const merchantCard = btn.closest('.merchant-card');
+                if (merchantCard) {
+                    const merchantId = merchantCard.dataset.merchantId;
+                    if (merchantId) {
+                        e.preventDefault();
+                        editMerchant(parseInt(merchantId));
+                    }
+                }
+            }
+            
+            // Handle Manage Locations button
+            if (target.textContent === 'Manage Locations' || target.closest('button')?.textContent === 'Manage Locations') {
+                const btn = target.tagName === 'BUTTON' ? target : target.closest('button');
+                const merchantCard = btn.closest('.merchant-card');
+                if (merchantCard) {
+                    const merchantId = merchantCard.dataset.merchantId;
+                    if (merchantId) {
+                        e.preventDefault();
+                        manageLocations(parseInt(merchantId));
+                    }
+                }
+            }
+            
+            // Handle Delete button
+            if (target.classList.contains('delete-merchant-btn') || target.closest('.delete-merchant-btn')) {
+                const btn = target.classList.contains('delete-merchant-btn') ? target : target.closest('.delete-merchant-btn');
+                const merchantCard = btn.closest('.merchant-card');
+                if (merchantCard) {
+                    const merchantName = merchantCard.querySelector('.merchant-name')?.textContent || '';
+                    const merchantId = merchantCard.dataset.merchantId;
+                    if (merchantId) {
+                        e.preventDefault();
+                        deleteMerchant(parseInt(merchantId), merchantName);
+                    }
+                }
+            }
+            
+            // Handle Copy API Key button
+            if (target.classList.contains('copy-api-btn') || target.closest('.copy-api-btn')) {
+                const btn = target.classList.contains('copy-api-btn') ? target : target.closest('.copy-api-btn');
+                const merchantCard = btn.closest('.merchant-card');
+                if (merchantCard) {
+                    const merchantId = merchantCard.dataset.merchantId;
+                    if (merchantId) {
+                        e.preventDefault();
+                        copyApiKey(merchantId);
+                    }
+                }
+            }
+            
+            // Handle Generate API Key button
+            if (target.classList.contains('generate-api-btn') || target.closest('.generate-api-btn')) {
+                const btn = target.classList.contains('generate-api-btn') ? target : target.closest('.generate-api-btn');
+                const merchantCard = btn.closest('.merchant-card');
+                if (merchantCard) {
+                    const merchantId = merchantCard.dataset.merchantId;
+                    if (merchantId) {
+                        e.preventDefault();
+                        generateApiKey(merchantId);
+                    }
+                }
+            }
+            
+            // Handle Add Location link
+            if (target.classList.contains('link-btn') && target.textContent.includes('Add Location')) {
+                const merchantCard = target.closest('.merchant-card');
+                if (merchantCard) {
+                    const merchantId = merchantCard.dataset.merchantId;
+                    if (merchantId) {
+                        e.preventDefault();
+                        manageLocations(parseInt(merchantId));
+                    }
+                }
+            }
+        });
+    }
+    
+    // Make sure functions are available globally for onclick handlers (backup)
     window.editMerchant = editMerchant;
     window.manageLocations = manageLocations;
     window.deleteMerchant = deleteMerchant;
+    window.copyApiKey = copyApiKey;
+    window.generateApiKey = generateApiKey;
 }
 
 // Initialize Merchants page (legacy)
@@ -1138,14 +1226,14 @@ function displayIntegrations(merchants) {
         const moreLocations = locationsCount > 3 ? `<span class="location-tag">+${locationsCount - 3} more</span>` : '';
         
         return `
-            <div class="merchant-card">
+            <div class="merchant-card" data-merchant-id="${merchant.id}">
                 <div class="merchant-header">
                     <div>
                         <h3 class="merchant-name">${escapeHtml(merchant.merchant_name)}</h3>
                         <div class="merchant-locations">
                             ${locationsCount > 0 ? 
                                 `<div class="locations-list">${locationsList}${moreLocations}</div>` :
-                                `<p class="no-locations">No locations yet. <button onclick="manageLocations(${merchant.id})" class="link-btn">Add Location</button></p>`
+                                `<p class="no-locations">No locations yet. <button class="link-btn">Add Location</button></p>`
                             }
                         </div>
                     </div>
@@ -1161,10 +1249,10 @@ function displayIntegrations(merchants) {
                                value="${hasApiKey ? escapeHtml(apiKeyDisplay) : ''}"
                                class="api-key-input">
                         ${hasApiKey ? 
-                            `<button onclick="copyApiKey('${merchant.id}')" class="btn-secondary copy-api-btn">
+                            `<button class="btn-secondary copy-api-btn">
                                 Copy API Key
                             </button>` :
-                            `<button onclick="generateApiKey('${merchant.id}')" class="btn-primary generate-api-btn">
+                            `<button class="btn-primary generate-api-btn">
                                 Generate API Key
                             </button>`
                         }
@@ -1172,15 +1260,9 @@ function displayIntegrations(merchants) {
                 </div>
                 
                 <div class="merchant-actions">
-                    <button onclick="manageLocations(${merchant.id})" class="btn-secondary">
-                        Manage Locations
-                    </button>
-                    <button onclick="editMerchant(${merchant.id})" class="btn-secondary edit-merchant-btn">
-                        Edit
-                    </button>
-                    <button onclick="deleteMerchant(${merchant.id}, '${escapeHtml(merchant.merchant_name)}')" class="delete-merchant-btn">
-                        Delete
-                    </button>
+                    <button class="btn-secondary">Manage Locations</button>
+                    <button class="btn-secondary edit-merchant-btn">Edit</button>
+                    <button class="delete-merchant-btn">Delete</button>
                 </div>
             </div>
         `;
@@ -1561,7 +1643,7 @@ function openAddLocationModal(merchantId, location = null) {
             <form id="locationForm" class="modal-body" onsubmit="handleLocationSubmit(event, ${merchantId}, ${location ? location.id : 'null'})">
                 <div class="form-group">
                     <label>Location Name <span style="color: red;">*</span></label>
-                    <input type="text" id="locationName" required placeholder="e.g., Makati Branch" value="${location ? escapeHtml(location.location_name) : ''}">
+                    <input type="text" id="locationName" required placeholder="Makati Branch" value="${location ? escapeHtml(location.location_name) : ''}">
                 </div>
                 <div class="form-group">
                     <label>Store ID <span style="color: red;">*</span></label>
