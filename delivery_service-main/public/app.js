@@ -1703,11 +1703,11 @@ async function handleMerchantSubmit(e) {
         const data = await response.json();
 
         if (data.success) {
-            showNotification('Merchant Saved', editingStoreId ? 'Merchant updated successfully' : 'Merchant added successfully', 'success');
+            showNotification('Merchant Saved', editingMerchantId ? 'Merchant updated successfully' : 'Merchant added successfully', 'success');
             closeMerchantModal();
             loadMerchants();
         } else {
-            showNotification('Error', data.error || (editingStoreId ? 'Failed to update merchant' : 'Failed to add merchant'), 'error');
+            showNotification('Error', data.error || (editingMerchantId ? 'Failed to update merchant' : 'Failed to add merchant'), 'error');
         }
     } catch (error) {
         console.error('Error saving merchant:', error);
@@ -2085,7 +2085,7 @@ async function showDashboardPage() {
             if (merchant.merchant_name &&
                 merchant.merchant_name.trim() !== '' &&
                 merchant.merchant_name !== merchant.store_id &&
-                merchant.merchant_name.toLowerCase() !== merchant.store_id.toLowerCase() &&
+                merchant.store_id && merchant.merchant_name.toLowerCase() !== merchant.store_id.toLowerCase() &&
                 !merchant.merchant_name.startsWith('Merchant ') &&
                 merchant.merchant_name !== 'Unknown Merchant' &&
                 merchant.merchant_name !== 'N/A') {
