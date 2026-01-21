@@ -1531,20 +1531,15 @@ function openMerchantModal(merchant) {
     form.dataset.editingLocationId = '';
     form.dataset.editingStoreId = '';
 
-    // Get or create locations container
-    let locationsContainer = document.getElementById('merchantLocationsContainer');
-    if (!locationsContainer) {
-        // Create locations section after the form
-        locationsContainer = document.createElement('div');
-        locationsContainer.id = 'merchantLocationsContainer';
-        locationsContainer.className = 'merchant-locations-section';
-        locationsContainer.style.cssText = 'margin-top: 20px; padding-top: 20px; border-top: 1px solid #e2e8f0;';
-        form.parentNode.insertBefore(locationsContainer, form.nextSibling);
+    // Remove any existing locations container (locations managed in main form only)
+    const existingContainer = document.getElementById('merchantLocationsContainer');
+    if (existingContainer) {
+        existingContainer.remove();
     }
 
     if (merchant) {
         // Editing existing merchant
-        title.textContent = 'Edit Integration & Manage Locations';
+        title.textContent = 'Edit Integration';
         document.getElementById('merchantName').value = merchant.merchant_name || '';
         document.getElementById('merchantIsActive').checked = merchant.is_active !== false;
         // Don't populate API key and master key for security
@@ -1576,11 +1571,7 @@ function openMerchantModal(merchant) {
             document.getElementById('merchantLocationPhone').value = merchant.phone || '';
         }
 
-        // Locations are managed in the main form only - hide legacy UI
-        if (locationsContainer) {
-            locationsContainer.style.display = 'none';
-            locationsContainer.innerHTML = '';
-        }
+        // Locations are managed in the main form only - no separate location UI
             <div id="merchantLocationsList" style="max-height: 400px; overflow-y: auto; padding-right: 4px;">
                 ${locations.length === 0 ? 
                     `<div style="text-align: center; padding: 48px 24px; background: linear-gradient(to bottom, #f8fafc, #ffffff); border: 2px dashed #e2e8f0; border-radius: 12px; margin-top: 16px;">
@@ -1673,16 +1664,11 @@ function openMerchantModal(merchant) {
         `;
         locationsContainer.style.display = 'block';
     } else {
-        // Adding new merchant - set defaults
+        // Adding new merchant
         title.textContent = 'Add Integration';
-        document.getElementById('merchantIsActive').checked = true;
-        document.getElementById('merchantLocationName').value = '';
-        // Hide locations section
-        const locationsContainer = document.getElementById('merchantLocationsContainer');
-        if (locationsContainer) {
-            locationsContainer.style.display = 'none';
-            locationsContainer.innerHTML = '';
-        }
+        document.getElementById('merchantIsActive').checked = true; // Default to active
+        // Hide locations section for new merchants
+        locationsContainer.style.display = 'none';
     }
 
     // Show modal
