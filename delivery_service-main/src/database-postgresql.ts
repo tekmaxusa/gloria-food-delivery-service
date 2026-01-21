@@ -287,6 +287,17 @@ export class OrderDatabasePostgreSQL {
         const client = await this.pool.connect();
         console.log('✅ PostgreSQL connection successful!');
 
+        // Ensure the updated_at trigger function exists before any triggers are created
+        await client.query(`
+          CREATE OR REPLACE FUNCTION public.update_updated_at_column()
+          RETURNS TRIGGER AS $$
+          BEGIN
+              NEW.updated_at = CURRENT_TIMESTAMP;
+              RETURN NEW;
+          END;
+          $$ language 'plpgsql';
+        `);
+
         // Create orders table if not exists
         // Note: user_id can be NULL for backward compatibility
         await client.query(`
