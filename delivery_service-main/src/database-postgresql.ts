@@ -591,7 +591,7 @@ export class OrderDatabasePostgreSQL {
           CREATE TRIGGER update_locations_updated_at
             BEFORE UPDATE ON locations
             FOR EACH ROW
-            EXECUTE FUNCTION update_updated_at_column()
+            EXECUTE FUNCTION public.update_updated_at_column()
         `);
 
         // Migration: Create locations from existing merchants (one-time migration)
@@ -637,7 +637,7 @@ export class OrderDatabasePostgreSQL {
 
         // Create trigger function for updated_at
         await client.query(`
-          CREATE OR REPLACE FUNCTION update_updated_at_column()
+          CREATE OR REPLACE FUNCTION public.update_updated_at_column()
           RETURNS TRIGGER AS $$
           BEGIN
               NEW.updated_at = CURRENT_TIMESTAMP;
@@ -652,7 +652,7 @@ export class OrderDatabasePostgreSQL {
           CREATE TRIGGER update_orders_updated_at
             BEFORE UPDATE ON orders
             FOR EACH ROW
-            EXECUTE FUNCTION update_updated_at_column()
+            EXECUTE FUNCTION public.update_updated_at_column()
         `);
 
         await client.query(`
@@ -660,7 +660,7 @@ export class OrderDatabasePostgreSQL {
           CREATE TRIGGER update_merchants_updated_at
             BEFORE UPDATE ON merchants
             FOR EACH ROW
-            EXECUTE FUNCTION update_updated_at_column()
+            EXECUTE FUNCTION public.update_updated_at_column()
         `);
 
         client.release();

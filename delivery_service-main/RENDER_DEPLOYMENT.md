@@ -211,7 +211,25 @@ Kung gusto mo hiwa-hiwalay ang variables:
    - DoorDash scheduling/dispatch (if enabled)
 
 ## ⚠️ Notes & Tips
-- If you see `ENOENT: package.json not found at /opt/render/project/src/package.json`, set **Root Directory** to `delivery_service-main` (in Render service settings) or rely on the provided `render.yaml` which already sets `rootDir: delivery_service-main`.
+
+### 🔧 Fix: "package.json not found" Error
+
+Kung nakikita mo ang error na:
+```
+npm error path /opt/render/project/src/package.json
+npm error enoent Could not read package.json
+```
+
+**Solution:**
+1. **Pumunta sa Render Dashboard** → Your Web Service
+2. **Click "Settings"** (sa left sidebar)
+3. **Scroll down sa "Build & Deploy" section**
+4. **Hanapin ang "Root Directory" field**
+5. **I-type o i-paste**: `delivery_service-main`
+6. **Click "Save Changes"**
+7. **Click "Manual Deploy"** → **"Clear build cache & deploy"**
+
+**Note**: Kahit may `render.yaml` na, kailangan mo i-set manually ang Root Directory sa Render dashboard kung na-create mo na ang service bago ma-update ang `render.yaml`.
 - SQLite is only for local dev; use PostgreSQL on Render.
 - Prefer `DATABASE_URL` from Render (internal) for simpler SSL handling; `DB_SSL=true` is recommended if you use individual vars.
 - If you change dependencies or build output, click **Manual Deploy → Clear cache & deploy** in Render.
