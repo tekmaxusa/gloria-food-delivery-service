@@ -2771,7 +2771,7 @@ export class OrderDatabasePostgreSQL {
     }
   }
 
-  async insertOrUpdateLocation(location: Partial<Location>): Promise<Location | null> {
+  async insertOrUpdateLocation(location: Partial<Location>, userId?: number): Promise<Location | null> {
     let client: PoolClient | null = null;
     try {
       if (!location.merchant_id) {
@@ -2786,6 +2786,20 @@ export class OrderDatabasePostgreSQL {
 
       client = await this.pool.connect();
       
+      // Verify merchant belongs to user (or is system/global)
+      const merchantCheckParams: any[] = [location.merchant_id];
+      let merchantCheckQuery = `SELECT id FROM merchants WHERE id = $1`;
+      if (userId !== undefined) {
+        merchantCheckQuery += ` AND user_id = $2`;
+        merchantCheckParams.push(userId);
+      } else {
+        merchantCheckQuery += ` AND user_id IS NULL`;
+      }
+      const merchantCheck = await client.query(merchantCheckQuery, merchantCheckParams);
+      if (!merchantCheck.rows || merchantCheck.rows.length === 0) {
+        throw new Error('Merchant not found for user');
+      }
+
       // Check if location already exists
       const existing = await client.query(
         `SELECT * FROM locations WHERE merchant_id = $1 AND store_id = $2`,
@@ -2856,6 +2870,9 @@ export class OrderDatabasePostgreSQL {
       console.error('Error inserting/updating location:', error);
       if (error.code === '23505') {
         throw new Error('Location already exists for this store_id and merchant');
+      }
+      if (error.code === '23503') {
+        throw new Error('Merchant not found for user');
       }
       throw error;
     } finally {

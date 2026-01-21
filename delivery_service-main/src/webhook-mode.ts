@@ -1749,7 +1749,7 @@ class GloriaFoodWebhookServer {
             latitude,
             longitude,
             is_active: is_active !== false
-          }));
+          }, user.userId));
 
           if (location) {
             res.json({ success: true, location });
@@ -1760,8 +1760,11 @@ class GloriaFoodWebhookServer {
           res.status(500).json({ success: false, error: 'Location management not available' });
         }
       } catch (error: any) {
-        const status = error?.message?.includes('already exists') ? 409 : 500;
-        res.status(status).json({ success: false, error: error.message });
+        const msg = error?.message || '';
+        const status = msg.includes('already exists') ? 409
+                    : msg.includes('Merchant not found') ? 404
+                    : 500;
+        res.status(status).json({ success: false, error: msg });
       }
     });
 
@@ -1798,7 +1801,7 @@ class GloriaFoodWebhookServer {
             latitude: latitude !== undefined ? latitude : existing.latitude,
             longitude: longitude !== undefined ? longitude : existing.longitude,
             is_active: is_active !== undefined ? is_active : existing.is_active
-          }));
+          }, user.userId));
 
           if (location) {
             res.json({ success: true, location });
@@ -1809,8 +1812,11 @@ class GloriaFoodWebhookServer {
           res.status(500).json({ success: false, error: 'Location management not available' });
         }
       } catch (error: any) {
-        const status = error?.message?.includes('already exists') ? 409 : 500;
-        res.status(status).json({ success: false, error: error.message });
+        const msg = error?.message || '';
+        const status = msg.includes('already exists') ? 409
+                    : msg.includes('Merchant not found') ? 404
+                    : 500;
+        res.status(status).json({ success: false, error: msg });
       }
     });
 
