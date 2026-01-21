@@ -2937,10 +2937,35 @@ export class OrderDatabasePostgreSQL {
         ]);
       }
 
-      // Return the location scoped to the current user (avoids NULL-user fallback)
+      // Get the newly created/updated location
+      const getLocationQuery = `SELECT * FROM locations WHERE merchant_id = $1 AND store_id = $2`;
+      const getLocationResult = await client.query(getLocationQuery, [location.merchant_id, location.store_id]);
+      client.release();
+      
+      if (getLocationResult.rows && getLocationResult.rows.length > 0) {
+        const loc = getLocationResult.rows[0];
+        return {
+          id: loc.id,
+          merchant_id: loc.merchant_id,
+          location_name: loc.location_name,
+          store_id: loc.store_id,
+          address: loc.address || undefined,
+          phone: loc.phone || undefined,
+          latitude: loc.latitude ? parseFloat(String(loc.latitude)) : undefined,
+          longitude: loc.longitude ? parseFloat(String(loc.longitude)) : undefined,
+          is_active: loc.is_active === true,
+          created_at: loc.created_at,
+          updated_at: loc.updated_at
+        };
+      }
+      
+      // Fallback: try getLocationByStoreId
       return await this.getLocationByStoreId(location.store_id, userId);
     } catch (error: any) {
-      console.error('Error inserting/updating location:', error);
+      if (client) {
+        try { client.release(); } catch { /* ignore */ }
+      }
+      console.error(`Error inserting/updating location for merchant ${location.merchant_id}:`, error?.message || error);
       if (error.code === '23505') {
         throw new Error('Location already exists for this store_id and merchant');
       }

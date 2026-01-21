@@ -1847,27 +1847,43 @@ class GloriaFoodWebhookServer {
 
         const db = this.database as any;
         if (typeof db.insertOrUpdateLocation === 'function') {
-          const location = await this.handleAsync(db.insertOrUpdateLocation({
-            merchant_id: merchantId,
-            location_name,
-            store_id,
-            address,
-            phone,
-            latitude,
-            longitude,
-            is_active: is_active !== false
-          }, user.userId));
+          try {
+            const location = await this.handleAsync(db.insertOrUpdateLocation({
+              merchant_id: merchantId,
+              location_name,
+              store_id,
+              address,
+              phone,
+              latitude,
+              longitude,
+              is_active: is_active !== false
+            }, user.userId));
 
-          if (location) {
-            res.json({ success: true, location });
-          } else {
-            res.status(500).json({ success: false, error: 'Failed to create location' });
+            if (location) {
+              res.json({ success: true, location });
+            } else {
+              console.error(chalk.red(`❌ Failed to create location for merchant ${merchantId}`));
+              res.status(500).json({ success: false, error: 'Failed to create location. Check server logs for details.' });
+            }
+          } catch (dbError: any) {
+            console.error(chalk.red(`❌ Database error creating location: ${dbError.message}`));
+            console.error(chalk.red(`   Stack: ${dbError.stack}`));
+            const msg = dbError?.message || 'Database error';
+            const status = msg.includes('already exists') ? 409
+                        : msg.includes('Merchant not found') ? 404
+                        : msg.includes('store_id is required') ? 400
+                        : msg.includes('location_name is required') ? 400
+                        : 500;
+            res.status(status).json({ success: false, error: msg });
           }
         } else {
+          console.error(chalk.red(`❌ insertOrUpdateLocation function not available in database`));
           res.status(500).json({ success: false, error: 'Location management not available' });
         }
       } catch (error: any) {
-        const msg = error?.message || '';
+        console.error(chalk.red(`❌ Error in POST /merchants/${req.params.merchantId}/locations: ${error.message}`));
+        console.error(chalk.red(`   Stack: ${error.stack}`));
+        const msg = error?.message || 'Unknown error';
         const status = msg.includes('already exists') ? 409
                     : msg.includes('Merchant not found') ? 404
                     : 500;
