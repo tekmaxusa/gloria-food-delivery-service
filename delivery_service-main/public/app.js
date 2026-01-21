@@ -2209,19 +2209,23 @@ async function showDashboardPage() {
         if (data.success && data.merchants && data.merchants.length > 0) {
             const merchant = data.merchants.find(m => m.is_active) || data.merchants[0];
 
-            // Check if merchant_name is valid (not empty, not null, and not the same as store_id)
-            const name = merchant.merchant_name || '';
-            const storeId = merchant.store_id || '';
-            if (name.trim() !== '' &&
-                name !== storeId &&
-                name.toLowerCase() !== storeId.toLowerCase() &&
-                !name.startsWith('Merchant ') &&
-                name !== 'Unknown Merchant' &&
-                name !== 'N/A') {
-                merchantName = merchant.merchant_name.trim();
-            } else {
-                // If merchant_name is missing or invalid, use store_id as fallback (don't check orders)
-                merchantName = merchant.store_id ? `Merchant ${merchant.store_id}` : 'Dashboard';
+            // Safely check if merchant exists and has required properties
+            if (merchant) {
+                // Check if merchant_name is valid (not empty, not null, and not the same as store_id)
+                const name = (merchant.merchant_name || '').toString();
+                const storeId = (merchant.store_id || '').toString();
+                
+                if (name.trim() !== '' &&
+                    name !== storeId &&
+                    name.toLowerCase() !== storeId.toLowerCase() &&
+                    !name.startsWith('Merchant ') &&
+                    name !== 'Unknown Merchant' &&
+                    name !== 'N/A') {
+                    merchantName = name.trim();
+                } else {
+                    // If merchant_name is missing or invalid, use store_id as fallback (don't check orders)
+                    merchantName = storeId ? `Merchant ${storeId}` : 'Dashboard';
+                }
             }
         }
     } catch (error) {
@@ -4331,14 +4335,16 @@ async function getBusinessSettingsContent() {
     let businessName = 'Not set';
     if (merchant) {
         // First, check if merchant_name in merchants table is valid
-        if (merchant.merchant_name &&
-            merchant.merchant_name.trim() !== '' &&
-            merchant.merchant_name !== merchant.store_id &&
-            merchant.merchant_name.toLowerCase() !== merchant.store_id.toLowerCase() &&
-            !merchant.merchant_name.startsWith('Merchant ') &&
-            merchant.merchant_name !== 'Unknown Merchant' &&
-            merchant.merchant_name !== 'N/A') {
-            businessName = merchant.merchant_name.trim();
+        const merchantName = (merchant.merchant_name || '').toString();
+        const merchantStoreId = (merchant.store_id || '').toString();
+        if (merchantName &&
+            merchantName.trim() !== '' &&
+            merchantName !== merchantStoreId &&
+            merchantName.toLowerCase() !== merchantStoreId.toLowerCase() &&
+            !merchantName.startsWith('Merchant ') &&
+            merchantName !== 'Unknown Merchant' &&
+            merchantName !== 'N/A') {
+            businessName = merchantName.trim();
         } else {
             // If merchant_name is missing or invalid, try to get it from orders
             try {
@@ -4346,13 +4352,15 @@ async function getBusinessSettingsContent() {
                 const ordersData = await ordersResponse.json();
                 if (ordersData.success && ordersData.orders && ordersData.orders.length > 0) {
                     // Find an order with merchant_name that's different from store_id and not a fallback
-                    const orderWithMerchant = ordersData.orders.find(o =>
-                        o.store_id === merchant.store_id &&
-                        o.merchant_name &&
-                        o.merchant_name.trim() !== '' &&
-                        o.merchant_name !== merchant.store_id &&
-                        o.merchant_name.toLowerCase() !== merchant.store_id.toLowerCase() &&
-                        !o.merchant_name.startsWith('Merchant ') &&
+                    const orderWithMerchant = ordersData.orders.find(o => {
+                        const orderStoreId = (o.store_id || '').toString();
+                        const orderMerchantName = (o.merchant_name || '').toString();
+                        return orderStoreId === merchantStoreId &&
+                            orderMerchantName &&
+                            orderMerchantName.trim() !== '' &&
+                            orderMerchantName !== orderStoreId &&
+                            orderMerchantName.toLowerCase() !== orderStoreId.toLowerCase() &&
+                            !orderMerchantName.startsWith('Merchant ') &&
                         o.merchant_name !== 'Unknown Merchant' &&
                         o.merchant_name !== 'N/A'
                     );
