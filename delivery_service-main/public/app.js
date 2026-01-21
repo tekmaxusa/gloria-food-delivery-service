@@ -988,17 +988,32 @@ function showIntegrationsPage() {
                     <div class="form-group">
                         <label>Merchant Name <span style="color: red;">*</span></label>
                         <input type="text" id="merchantName" required placeholder="Enter Merchant Name">
-                        <small style="color: #666; font-size: 12px;">Company or business name. You can add locations with Store IDs after creating the merchant.</small>
+                        <small style="color: #666; font-size: 12px;">Company or business name.</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Store ID <span style="color: red;">*</span></label>
+                        <input type="text" id="merchantStoreId" required placeholder="Enter Store ID" pattern="[A-Za-z0-9_-]+">
+                        <small style="color: #666; font-size: 12px;">GloriaFood Store ID. Required to match incoming orders.</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Location Name <span style="color: red;">*</span></label>
+                        <input type="text" id="merchantLocationName" required placeholder="Enter Location Name">
+                        <small style="color: #666; font-size: 12px;">Name for this location (usually same as Merchant Name).</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Location Address</label>
+                        <textarea id="merchantLocationAddress" rows="2" placeholder="Enter address"></textarea>
+                        <small style="color: #666; font-size: 12px;">Optional: Physical address of this location.</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Location Phone</label>
+                        <input type="text" id="merchantLocationPhone" placeholder="Enter phone number">
+                        <small style="color: #666; font-size: 12px;">Optional: Contact phone number for this location.</small>
                     </div>
                     <div class="form-group">
                         <label>API Key</label>
                         <input type="password" id="merchantApiKey" placeholder="Enter API Key">
                         <small style="color: #666; font-size: 12px;">Leave empty to auto-generate</small>
-                    </div>
-                    <div class="form-group">
-                        <label>API URL</label>
-                        <input type="url" id="merchantApiUrl" placeholder="https://api.example.com">
-                        <small style="color: #666; font-size: 12px;">Optional: Custom API URL for this merchant</small>
                     </div>
                     <div class="form-group">
                         <label>Master Key</label>
@@ -1504,6 +1519,7 @@ function openMerchantModal(merchant) {
     // Reset form
     form.reset();
     form.dataset.editingMerchantId = '';
+    form.dataset.editingLocationId = '';
 
     // Get or create locations container
     let locationsContainer = document.getElementById('merchantLocationsContainer');
@@ -1520,13 +1536,35 @@ function openMerchantModal(merchant) {
         // Editing existing merchant
         title.textContent = 'Edit Integration & Manage Locations';
         document.getElementById('merchantName').value = merchant.merchant_name || '';
-        document.getElementById('merchantApiUrl').value = merchant.api_url || '';
         document.getElementById('merchantIsActive').checked = merchant.is_active !== false;
         // Don't populate API key and master key for security
         form.dataset.editingMerchantId = merchant.id;
 
-        // Show locations section
+        // Populate primary location fields from first active location (or first location)
         const locations = merchant.locations || [];
+        const primaryLocation = locations.find(l => l.is_active) || locations[0] || null;
+        const storeIdInput = document.getElementById('merchantStoreId');
+        if (primaryLocation) {
+            if (storeIdInput) {
+                storeIdInput.value = primaryLocation.store_id || '';
+                storeIdInput.readOnly = true; // prevent accidental store_id changes
+            }
+            document.getElementById('merchantLocationName').value = primaryLocation.location_name || '';
+            document.getElementById('merchantLocationAddress').value = primaryLocation.address || '';
+            document.getElementById('merchantLocationPhone').value = primaryLocation.phone || '';
+            form.dataset.editingLocationId = primaryLocation.id;
+        } else {
+            if (storeIdInput) {
+                storeIdInput.value = merchant.store_id || '';
+                storeIdInput.readOnly = false;
+            }
+            document.getElementById('merchantLocationName').value = merchant.merchant_name || '';
+            document.getElementById('merchantLocationAddress').value = merchant.address || '';
+            document.getElementById('merchantLocationPhone').value = merchant.phone || '';
+        }
+
+        // Show locations section
+        // (keep multi-location management UI below)
         locationsContainer.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 2px solid #e2e8f0;">
                 <h3 style="margin: 0; font-size: 20px; font-weight: 700; color: #1e293b; display: flex; align-items: center; gap: 8px;">
@@ -1663,20 +1701,24 @@ async function handleMerchantSubmit(e) {
     const form = e.target;
     const merchantName = document.getElementById('merchantName').value.trim();
     const apiKey = document.getElementById('merchantApiKey').value.trim();
-    const apiUrl = document.getElementById('merchantApiUrl').value.trim();
     const masterKey = document.getElementById('merchantMasterKey').value.trim();
     const isActive = document.getElementById('merchantIsActive').checked;
+    const storeId = document.getElementById('merchantStoreId').value.trim();
+    const locationName = document.getElementById('merchantLocationName').value.trim();
+    const locationAddress = document.getElementById('merchantLocationAddress').value.trim();
+    const locationPhone = document.getElementById('merchantLocationPhone').value.trim();
 
-    // Only merchant_name is required
-    if (!merchantName) {
-        showError('Merchant Name is required');
+    // Merchant + primary location required
+    if (!merchantName || !storeId || !locationName) {
+        showError('Merchant Name, Store ID, and Location Name are required');
         return;
     }
 
     const editingMerchantId = form.dataset.editingMerchantId;
+    const editingLocationId = form.dataset.editingLocationId;
     const merchantData = {
         merchant_name: merchantName,
-        api_url: apiUrl || undefined,
+        store_id: storeId,
         is_active: isActive
     };
 
@@ -1703,6 +1745,39 @@ async function handleMerchantSubmit(e) {
         const data = await response.json();
 
         if (data.success) {
+            // Save primary location (same form)
+            try {
+                const merchantIdForLocation = editingMerchantId || data.merchant?.id;
+                if (!merchantIdForLocation) throw new Error('Missing merchant id for location save');
+
+                if (editingLocationId) {
+                    await authenticatedFetch(`${API_BASE}/locations/${editingLocationId}`, {
+                        method: 'PUT',
+                        body: JSON.stringify({
+                            location_name: locationName,
+                            store_id: storeId,
+                            address: locationAddress || undefined,
+                            phone: locationPhone || undefined,
+                            is_active: true
+                        })
+                    });
+                } else {
+                    await authenticatedFetch(`${API_BASE}/merchants/${merchantIdForLocation}/locations`, {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            location_name: locationName,
+                            store_id: storeId,
+                            address: locationAddress || undefined,
+                            phone: locationPhone || undefined,
+                            is_active: true
+                        })
+                    });
+                }
+            } catch (locErr) {
+                console.error('Error saving location:', locErr);
+                showNotification('Warning', 'Merchant saved but location could not be saved. Please try again.', 'warning');
+            }
+
             showNotification('Merchant Saved', editingMerchantId ? 'Merchant updated successfully' : 'Merchant added successfully', 'success');
             closeMerchantModal();
             loadMerchants();

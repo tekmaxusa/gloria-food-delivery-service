@@ -2635,6 +2635,26 @@ export class OrderDatabasePostgreSQL {
     }
   }
 
+  async deleteMerchantById(merchantId: number, userId?: number): Promise<boolean> {
+    try {
+      const client = await this.pool.connect();
+      let query = `DELETE FROM merchants WHERE id = $1`;
+      const params: any[] = [merchantId];
+      if (userId !== undefined) {
+        query += ` AND user_id = $2`;
+        params.push(userId);
+      } else {
+        query += ` AND user_id IS NULL`;
+      }
+      const result = await client.query(query, params);
+      client.release();
+      return (result.rowCount || 0) > 0;
+    } catch (error) {
+      console.error('Error deleting merchant by id:', error);
+      return false;
+    }
+  }
+
   // Location methods
   async getAllLocations(merchantId: number, userId?: number): Promise<Location[]> {
     try {

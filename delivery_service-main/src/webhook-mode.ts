@@ -1666,15 +1666,19 @@ class GloriaFoodWebhookServer {
       }
     });
 
-    this.app.delete('/merchants/:storeId', async (req: Request, res: Response) => {
+    this.app.delete('/merchants/:identifier', async (req: Request, res: Response) => {
       try {
         const user = getCurrentUser(req);
         if (!user) {
           return res.status(401).json({ success: false, error: 'Not authenticated' });
         }
         
-        const storeId = req.params.storeId;
-        const deleted = await this.handleAsync(this.database.deleteMerchant(storeId, user.userId));
+        const identifier = req.params.identifier;
+        const id = parseInt(identifier, 10);
+        const db = this.database as any;
+        const deleted = !isNaN(id) && typeof db.deleteMerchantById === 'function'
+          ? await this.handleAsync(db.deleteMerchantById(id, user.userId))
+          : await this.handleAsync(this.database.deleteMerchant(identifier, user.userId));
         
         if (deleted) {
           // Reload merchants in manager
