@@ -2657,24 +2657,28 @@ export class OrderDatabasePostgreSQL {
 
   // Location methods
   async getAllLocations(merchantId: number, userId?: number): Promise<Location[]> {
+    let client;
     try {
-      const client = await this.pool.connect();
+      client = await this.pool.connect();
       
-      // Verify merchant belongs to user
-      let merchantQuery = `SELECT id FROM merchants WHERE id = $1`;
-      const merchantParams: any[] = [merchantId];
-      
-      if (userId !== undefined) {
-        merchantQuery += ` AND user_id = $2`;
-        merchantParams.push(userId);
+      // Verify merchant belongs to user (if userId is provided)
+      if (userId !== undefined && userId !== null) {
+        const merchantQuery = `SELECT id FROM merchants WHERE id = $1 AND user_id = $2`;
+        const merchantCheck = await client.query(merchantQuery, [merchantId, userId]);
+        if (!merchantCheck.rows || merchantCheck.rows.length === 0) {
+          client.release();
+          console.log(`Merchant ${merchantId} not found or doesn't belong to user ${userId}`);
+          return [];
+        }
       } else {
-        merchantQuery += ` AND user_id IS NULL`;
-      }
-      
-      const merchantCheck = await client.query(merchantQuery, merchantParams);
-      if (!merchantCheck.rows || merchantCheck.rows.length === 0) {
-        client.release();
-        return [];
+        // If no userId provided, just check if merchant exists
+        const merchantQuery = `SELECT id FROM merchants WHERE id = $1`;
+        const merchantCheck = await client.query(merchantQuery, [merchantId]);
+        if (!merchantCheck.rows || merchantCheck.rows.length === 0) {
+          client.release();
+          console.log(`Merchant ${merchantId} not found`);
+          return [];
+        }
       }
       
       const result = await client.query(
@@ -2691,14 +2695,19 @@ export class OrderDatabasePostgreSQL {
         store_id: l.store_id,
         address: l.address || undefined,
         phone: l.phone || undefined,
-        latitude: l.latitude ? parseFloat(l.latitude) : undefined,
-        longitude: l.longitude ? parseFloat(l.longitude) : undefined,
+        latitude: l.latitude ? parseFloat(String(l.latitude)) : undefined,
+        longitude: l.longitude ? parseFloat(String(l.longitude)) : undefined,
         is_active: l.is_active === true,
         created_at: l.created_at,
         updated_at: l.updated_at
       }));
-    } catch (error) {
-      console.error('Error getting locations:', error);
+    } catch (error: any) {
+      if (client) {
+        client.release();
+      }
+      console.error(`Error getting locations for merchant ${merchantId}:`, error?.message || error);
+      // Return empty array instead of throwing to prevent 500 errors
+      // The endpoint will handle the empty array gracefully
       return [];
     }
   }

@@ -992,7 +992,7 @@ function showIntegrationsPage() {
                     </div>
                     <div class="form-group">
                         <label>Store ID <span style="color: red;">*</span></label>
-                        <input type="text" id="merchantStoreId" required placeholder="Enter Store ID" pattern="[A-Za-z0-9_-]+">
+                        <input type="text" id="merchantStoreId" required placeholder="Enter Store ID" pattern="[A-Za-z0-9_\-]+">
                         <small style="color: #666; font-size: 12px;">GloriaFood Store ID. Required to match incoming orders.</small>
                     </div>
                     <div class="form-group">
@@ -1942,7 +1942,7 @@ function openAddLocationModal(merchantId, location = null) {
                 <div class="form-group">
                     <label>Store ID <span style="color: red;">*</span></label>
                     <input type="text" id="locationStoreId" required placeholder="Enter Store ID" 
-                           pattern="[A-Za-z0-9_-]+" value="${location ? escapeHtml(location.store_id) : ''}"
+                           pattern="[A-Za-z0-9_\-]+" value="${location ? escapeHtml(location.store_id) : ''}"
                            ${location ? 'readonly' : ''}>
                     <small style="color: #666; font-size: 12px;">This is the Store ID from GloriaFood. Orders will be matched using this ID.</small>
                 </div>
