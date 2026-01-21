@@ -54,7 +54,7 @@ async function deleteAllMerchants() {
     
     // Also try to delete any merchants that might have been missed
     const deleteResult2 = await client.query('DELETE FROM merchants WHERE id IS NOT NULL');
-    if (deleteResult2.rowCount > 0) {
+    if (deleteResult2.rowCount && deleteResult2.rowCount > 0) {
       console.log(`✅ Deleted additional ${deleteResult2.rowCount} merchant(s)`);
     }
 
