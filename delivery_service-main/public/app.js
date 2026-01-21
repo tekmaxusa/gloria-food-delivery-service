@@ -1699,14 +1699,28 @@ async function handleMerchantSubmit(e) {
     e.preventDefault();
 
     const form = e.target;
-    const merchantName = document.getElementById('merchantName').value.trim();
-    const apiKey = document.getElementById('merchantApiKey').value.trim();
-    const masterKey = document.getElementById('merchantMasterKey').value.trim();
-    const isActive = document.getElementById('merchantIsActive').checked;
-    const storeId = document.getElementById('merchantStoreId').value.trim();
-    const locationName = document.getElementById('merchantLocationName').value.trim();
-    const locationAddress = document.getElementById('merchantLocationAddress').value.trim();
-    const locationPhone = document.getElementById('merchantLocationPhone').value.trim();
+    const merchantNameEl = document.getElementById('merchantName');
+    const apiKeyEl = document.getElementById('merchantApiKey');
+    const masterKeyEl = document.getElementById('merchantMasterKey');
+    const isActiveEl = document.getElementById('merchantIsActive');
+    const storeIdEl = document.getElementById('merchantStoreId');
+    const locationNameEl = document.getElementById('merchantLocationName');
+    const locationAddressEl = document.getElementById('merchantLocationAddress');
+    const locationPhoneEl = document.getElementById('merchantLocationPhone');
+    
+    if (!merchantNameEl || !storeIdEl || !locationNameEl) {
+        showError('Required form fields are missing');
+        return;
+    }
+    
+    const merchantName = merchantNameEl.value.trim();
+    const apiKey = apiKeyEl ? apiKeyEl.value.trim() : '';
+    const masterKey = masterKeyEl ? masterKeyEl.value.trim() : '';
+    const isActive = isActiveEl ? isActiveEl.checked : true;
+    const storeId = storeIdEl.value.trim();
+    const locationName = locationNameEl.value.trim();
+    const locationAddress = locationAddressEl ? locationAddressEl.value.trim() : '';
+    const locationPhone = locationPhoneEl ? locationPhoneEl.value.trim() : '';
 
     // Merchant + primary location required
     if (!merchantName || !storeId || !locationName) {
@@ -1714,8 +1728,8 @@ async function handleMerchantSubmit(e) {
         return;
     }
 
-    const editingMerchantId = form.dataset.editingMerchantId;
-    const editingLocationId = form.dataset.editingLocationId;
+    const editingMerchantId = form.dataset.editingMerchantId || '';
+    const editingLocationId = form.dataset.editingLocationId || '';
     const merchantData = {
         merchant_name: merchantName,
         store_id: storeId,
