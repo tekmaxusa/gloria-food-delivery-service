@@ -1803,14 +1803,23 @@ class GloriaFoodWebhookServer {
 
         const db = this.database as any;
         if (typeof db.getAllLocations === 'function') {
-          const locations = await this.handleAsync(db.getAllLocations(merchantId, user.userId));
-          res.json({ success: true, locations });
+          try {
+            const locations = await this.handleAsync(db.getAllLocations(merchantId, user.userId));
+            res.json({ success: true, locations: locations || [] });
+          } catch (dbError: any) {
+            console.error(chalk.red(`❌ Database error in /merchants/${merchantId}/locations: ${dbError.message}`));
+            console.error(chalk.red(`   Stack: ${dbError.stack}`));
+            // Return empty array instead of error to prevent UI issues
+            res.json({ success: true, locations: [], error: dbError.message });
+          }
         } else {
+          console.error(chalk.red(`❌ getAllLocations function not available in database`));
           res.status(500).json({ success: false, error: 'Location management not available' });
         }
       } catch (error: any) {
         console.error(chalk.red(`❌ Error in /merchants/${req.params.merchantId}/locations: ${error.message}`));
-        res.status(500).json({ success: false, error: error.message });
+        console.error(chalk.red(`   Stack: ${error.stack}`));
+        res.status(500).json({ success: false, error: error.message || 'Unknown error occurred' });
       }
     });
 

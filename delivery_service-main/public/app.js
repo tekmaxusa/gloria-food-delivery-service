@@ -992,7 +992,7 @@ function showIntegrationsPage() {
                     </div>
                     <div class="form-group">
                         <label>Store ID <span style="color: red;">*</span></label>
-                        <input type="text" id="merchantStoreId" required placeholder="Enter Store ID" pattern="[A-Za-z0-9_\-]+">
+                        <input type="text" id="merchantStoreId" required placeholder="Enter Store ID">
                         <small style="color: #666; font-size: 12px;">GloriaFood Store ID. Required to match incoming orders.</small>
                     </div>
                     <div class="form-group">
@@ -1727,6 +1727,13 @@ async function handleMerchantSubmit(e) {
         showError('Merchant Name, Store ID, and Location Name are required');
         return;
     }
+    
+    // Validate Store ID format (alphanumeric, underscore, and dash only)
+    const storeIdPattern = /^[A-Za-z0-9_-]+$/;
+    if (!storeIdPattern.test(storeId)) {
+        showError('Store ID can only contain letters, numbers, underscores, and dashes');
+        return;
+    }
 
     const editingMerchantId = form.dataset.editingMerchantId || '';
     const editingLocationId = form.dataset.editingLocationId || '';
@@ -1942,7 +1949,7 @@ function openAddLocationModal(merchantId, location = null) {
                 <div class="form-group">
                     <label>Store ID <span style="color: red;">*</span></label>
                     <input type="text" id="locationStoreId" required placeholder="Enter Store ID" 
-                           pattern="[A-Za-z0-9_\-]+" value="${location ? escapeHtml(location.store_id) : ''}"
+                           value="${location ? escapeHtml(location.store_id) : ''}"
                            ${location ? 'readonly' : ''}>
                     <small style="color: #666; font-size: 12px;">This is the Store ID from GloriaFood. Orders will be matched using this ID.</small>
                 </div>
@@ -1993,6 +2000,13 @@ async function handleLocationSubmit(e, merchantId, locationId) {
     
     if (!locationName || !storeId) {
         showNotification('Error', 'Location Name and Store ID are required', 'error');
+        return;
+    }
+    
+    // Validate Store ID format (alphanumeric, underscore, and dash only)
+    const storeIdPattern = /^[A-Za-z0-9_-]+$/;
+    if (!storeIdPattern.test(storeId)) {
+        showNotification('Error', 'Store ID can only contain letters, numbers, underscores, and dashes', 'error');
         return;
     }
     
