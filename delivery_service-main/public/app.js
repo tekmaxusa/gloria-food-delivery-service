@@ -1499,12 +1499,6 @@ function displayMerchants(merchants) {
                 </span>
             </td>
             <td>
-                <button class="btn-icon" onclick="manageLocations(${merchant.id})" title="Manage Locations">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-                        <circle cx="12" cy="10" r="3"></circle>
-                    </svg>
-                </button>
                 <button class="btn-icon" onclick="editMerchant(${merchant.id})" title="Edit">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
@@ -1871,19 +1865,7 @@ async function editMerchant(merchantId) {
 
 // Manage locations for a merchant
 async function manageLocations(merchantId) {
-    try {
-        const response = await authenticatedFetch(`${API_BASE}/merchants/${merchantId}/locations`);
-        const data = await response.json();
-        
-        if (data.success) {
-            openLocationModal(merchantId, data.locations || []);
-        } else {
-            showNotification('Error', data.error || 'Failed to load locations', 'error');
-        }
-    } catch (error) {
-        console.error('Error loading locations:', error);
-        showNotification('Error', 'Error loading locations: ' + error.message, 'error');
-    }
+    showNotification('Info', 'Additional locations are disabled. Use the main form to edit the primary location.', 'info');
 }
 
 // Open location management modal
