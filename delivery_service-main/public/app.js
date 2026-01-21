@@ -36,14 +36,14 @@ function saveSessionId(sessionId) {
 
 // Helper function for authenticated fetch requests
 function authenticatedFetch(url, options = {}) {
-    const sessionId = getSessionId();
+    const currentSessionId = getSessionId();
     const headers = {
         'Content-Type': 'application/json',
         ...(options.headers || {})
     };
 
-    if (sessionId) {
-        headers['X-Session-Id'] = sessionId;
+    if (currentSessionId) {
+        headers['X-Session-Id'] = currentSessionId;
     }
 
     return fetch(url, {
