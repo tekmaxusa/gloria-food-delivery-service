@@ -3833,8 +3833,7 @@ function createProfileDropdown() {
             console.error('Logout error:', error);
         }
 
-        currentUser = null;
-        sessionId = null;
+        clearSession();
         saveSessionId(null);
         showLogin();
     });
