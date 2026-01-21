@@ -1760,7 +1760,8 @@ class GloriaFoodWebhookServer {
           res.status(500).json({ success: false, error: 'Location management not available' });
         }
       } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+        const status = error?.message?.includes('already exists') ? 409 : 500;
+        res.status(status).json({ success: false, error: error.message });
       }
     });
 
@@ -1808,7 +1809,8 @@ class GloriaFoodWebhookServer {
           res.status(500).json({ success: false, error: 'Location management not available' });
         }
       } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+        const status = error?.message?.includes('already exists') ? 409 : 500;
+        res.status(status).json({ success: false, error: error.message });
       }
     });
 

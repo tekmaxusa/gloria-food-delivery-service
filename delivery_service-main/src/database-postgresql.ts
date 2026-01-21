@@ -2772,6 +2772,7 @@ export class OrderDatabasePostgreSQL {
   }
 
   async insertOrUpdateLocation(location: Partial<Location>): Promise<Location | null> {
+    let client: PoolClient | null = null;
     try {
       if (!location.merchant_id) {
         throw new Error('merchant_id is required');
@@ -2783,7 +2784,7 @@ export class OrderDatabasePostgreSQL {
         throw new Error('location_name is required');
       }
 
-      const client = await this.pool.connect();
+      client = await this.pool.connect();
       
       // Check if location already exists
       const existing = await client.query(
@@ -2850,11 +2851,17 @@ export class OrderDatabasePostgreSQL {
         ]);
       }
 
-      client.release();
       return await this.getLocationByStoreId(location.store_id);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error inserting/updating location:', error);
-      return null;
+      if (error.code === '23505') {
+        throw new Error('Location already exists for this store_id and merchant');
+      }
+      throw error;
+    } finally {
+      if (client) {
+        try { client.release(); } catch { /* ignore */ }
+      }
     }
   }
 
