@@ -2551,9 +2551,10 @@ export class OrderDatabasePostgreSQL {
         }
       } else {
         // Insert new merchant (store_id is optional now)
-        await client.query(`
+        const insertResult = await client.query(`
           INSERT INTO merchants (user_id, store_id, merchant_name, api_key, api_url, master_key, phone, address, is_active)
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          RETURNING id
         `, [
           merchant.user_id,
           merchant.store_id || null,
@@ -2565,6 +2566,39 @@ export class OrderDatabasePostgreSQL {
           (merchant as any).address || null,
           merchant.is_active !== undefined ? merchant.is_active : true
         ]);
+        
+        // Store the new merchant ID for retrieval
+        const newMerchantId = insertResult.rows[0].id;
+        
+        // Get the newly created merchant by ID (more reliable than by store_id)
+        const getQuery = `SELECT * FROM merchants WHERE id = $1`;
+        const getResult = await client.query(getQuery, [newMerchantId]);
+        client.release();
+        
+        if (getResult.rows.length > 0) {
+          const newMerchant = getResult.rows[0];
+          // Get locations for this merchant (location might be created after merchant, so check both)
+          const locationsQuery = `SELECT * FROM locations WHERE merchant_id = $1 ORDER BY location_name LIMIT 1`;
+          const locationsResult = await client.query(locationsQuery, [newMerchant.id]);
+          const firstLocation = locationsResult.rows.length > 0 ? locationsResult.rows[0] : null;
+          
+          updated = {
+            id: newMerchant.id,
+            user_id: newMerchant.user_id || undefined,
+            merchant_name: newMerchant.merchant_name,
+            api_key: newMerchant.api_key,
+            api_url: newMerchant.api_url,
+            master_key: newMerchant.master_key,
+            is_active: newMerchant.is_active === true,
+            // Prioritize location store_id, but fallback to merchant.store_id if location not created yet
+            store_id: firstLocation?.store_id || newMerchant.store_id || undefined,
+            address: firstLocation?.address || newMerchant.address || undefined,
+            phone: firstLocation?.phone || newMerchant.phone || undefined,
+            created_at: newMerchant.created_at,
+            updated_at: newMerchant.updated_at
+          };
+        }
+        return updated;
       }
       
       // Get updated merchant (by id if we have it, or by store_id)
@@ -2574,6 +2608,7 @@ export class OrderDatabasePostgreSQL {
         updated = await this.getMerchantByStoreId(existing.store_id || '', merchant.user_id);
       } else if (merchant.store_id) {
         client.release();
+        // For updates, try to get by store_id, but also check by merchant ID if we have it
         updated = await this.getMerchantByStoreId(merchant.store_id, merchant.user_id);
       } else {
         // Get by user_id and merchant_name (for new merchants without store_id)
