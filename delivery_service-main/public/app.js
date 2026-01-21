@@ -1481,7 +1481,7 @@ function displayMerchants(merchants) {
         <tr data-merchant-id="${merchant.id}">
             <td><strong>${escapeHtml(merchant.merchant_name)}</strong></td>
             <td>${escapeHtml(locationsDisplay)}</td>
-            <td>${escapeHtml(merchant.api_url || 'Default')}</td>
+            <td>${escapeHtml(merchant.store_id || (locations[0]?.store_id || 'N/A'))}</td>
             <td>
                 <span class="status-badge status-${merchant.is_active ? 'active' : 'inactive'}">
                     ${merchant.is_active ? 'Active' : 'Inactive'}
