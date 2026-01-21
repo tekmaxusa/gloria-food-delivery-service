@@ -1014,10 +1014,21 @@ function showIntegrationsPage() {
                         <input type="text" id="merchantLocationPhone" placeholder="Enter phone number">
                         <small style="color: #666; font-size: 12px;">Optional: Contact phone number for this location.</small>
                     </div>
+                    <div style="margin: 16px 0 8px; padding-top: 12px; border-top: 1px solid #e2e8f0;">
+                        <strong style="display:block; color:#0f172a; font-size: 13px; margin-bottom: 8px;">API Credentials (GloriaFood)</strong>
+                        <small style="color: #666; font-size: 12px;">
+                            These are used for API access / future polling. To receive <strong>actual orders</strong>, you still need to set the Webhook URL in GloriaFood to <code>/webhook</code>.
+                        </small>
+                    </div>
                     <div class="form-group">
                         <label>API Key</label>
                         <input type="password" id="merchantApiKey" placeholder="Enter API Key">
                         <small style="color: #666; font-size: 12px;">Leave empty to auto-generate</small>
+                    </div>
+                    <div class="form-group">
+                        <label>API URL</label>
+                        <input type="text" id="merchantApiUrl" placeholder="e.g. https://api.gloriafood.com">
+                        <small style="color: #666; font-size: 12px;">Optional: GloriaFood API base URL (leave empty if unsure)</small>
                     </div>
                     <div class="form-group">
                         <label>Master Key</label>
@@ -1542,6 +1553,8 @@ function openMerchantModal(merchant) {
         document.getElementById('merchantName').value = merchant.merchant_name || '';
         document.getElementById('merchantIsActive').checked = merchant.is_active !== false;
         // Don't populate API key and master key for security
+        const apiUrlEl = document.getElementById('merchantApiUrl');
+        if (apiUrlEl) apiUrlEl.value = merchant.api_url || '';
         form.dataset.editingMerchantId = merchant.id;
 
         // Populate primary location fields from first active location (or first location)
@@ -1705,6 +1718,7 @@ async function handleMerchantSubmit(e) {
     const form = e.target;
     const merchantNameEl = document.getElementById('merchantName');
     const apiKeyEl = document.getElementById('merchantApiKey');
+    const apiUrlEl = document.getElementById('merchantApiUrl');
     const masterKeyEl = document.getElementById('merchantMasterKey');
     const isActiveEl = document.getElementById('merchantIsActive');
     const storeIdEl = document.getElementById('merchantStoreId');
@@ -1719,6 +1733,7 @@ async function handleMerchantSubmit(e) {
     
     const merchantName = merchantNameEl.value.trim();
     const apiKey = apiKeyEl ? apiKeyEl.value.trim() : '';
+    const apiUrl = apiUrlEl ? apiUrlEl.value.trim() : '';
     const masterKey = masterKeyEl ? masterKeyEl.value.trim() : '';
     const isActive = isActiveEl ? isActiveEl.checked : true;
     const storeId = storeIdEl.value.trim();
@@ -1749,6 +1764,7 @@ async function handleMerchantSubmit(e) {
 
     // Only include API key and master key if provided (for security)
     if (apiKey) merchantData.api_key = apiKey;
+    if (apiUrl) merchantData.api_url = apiUrl;
     if (masterKey) merchantData.master_key = masterKey;
 
     try {
