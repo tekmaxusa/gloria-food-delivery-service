@@ -1576,26 +1576,11 @@ function openMerchantModal(merchant) {
             document.getElementById('merchantLocationPhone').value = merchant.phone || '';
         }
 
-        // Show locations section
-        // (keep multi-location management UI below)
-        locationsContainer.innerHTML = `
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 2px solid #e2e8f0;">
-                <h3 style="margin: 0; font-size: 20px; font-weight: 700; color: #1e293b; display: flex; align-items: center; gap: 8px;">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: #3b82f6;">
-                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-                        <circle cx="12" cy="10" r="3"></circle>
-                    </svg>
-                    Locations
-                    <span style="font-size: 14px; font-weight: 500; color: #64748b; margin-left: 8px;">(${locations.length})</span>
-                </h3>
-                <button type="button" onclick="openAddLocationModal(${merchant.id})" class="btn-primary" style="padding: 10px 20px; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                        <line x1="12" y1="5" x2="12" y2="19"></line>
-                        <line x1="5" y1="12" x2="19" y2="12"></line>
-                    </svg>
-                    Add Location
-                </button>
-            </div>
+        // Locations are managed in the main form only - hide legacy UI
+        if (locationsContainer) {
+            locationsContainer.style.display = 'none';
+            locationsContainer.innerHTML = '';
+        }
             <div id="merchantLocationsList" style="max-height: 400px; overflow-y: auto; padding-right: 4px;">
                 ${locations.length === 0 ? 
                     `<div style="text-align: center; padding: 48px 24px; background: linear-gradient(to bottom, #f8fafc, #ffffff); border: 2px dashed #e2e8f0; border-radius: 12px; margin-top: 16px;">
@@ -1688,11 +1673,16 @@ function openMerchantModal(merchant) {
         `;
         locationsContainer.style.display = 'block';
     } else {
-        // Adding new merchant
+        // Adding new merchant - set defaults
         title.textContent = 'Add Integration';
-        document.getElementById('merchantIsActive').checked = true; // Default to active
-        // Hide locations section for new merchants
-        locationsContainer.style.display = 'none';
+        document.getElementById('merchantIsActive').checked = true;
+        document.getElementById('merchantLocationName').value = '';
+        // Hide locations section
+        const locationsContainer = document.getElementById('merchantLocationsContainer');
+        if (locationsContainer) {
+            locationsContainer.style.display = 'none';
+            locationsContainer.innerHTML = '';
+        }
     }
 
     // Show modal
