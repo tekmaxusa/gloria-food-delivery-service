@@ -1560,7 +1560,7 @@ function openMerchantModal(merchant) {
         if (primaryLocation) {
             if (storeIdInput) {
                 storeIdInput.value = primaryLocation.store_id || '';
-                storeIdInput.readOnly = true; // prevent accidental store_id changes
+                storeIdInput.readOnly = false; // Allow editing Store ID
             }
             document.getElementById('merchantLocationName').value = primaryLocation.location_name || '';
             document.getElementById('merchantLocationAddress').value = primaryLocation.address || '';
@@ -1569,7 +1569,7 @@ function openMerchantModal(merchant) {
         } else {
             if (storeIdInput) {
                 storeIdInput.value = merchant.store_id || '';
-                storeIdInput.readOnly = false;
+                storeIdInput.readOnly = false; // Always allow editing
             }
             document.getElementById('merchantLocationName').value = merchant.merchant_name || '';
             document.getElementById('merchantLocationAddress').value = merchant.address || '';
