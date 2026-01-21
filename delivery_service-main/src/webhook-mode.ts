@@ -1046,27 +1046,74 @@ class GloriaFoodWebhookServer {
       });
     });
 
-    // GET handler for webhook endpoint (for testing/debugging)
+    // Test webhook endpoint - helps verify webhook URL is accessible
     this.app.get(this.config.webhookPath, (req: Request, res: Response) => {
+      console.log(chalk.cyan(`\n🔵 Webhook test GET request received`));
+      console.log(chalk.gray(`   URL: ${req.url}`));
+      console.log(chalk.gray(`   Query params: ${JSON.stringify(req.query)}`));
+      
+      res.status(200).json({ 
+        success: true,
+        message: 'Webhook endpoint is active and accessible',
+        method: 'GET',
+        note: 'GloriaFood should send POST requests to this endpoint',
+        endpoint: this.config.webhookPath,
+        timestamp: new Date().toISOString(),
+        instructions: {
+          step1: 'Copy the webhook URL from the Integrations page',
+          step2: 'Go to GloriaFood Admin Dashboard → Settings → Integrations',
+          step3: 'Paste the webhook URL in the webhook configuration',
+          step4: 'Save and test with a new order'
+        }
+      });
+    });
+
+    // GET handler for webhook endpoint (for testing/debugging)
+    this.app.get(this.config.webhookPath, async (req: Request, res: Response) => {
+      console.log(chalk.cyan(`\n🔵 Webhook test GET request received`));
+      
+      // Get webhook URL
+      const protocol = req.protocol || 'https';
+      const host = req.get('host') || 'your-app.onrender.com';
+      const webhookUrl = `${protocol}://${host}${this.config.webhookPath}`;
+      
+      // Get merchants count for info
+      let merchantsInfo = 'N/A';
+      try {
+        const merchants = await this.database.getAllMerchants();
+        const activeMerchants = merchants.filter(m => m.is_active !== false);
+        merchantsInfo = `${activeMerchants.length} active merchant(s) configured`;
+      } catch (e) {
+        merchantsInfo = 'Could not load merchants';
+      }
+      
       res.json({
+        success: true,
         service: 'GloriaFood Webhook Server',
         endpoint: this.config.webhookPath,
-        method: 'POST',
+        method: 'POST (for actual orders)',
         protocol: 'JSON',
         protocol_version: this.config.protocolVersion,
         status: 'ready',
-        message: 'This endpoint accepts POST requests only. GloriaFood will send order data here.',
+        webhook_url: webhookUrl,
+        message: 'Webhook endpoint is active and accessible. GloriaFood should send POST requests here with order data.',
+        merchants: merchantsInfo,
         instructions: {
-          webhook_url: `https://tekmaxllc.com${this.config.webhookPath}`,
-          method: 'POST',
-          content_type: 'application/json',
-          authentication: 'API Key or Master Key required',
-          timestamp: new Date().toISOString()
+          step1: 'Copy the webhook URL above',
+          step2: 'Go to GloriaFood Admin Dashboard → Settings → Integrations/Webhooks',
+          step3: 'Paste the webhook URL in the webhook configuration field',
+          step4: 'Make sure you have added a merchant in the Integrations page with the correct Store ID',
+          step5: 'Save and test with a new order',
+          step6: 'Check server logs to see if orders are being received'
         },
-        stats: {
-          database_type: process.env.DB_TYPE || 'sqlite',
-          note: 'Check /stats endpoint for live statistics'
-        }
+        troubleshooting: {
+          no_orders: 'If orders are not received:',
+          check1: '1. Verify webhook URL is correctly configured in GloriaFood',
+          check2: '2. Verify Store ID in Integration matches the Store ID from GloriaFood',
+          check3: '3. Check server logs when placing a test order',
+          check4: '4. Make sure merchant is set to "Active" in Integrations page'
+        },
+        timestamp: new Date().toISOString()
       });
     });
 
@@ -1183,17 +1230,35 @@ class GloriaFoodWebhookServer {
 
         // Log received order
         const orderId = orderData.id || orderData.order_id || 'unknown';
+        const receivedStoreId = this.merchantManager.extractStoreIdFromOrder(orderData) || 'NOT FOUND';
+        
         console.log(chalk.green(`\n✅ Order data extracted successfully from GloriaFood: #${orderId}`));
         console.log(chalk.green(`   ✅ Connected to GloriaFood - Order received!`));
+        console.log(chalk.cyan(`   📦 Store ID from order: ${receivedStoreId}`));
+        console.log(chalk.gray(`   📋 Order data keys: ${Object.keys(orderData).join(', ')}`));
         
         if (merchant) {
           console.log(chalk.cyan(`   🏪 Merchant: ${merchant.merchant_name} (${merchant.store_id || 'no store_id'})`));
           // Add merchant name to orderData
           orderData.merchant_name = merchant.merchant_name;
         } else {
-          const storeId = orderData.store_id || orderData.restaurant_id || 'unknown';
-          console.log(chalk.yellow(`   ⚠️  Merchant not found for store_id: ${storeId}`));
-          console.log(chalk.gray(`   💡 Add this merchant to Integrations page or GLORIAFOOD_MERCHANTS in .env`));
+          console.log(chalk.yellow(`   ⚠️  Merchant not found for store_id: ${receivedStoreId}`));
+          console.log(chalk.gray(`   💡 Checking if store_id matches any location in database...`));
+          
+          // Try to find location directly to help debug
+          try {
+            const location = await this.merchantManager.findLocationForOrder(orderData);
+            if (location) {
+              console.log(chalk.green(`   ✅ Found location: ${location.location_name} (store_id: ${location.store_id})`));
+            } else {
+              console.log(chalk.red(`   ❌ No location found with store_id: ${receivedStoreId}`));
+              console.log(chalk.gray(`   💡 Make sure the Store ID in your Integration matches exactly: ${receivedStoreId}`));
+            }
+          } catch (locError: any) {
+            console.log(chalk.yellow(`   ⚠️  Could not check location: ${locError.message}`));
+          }
+          
+          console.log(chalk.gray(`   💡 Add this merchant to Integrations page with Store ID: ${receivedStoreId}`));
         }
 
         // Determine if this is a new order BEFORE saving

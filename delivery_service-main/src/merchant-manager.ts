@@ -163,16 +163,56 @@ export class MerchantManager {
   }
 
   /**
+   * Extract store ID from order data (tries multiple possible field names)
+   */
+  extractStoreIdFromOrder(orderData: any): string | null {
+    if (!orderData) return null;
+    
+    // Try various possible field names that Gloria Food might use
+    const possibleFields = [
+      'store_id',
+      'restaurant_id',
+      'restaurantId',
+      'storeId',
+      'storeId',
+      'restaurant',
+      'restaurantId',
+      // Nested fields
+      orderData.restaurant?.id,
+      orderData.restaurant?.store_id,
+      orderData.store?.id,
+      orderData.store?.store_id,
+      // From raw_data if it's a string
+      (() => {
+        try {
+          if (typeof orderData.raw_data === 'string') {
+            const parsed = JSON.parse(orderData.raw_data);
+            return parsed.store_id || parsed.restaurant_id || parsed.restaurantId;
+          }
+        } catch (e) {
+          // Ignore parse errors
+        }
+        return null;
+      })()
+    ];
+    
+    for (const field of possibleFields) {
+      if (field && String(field).trim() !== '') {
+        return String(field).trim();
+      }
+    }
+    
+    return null;
+  }
+
+  /**
    * Find location by store ID from order data (tries multiple fields)
    */
   async findLocationForOrder(orderData: any, userId?: number): Promise<Location | null> {
-    const storeId = orderData.store_id || 
-                   orderData.restaurant_id || 
-                   orderData.restaurantId ||
-                   orderData.storeId;
+    const storeId = this.extractStoreIdFromOrder(orderData);
     
     if (storeId) {
-      return await this.getLocationByStoreId(String(storeId), userId);
+      return await this.getLocationByStoreId(storeId, userId);
     }
     
     return null;
@@ -183,14 +223,11 @@ export class MerchantManager {
    * Updated to work with locations
    */
   async findMerchantForOrder(orderData: any, userId?: number): Promise<Merchant | null> {
-    const storeId = orderData.store_id || 
-                   orderData.restaurant_id || 
-                   orderData.restaurantId ||
-                   orderData.storeId;
+    const storeId = this.extractStoreIdFromOrder(orderData);
     
     if (storeId && this.database) {
       // Use database method which now handles locations
-      return await this.database.getMerchantByStoreId(String(storeId), userId);
+      return await this.database.getMerchantByStoreId(storeId, userId);
     }
     
     return null;

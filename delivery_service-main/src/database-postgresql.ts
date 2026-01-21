@@ -904,7 +904,15 @@ export class OrderDatabasePostgreSQL {
       // Find location and merchant by store_id
       let locationId: number | undefined = undefined;
       let locationName: string | undefined = undefined;
-      const storeId = orderData.store_id?.toString() || orderData.restaurant_id?.toString();
+      // Try multiple possible field names for store_id
+      const storeId = orderData.store_id?.toString() || 
+                     orderData.restaurant_id?.toString() ||
+                     orderData.restaurantId?.toString() ||
+                     orderData.storeId?.toString() ||
+                     orderData.restaurant?.id?.toString() ||
+                     orderData.restaurant?.store_id?.toString() ||
+                     orderData.store?.id?.toString() ||
+                     orderData.store?.store_id?.toString();
       
       if (storeId) {
         try {
