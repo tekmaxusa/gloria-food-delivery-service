@@ -2865,7 +2865,8 @@ export class OrderDatabasePostgreSQL {
         ]);
       }
 
-      return await this.getLocationByStoreId(location.store_id);
+      // Return the location scoped to the current user (avoids NULL-user fallback)
+      return await this.getLocationByStoreId(location.store_id, userId);
     } catch (error: any) {
       console.error('Error inserting/updating location:', error);
       if (error.code === '23505') {
