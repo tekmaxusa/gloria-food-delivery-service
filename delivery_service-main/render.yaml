@@ -3,8 +3,8 @@ services:
     name: gloriafood-webhook
     env: node
     plan: free
-    region: singapore
-    rootDir: .
+    region: virginia  # US East
+    rootDir: delivery_service-main
     buildCommand: npm install --production=false && npm run build
     startCommand: npm start
     envVars:
