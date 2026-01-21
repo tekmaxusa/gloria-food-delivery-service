@@ -26,12 +26,20 @@ function getSessionId() {
 }
 
 // Save session ID to localStorage
-function saveSessionId(sessionId) {
-    if (sessionId) {
-        localStorage.setItem('sessionId', sessionId);
+function saveSessionId(newSessionId) {
+    if (newSessionId) {
+        localStorage.setItem('sessionId', newSessionId);
+        sessionId = newSessionId;
     } else {
         localStorage.removeItem('sessionId');
+        sessionId = null;
     }
+}
+
+// Clear session (helper function to avoid scope issues)
+function clearSession() {
+    saveSessionId(null);
+    currentUser = null;
 }
 
 // Helper function for authenticated fetch requests
@@ -54,9 +62,7 @@ function authenticatedFetch(url, options = {}) {
         // Handle 401 (Unauthorized) globally - session expired or invalid
         if (response.status === 401) {
             console.warn('Authentication failed (401), session expired. Redirecting to login...');
-            saveSessionId(null);
-            currentUser = null;
-            sessionId = null;
+            clearSession();
             showNotification('Session Expired', 'Please login again', 'warning');
             showLogin();
             // Return a rejected promise to prevent further processing
@@ -382,9 +388,7 @@ function setupHeaderButtons() {
                 console.error('Logout error:', error);
             }
 
-            currentUser = null;
-            sessionId = null;
-            saveSessionId(null);
+            clearSession();
             showLogin();
         });
     }
