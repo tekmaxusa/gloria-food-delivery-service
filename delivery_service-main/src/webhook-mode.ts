@@ -1470,19 +1470,20 @@ class GloriaFoodWebhookServer {
           return res.status(401).json({ success: false, error: 'Not authenticated' });
         }
         
-        const { store_id, merchant_name, api_key, api_url, master_key, is_active } = req.body;
+        const { store_id, merchant_name, api_key, api_url, master_key, is_active, location_name, address, phone } = req.body;
         
-        // merchant_name is required, but store_id is optional (should be in locations)
-        if (!merchant_name) {
+        // Require merchant + primary location fields
+        if (!merchant_name || !store_id || !location_name) {
           return res.status(400).json({ 
             success: false, 
-            error: 'merchant_name is required' 
+            error: 'merchant_name, store_id, and location_name are required' 
           });
         }
 
+        // Create/update merchant (store_id kept for backward compatibility)
         const merchant = await this.handleAsync(this.database.insertOrUpdateMerchant({
           user_id: user.userId,
-          store_id: store_id || undefined, // Optional - store_id should be in locations
+          store_id,
           merchant_name,
           api_key,
           api_url,
@@ -1491,9 +1492,19 @@ class GloriaFoodWebhookServer {
         }));
 
         if (merchant) {
+          // Ensure primary location exists/updated for this merchant
+          const location = await this.handleAsync((this.database as any).insertOrUpdateLocation({
+            merchant_id: merchant.id,
+            location_name,
+            store_id,
+            address,
+            phone,
+            is_active: true
+          }, user.userId));
+
           // Reload merchants in manager
           await this.merchantManager.reload();
-          res.json({ success: true, merchant });
+          res.json({ success: true, merchant, location });
         } else {
           res.status(500).json({ success: false, error: 'Failed to create merchant' });
         }
