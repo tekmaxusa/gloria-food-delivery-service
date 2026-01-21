@@ -468,7 +468,7 @@ export class OrderDatabasePostgreSQL {
           CREATE TABLE IF NOT EXISTS merchants (
             id SERIAL PRIMARY KEY,
             user_id INTEGER,
-            store_id VARCHAR(255) NOT NULL,
+            store_id VARCHAR(255),
             merchant_name VARCHAR(255) NOT NULL,
             api_key VARCHAR(500),
             api_url VARCHAR(500),
@@ -480,6 +480,19 @@ export class OrderDatabasePostgreSQL {
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
           )
         `);
+
+        // Allow store_id to be NULL (store_id now stored in locations)
+        try {
+          await client.query(`
+            ALTER TABLE merchants
+            ALTER COLUMN store_id DROP NOT NULL
+          `);
+        } catch (e: any) {
+          // Ignore if already nullable
+          if (e.code !== '42701') {
+            console.log('   Note: could not drop NOT NULL on merchants.store_id');
+          }
+        }
 
         // Add phone, address, and user_id columns if they don't exist (for existing databases)
         try {
@@ -534,6 +547,27 @@ export class OrderDatabasePostgreSQL {
         `);
         await client.query(`
           CREATE INDEX IF NOT EXISTS idx_merchants_user_id ON merchants(user_id)
+        `);
+
+        // Ensure drivers table exists for stats/endpoints
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS drivers (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            phone VARCHAR(100),
+            email VARCHAR(255),
+            vehicle_type VARCHAR(100),
+            vehicle_plate VARCHAR(100),
+            rating DECIMAL(3, 2) DEFAULT 0.00,
+            status VARCHAR(50) DEFAULT 'active',
+            latitude DECIMAL(10, 8),
+            longitude DECIMAL(11, 8),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+        await client.query(`
+          CREATE INDEX IF NOT EXISTS idx_drivers_status ON drivers(status)
         `);
 
         // Create locations table for multiple locations per merchant
@@ -2103,6 +2137,27 @@ export class OrderDatabasePostgreSQL {
       try {
         const client = await this.pool.connect();
 
+        // Ensure drivers table exists before querying stats (self-heal if init missed)
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS drivers (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            phone VARCHAR(100),
+            email VARCHAR(255),
+            vehicle_type VARCHAR(100),
+            vehicle_plate VARCHAR(100),
+            rating DECIMAL(3, 2) DEFAULT 0.00,
+            status VARCHAR(50) DEFAULT 'active',
+            latitude DECIMAL(10, 8),
+            longitude DECIMAL(11, 8),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+        await client.query(`
+          CREATE INDEX IF NOT EXISTS idx_drivers_status ON drivers(status)
+        `);
+
         let orderStatsQuery = `
           SELECT 
             COUNT(*) as total_orders,
@@ -2413,6 +2468,19 @@ export class OrderDatabasePostgreSQL {
       }
 
       const client = await this.pool.connect();
+
+      // Ensure store_id is nullable for backward compatibility (older DBs may still enforce NOT NULL)
+      try {
+        await client.query(`
+          ALTER TABLE merchants
+          ALTER COLUMN store_id DROP NOT NULL
+        `);
+      } catch (e: any) {
+        // 42701: NOT NULL already dropped; ignore other expected states
+        if (e.code !== '42701') {
+          console.log('   Note: could not drop NOT NULL on merchants.store_id');
+        }
+      }
 
       // Check if merchant exists (by id if provided, or by store_id for backward compatibility)
       let existing: Merchant | null = null;
