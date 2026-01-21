@@ -2490,14 +2490,14 @@ export class OrderDatabasePostgreSQL {
           merchant.is_active !== undefined ? merchant.is_active : true
         ]);
       }
-
-      client.release();
       
       // Get updated merchant (by id if we have it, or by store_id)
       let updated: Merchant | null = null;
       if (existing) {
+        client.release();
         updated = await this.getMerchantByStoreId(existing.store_id || '', merchant.user_id);
       } else if (merchant.store_id) {
+        client.release();
         updated = await this.getMerchantByStoreId(merchant.store_id, merchant.user_id);
       } else {
         // Get by user_id and merchant_name (for new merchants without store_id)
@@ -2525,6 +2525,7 @@ export class OrderDatabasePostgreSQL {
             updated_at: newMerchant.updated_at
           };
         }
+        client.release();
       }
       
       if (updated) {
