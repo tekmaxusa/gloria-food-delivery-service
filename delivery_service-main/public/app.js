@@ -2210,13 +2210,14 @@ async function showDashboardPage() {
             const merchant = data.merchants.find(m => m.is_active) || data.merchants[0];
 
             // Check if merchant_name is valid (not empty, not null, and not the same as store_id)
-            if (merchant.merchant_name &&
-                merchant.merchant_name.trim() !== '' &&
-                merchant.merchant_name !== merchant.store_id &&
-                merchant.store_id && merchant.merchant_name.toLowerCase() !== merchant.store_id.toLowerCase() &&
-                !merchant.merchant_name.startsWith('Merchant ') &&
-                merchant.merchant_name !== 'Unknown Merchant' &&
-                merchant.merchant_name !== 'N/A') {
+            const name = merchant.merchant_name || '';
+            const storeId = merchant.store_id || '';
+            if (name.trim() !== '' &&
+                name !== storeId &&
+                name.toLowerCase() !== storeId.toLowerCase() &&
+                !name.startsWith('Merchant ') &&
+                name !== 'Unknown Merchant' &&
+                name !== 'N/A') {
                 merchantName = merchant.merchant_name.trim();
             } else {
                 // If merchant_name is missing or invalid, use store_id as fallback (don't check orders)
