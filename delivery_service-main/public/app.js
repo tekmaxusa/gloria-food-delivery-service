@@ -4348,7 +4348,7 @@ async function getBusinessSettingsContent() {
         } else {
             // If merchant_name is missing or invalid, try to get it from orders
             try {
-                const ordersResponse = await authenticatedFetch(`${API_BASE}/orders?limit=100&store_id=${encodeURIComponent(merchant.store_id)}`);
+                const ordersResponse = await authenticatedFetch(`${API_BASE}/orders?limit=100&store_id=${encodeURIComponent(merchantStoreId)}`);
                 const ordersData = await ordersResponse.json();
                 if (ordersData.success && ordersData.orders && ordersData.orders.length > 0) {
                     // Find an order with merchant_name that's different from store_id and not a fallback
@@ -4361,11 +4361,11 @@ async function getBusinessSettingsContent() {
                             orderMerchantName !== orderStoreId &&
                             orderMerchantName.toLowerCase() !== orderStoreId.toLowerCase() &&
                             !orderMerchantName.startsWith('Merchant ') &&
-                        o.merchant_name !== 'Unknown Merchant' &&
-                        o.merchant_name !== 'N/A'
-                    );
+                            orderMerchantName !== 'Unknown Merchant' &&
+                            orderMerchantName !== 'N/A';
+                    });
                     if (orderWithMerchant && orderWithMerchant.merchant_name) {
-                        businessName = orderWithMerchant.merchant_name.trim();
+                        businessName = (orderWithMerchant.merchant_name || '').toString().trim();
                     } else {
                         // Last resort: try to get from raw_data
                         for (const order of ordersData.orders) {
