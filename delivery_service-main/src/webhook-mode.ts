@@ -911,7 +911,16 @@ class GloriaFoodWebhookServer {
       console.log(chalk.blue('🔵 Serving static files from: dist/public'));
       const resolvedPath = path.resolve(distPublicPath);
       console.log(chalk.gray(`   Resolved path: ${resolvedPath}`));
-      this.app.use(express.static(resolvedPath));
+      // Add cache-busting for app.js to force browser refresh
+      this.app.use(express.static(resolvedPath, {
+        setHeaders: (res, filePath) => {
+          if (filePath.endsWith('app.js')) {
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
+          }
+        }
+      }));
       
       // Also check if index.html exists
       const indexPath = path.join(distPublicPath, 'index.html');
@@ -924,7 +933,16 @@ class GloriaFoodWebhookServer {
       console.log(chalk.blue('🔵 Serving static files from: public'));
       const resolvedPath = path.resolve(publicPath);
       console.log(chalk.gray(`   Resolved path: ${resolvedPath}`));
-      this.app.use(express.static(resolvedPath));
+      // Add cache-busting for app.js to force browser refresh
+      this.app.use(express.static(publicPath, {
+        setHeaders: (res, filePath) => {
+          if (filePath.endsWith('app.js')) {
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
+          }
+        }
+      }));
     } else {
       console.log(chalk.yellow('⚠️  Public directory not found, dashboard may not be available'));
     }
