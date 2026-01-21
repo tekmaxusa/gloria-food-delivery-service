@@ -1535,6 +1535,7 @@ function openMerchantModal(merchant) {
     form.reset();
     form.dataset.editingMerchantId = '';
     form.dataset.editingLocationId = '';
+    form.dataset.editingStoreId = '';
 
     // Get or create locations container
     let locationsContainer = document.getElementById('merchantLocationsContainer');
@@ -1556,6 +1557,7 @@ function openMerchantModal(merchant) {
         const apiUrlEl = document.getElementById('merchantApiUrl');
         if (apiUrlEl) apiUrlEl.value = merchant.api_url || '';
         form.dataset.editingMerchantId = merchant.id;
+        form.dataset.editingStoreId = merchant.store_id || '';
 
         // Populate primary location fields from first active location (or first location)
         const locations = merchant.locations || [];
@@ -1726,6 +1728,9 @@ async function handleMerchantSubmit(e) {
     const locationAddressEl = document.getElementById('merchantLocationAddress');
     const locationPhoneEl = document.getElementById('merchantLocationPhone');
     
+    // Backward-compat guard: avoid ReferenceError if old code references editingStoreId
+    const editingStoreId = form.dataset.editingStoreId || '';
+
     if (!merchantNameEl || !storeIdEl || !locationNameEl) {
         showError('Required form fields are missing');
         return;
