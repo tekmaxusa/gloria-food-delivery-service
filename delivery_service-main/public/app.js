@@ -156,22 +156,30 @@ function showLogin() {
 
 // Show dashboard
 function showDashboard() {
+    console.log('showDashboard() called');
+    
     // Hide login/signup container
     const authContainer = document.getElementById('authContainer');
     if (authContainer) {
         authContainer.classList.add('hidden');
+        console.log('Auth container hidden');
+    } else {
+        console.warn('Auth container not found');
     }
 
     // Show dashboard container
     const dashboardContainer = document.getElementById('dashboardContainer');
     if (dashboardContainer) {
         dashboardContainer.classList.remove('hidden');
+        console.log('Dashboard container shown');
 
         // Show dashboard page by default
         showDashboardPage();
 
         // Start auto-refresh only when authenticated
         startAutoRefresh();
+    } else {
+        console.error('Dashboard container not found!');
     }
 }
 
@@ -440,13 +448,32 @@ function setupAuth() {
                 const data = await response.json();
 
                 if (data.success && data.user) {
+                    // Save user data and session
                     currentUser = data.user;
                     sessionId = data.sessionId;
                     saveSessionId(data.sessionId);
-                    showNotification('Success', 'Login successful!');
+                    
+                    console.log('Login successful, redirecting to dashboard...');
+                    showNotification('Success', 'Login successful! Redirecting to dashboard...');
 
-                    // Redirect to dashboard
+                    // Clear login form
+                    const loginFormElement = document.getElementById('loginFormElement');
+                    if (loginFormElement) {
+                        loginFormElement.reset();
+                    }
+
+                    // Redirect to dashboard immediately
                     showDashboard();
+                    
+                    // Ensure dashboard is visible (double check)
+                    setTimeout(() => {
+                        const dashboardContainer = document.getElementById('dashboardContainer');
+                        const authContainer = document.getElementById('authContainer');
+                        if (dashboardContainer && authContainer) {
+                            dashboardContainer.classList.remove('hidden');
+                            authContainer.classList.add('hidden');
+                        }
+                    }, 100);
                 } else {
                     const errorMsg = data.error || 'Invalid email or password';
                     if (errorDiv) {
