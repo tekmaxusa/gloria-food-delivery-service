@@ -518,11 +518,25 @@ function setupAuth() {
                 const data = await response.json();
 
                 if (data.success && data.user) {
-                    currentUser = data.user;
-                    sessionId = data.sessionId;
-                    saveSessionId(data.sessionId);
-                    showNotification('Success', 'Account created successfully!');
-                    showDashboard();
+                    // Clear signup form
+                    const signupFormElement = document.getElementById('signupFormElement');
+                    if (signupFormElement) {
+                        signupFormElement.reset();
+                    }
+                    
+                    showNotification('Success', 'Account created successfully! Please login to continue.');
+                    
+                    // Switch to login form instead of going to dashboard
+                    const loginForm = document.getElementById('loginForm');
+                    const signupForm = document.getElementById('signupForm');
+                    if (loginForm) loginForm.classList.add('active');
+                    if (signupForm) signupForm.classList.remove('active');
+                    
+                    // Pre-fill email in login form
+                    const loginEmail = document.getElementById('loginEmail');
+                    if (loginEmail) {
+                        loginEmail.value = email;
+                    }
                 } else {
                     const errorMsg = data.error || 'Failed to create account';
                     if (errorDiv) {
@@ -677,6 +691,9 @@ function navigateToPage(page) {
             break;
         case 'reviews':
             showReviewsPage();
+            break;
+        case 'integrations':
+            showIntegrationsPage();
             break;
         default:
             showOrdersPage();
@@ -1107,8 +1124,201 @@ async function saveMerchantConnection(event) {
     }
 }
 
+// Show Add Merchant Popup (centered modal)
+function showAddMerchantPopup() {
+    // Check if popup already exists
+    if (document.getElementById('addMerchantPopup')) {
+        return;
+    }
+    
+    const popup = document.createElement('div');
+    popup.id = 'addMerchantPopup';
+    popup.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+        animation: fadeIn 0.3s ease;
+    `;
+    
+    popup.innerHTML = `
+        <div style="
+            background: white;
+            border-radius: 16px;
+            padding: 32px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            animation: slideUp 0.3s ease;
+        ">
+            <div style="text-align: center; margin-bottom: 24px;">
+                <div style="width: 64px; height: 64px; background: #eff6ff; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="8.5" cy="7" r="4"></circle>
+                        <path d="M20 8v6M23 11h-6"></path>
+                    </svg>
+                </div>
+                <h2 style="font-size: 24px; font-weight: 600; color: #0f172a; margin-bottom: 8px;">Connect Your First Merchant</h2>
+                <p style="font-size: 16px; color: #64748b; line-height: 1.6;">
+                    To start receiving orders, you need to connect a GloriaFood merchant. 
+                    Go to the Integrations page to add your merchant credentials.
+                </p>
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: center;">
+                <button onclick="closeAddMerchantPopup()" style="
+                    padding: 12px 24px;
+                    border: 1px solid #e2e8f0;
+                    background: white;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    font-weight: 500;
+                    color: #64748b;
+                ">Maybe Later</button>
+                <button onclick="goToIntegrationsPage()" style="
+                    padding: 12px 24px;
+                    background: #3b82f6;
+                    color: white;
+                    border: none;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    font-weight: 600;
+                ">Go to Integrations</button>
+            </div>
+        </div>
+    `;
+    
+    // Add animation styles if not already added
+    if (!document.getElementById('popupStyles')) {
+        const style = document.createElement('style');
+        style.id = 'popupStyles';
+        style.textContent = `
+            @keyframes fadeIn {
+                from { opacity: 0; }
+                to { opacity: 1; }
+            }
+            @keyframes slideUp {
+                from { transform: translateY(20px); opacity: 0; }
+                to { transform: translateY(0); opacity: 1; }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+    
+    document.body.appendChild(popup);
+    
+    // Close on background click
+    popup.addEventListener('click', (e) => {
+        if (e.target === popup) {
+            closeAddMerchantPopup();
+        }
+    });
+}
+
+function closeAddMerchantPopup() {
+    const popup = document.getElementById('addMerchantPopup');
+    if (popup) {
+        popup.style.animation = 'fadeOut 0.3s ease';
+        setTimeout(() => {
+            popup.remove();
+        }, 300);
+    }
+}
+
+function goToIntegrationsPage() {
+    closeAddMerchantPopup();
+    // Navigate to integrations page
+    navigateToPage('Integrations');
+}
+
+// Show Integrations Page
+async function showIntegrationsPage() {
+    const mainContainer = document.querySelector('.main-container');
+    if (!mainContainer) {
+        return;
+    }
+
+    // Load merchants
+    let merchants = [];
+    try {
+        const response = await authenticatedFetch(`${API_BASE}/merchants`);
+        const data = await response.json();
+        if (data.success && data.merchants) {
+            merchants = data.merchants;
+        }
+    } catch (error) {
+        console.error('Error loading merchants:', error);
+    }
+
+    mainContainer.innerHTML = `
+        <div class="orders-header">
+            <h1 class="page-title">Integrations</h1>
+            <button onclick="openConnectMerchantModal()" class="btn-primary" style="padding: 12px 24px; font-size: 14px; font-weight: 600;">
+                + Add Integration
+            </button>
+        </div>
+        
+        <div style="padding: 24px;">
+            <div style="background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+                <h2 style="font-size: 20px; font-weight: 600; color: #0f172a; margin-bottom: 16px;">Connected Merchants</h2>
+                
+                ${merchants.length === 0 ? `
+                    <div style="text-align: center; padding: 48px 24px;">
+                        <div style="width: 64px; height: 64px; background: #f1f5f9; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2">
+                                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="8.5" cy="7" r="4"></circle>
+                                <path d="M20 8v6M23 11h-6"></path>
+                            </svg>
+                        </div>
+                        <p style="font-size: 16px; color: #64748b; margin-bottom: 24px;">No merchants connected yet</p>
+                        <button onclick="openConnectMerchantModal()" class="btn-primary" style="padding: 12px 24px; font-size: 14px; font-weight: 600;">
+                            Connect Your First Merchant
+                        </button>
+                    </div>
+                ` : `
+                    <div style="display: grid; gap: 16px;">
+                        ${merchants.map(merchant => `
+                            <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <h3 style="font-size: 18px; font-weight: 600; color: #0f172a; margin-bottom: 8px;">
+                                        ${escapeHtml(merchant.merchant_name || 'Unknown Merchant')}
+                                    </h3>
+                                    <div style="display: flex; gap: 24px; color: #64748b; font-size: 14px;">
+                                        <span><strong>Store ID:</strong> ${escapeHtml(merchant.store_id || 'N/A')}</span>
+                                        <span><strong>Status:</strong> 
+                                            <span style="color: ${merchant.is_active ? '#10b981' : '#ef4444'};">
+                                                ${merchant.is_active ? 'Active' : 'Inactive'}
+                                            </span>
+                                        </span>
+                                    </div>
+                                </div>
+                                <div style="display: flex; gap: 8px;">
+                                    <button onclick="deleteMerchant(${merchant.id}, '${escapeHtml(merchant.merchant_name || 'Unknown')}')" 
+                                            style="padding: 8px 16px; border: 1px solid #ef4444; background: white; color: #ef4444; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                                        Delete
+                                    </button>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `}
+            </div>
+        </div>
+    `;
+}
+
 // Make functions globally available
 window.openConnectMerchantModal = openConnectMerchantModal;
+window.showAddMerchantPopup = showAddMerchantPopup;
+window.closeAddMerchantPopup = closeAddMerchantPopup;
+window.goToIntegrationsPage = goToIntegrationsPage;
 window.closeConnectMerchantModal = closeConnectMerchantModal;
 window.saveMerchantConnection = saveMerchantConnection;
 
@@ -1189,7 +1399,7 @@ async function showDashboardPage() {
         // Silently handle error - will show connect merchant prompt
     }
 
-    // If no merchant, show connect merchant prompt
+    // If no merchant, show connect merchant prompt and popup modal
     if (!hasMerchant) {
         mainContainer.innerHTML = `
             <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; padding: 40px 20px;">
@@ -1212,6 +1422,12 @@ async function showDashboardPage() {
                 </div>
             </div>
         `;
+        
+        // Show popup modal in center of screen
+        setTimeout(() => {
+            showAddMerchantPopup();
+        }, 500);
+        
         return;
     }
 
