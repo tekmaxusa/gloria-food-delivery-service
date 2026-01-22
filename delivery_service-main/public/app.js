@@ -5513,13 +5513,28 @@ async function loadOrders() {
             // This ensures orders are shown when they're loaded
             filterAndDisplayOrders();
             
-            // Also try to display directly if we're on Orders page
-            const tbody = document.getElementById('ordersTableBody');
-            if (tbody) {
-                console.log('✅ Orders page is active, orders should be displayed');
-            } else {
-                console.log('ℹ️ Orders page might not be active yet, but orders are loaded and ready');
-            }
+            // CRITICAL: Also try to display directly if we're on Orders page
+            // This is a safety net to ensure orders are always displayed
+            setTimeout(() => {
+                const tbody = document.getElementById('ordersTableBody');
+                if (tbody && allOrders.length > 0) {
+                    console.log('🔄 Safety check: Re-displaying orders to ensure they show up');
+                    filterAndDisplayOrders();
+                }
+            }, 500);
+            
+            // One more check after 1 second to be absolutely sure
+            setTimeout(() => {
+                const tbody = document.getElementById('ordersTableBody');
+                if (tbody && allOrders.length > 0) {
+                    const currentRows = tbody.querySelectorAll('tr');
+                    // If table is empty but we have orders, force display
+                    if (currentRows.length === 0 || (currentRows.length === 1 && currentRows[0].querySelector('.empty-state'))) {
+                        console.log('🔄 Final safety check: Table appears empty, forcing order display');
+                        filterAndDisplayOrders();
+                    }
+                }
+            }, 1000);
         } else {
             console.warn('Orders API response format unexpected:', data);
             allOrders = [];
@@ -6201,6 +6216,9 @@ function displayOrders(orders) {
     
     // Found tbody immediately, display orders
     displayOrdersToTable(orders, tbody);
+    
+    // Log success for debugging
+    console.log(`✅ displayOrders: Called displayOrdersToTable with ${orders ? orders.length : 0} order(s)`);
 }
 
 // Helper function to actually display orders to the table
@@ -6253,7 +6271,14 @@ function displayOrdersToTable(orders, tbody) {
         tbody.innerHTML = '';
         tbody.appendChild(fragment);
         
-        console.log(`✅ Successfully displayed ${orders.length} order(s) in table`);
+        // Verify orders were actually added
+        const rowsAfter = tbody.querySelectorAll('tr');
+        console.log(`✅ Successfully displayed ${orders.length} order(s) in table (${rowsAfter.length} rows in DOM)`);
+        
+        // Final verification - if rows don't match, log warning
+        if (rowsAfter.length !== orders.length) {
+            console.warn(`⚠️ Row count mismatch: Expected ${orders.length} rows, found ${rowsAfter.length} in DOM`);
+        }
     } catch (error) {
         console.error('Error displaying orders:', error);
         tbody.innerHTML = `
