@@ -1605,12 +1605,16 @@ class GloriaFoodWebhookServer {
           console.log(chalk.yellow(`⚠️  /orders: No user session found, using default user ID ${userId}`));
         }
         
+        console.log(chalk.blue(`📥 /orders: Fetching orders for user_id=${userId}, limit=${limit}`));
+        
         let orders;
         if (status) {
           orders = await this.handleAsync(this.database.getOrdersByStatus(status, userId));
         } else {
           orders = await this.handleAsync(this.database.getAllOrders(limit, userId));
         }
+        
+        console.log(chalk.blue(`📊 /orders: Found ${orders.length} order(s) from database query`));
         
         // If user is logged in (or using default), also include orders with user_id = NULL that match user's merchants
         // This handles backward compatibility for orders saved before user_id was set
@@ -1694,6 +1698,8 @@ class GloriaFoodWebhookServer {
             merchant_name: merchantName
           };
         });
+        
+        console.log(chalk.green(`✅ /orders: Returning ${enrichedOrders.length} order(s) to client`));
         
         res.json({ 
           success: true, 

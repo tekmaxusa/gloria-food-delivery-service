@@ -1655,7 +1655,9 @@ export class OrderDatabasePostgreSQL {
         query += ' ORDER BY fetched_at DESC LIMIT $' + (params.length + 1);
         params.push(limit);
         
+        console.log(`🔍 getAllOrders query: ${query}, params: [${params.join(', ')}]`);
         const result = await client.query(query, params);
+        console.log(`✅ getAllOrders returned ${result.rows.length} row(s)`);
 
         client.release();
         return result.rows.map(row => this.mapRowToOrder(row));
