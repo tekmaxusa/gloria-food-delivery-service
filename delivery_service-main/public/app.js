@@ -5569,21 +5569,6 @@ async function loadOrders() {
             // Only try to display if we're on Orders page
             // filterAndDisplayOrders will check if page is active
             filterAndDisplayOrders();
-            
-            // Single safety check - only re-display if table is actually empty
-            setTimeout(() => {
-                const tbody = document.getElementById('ordersTableBody');
-                if (tbody && allOrders.length > 0) {
-                    const currentRows = tbody.querySelectorAll('tr');
-                    // Only re-display if table is empty or shows empty state
-                    const isEmpty = currentRows.length === 0 || 
-                                   (currentRows.length === 1 && currentRows[0].querySelector('.empty-state'));
-                    if (isEmpty) {
-                        console.log('🔄 Safety check: Table appears empty, re-displaying orders');
-                        filterAndDisplayOrders();
-                    }
-                }
-            }, 500);
         } else {
             console.warn('Orders API response format unexpected:', data);
             allOrders = [];
@@ -6238,10 +6223,11 @@ function filterAndDisplayOrders() {
     console.log(`✅ Final filtered orders: ${filtered.length} (will display)`);
     displayOrders(filtered);
     
-    // Reset flag after a short delay to allow display to complete
+    // Reset flag after display completes (longer delay to prevent rapid re-displays)
     setTimeout(() => {
         isDisplayingOrders = false;
-    }, 100);
+        console.log('✅ Display flag reset - ready for next display');
+    }, 500);
 }
 
 // Display orders in table (optimized with DocumentFragment for faster rendering)
@@ -6304,7 +6290,12 @@ function displayOrdersToTable(orders, tbody) {
     console.log(`✅ About to display ${orders.length} order(s) - creating rows...`);
 
     try {
-        // Clear table first to prevent duplicates
+        // CRITICAL: Clear table FIRST to prevent duplicates
+        // This must happen before any other operations
+        const existingRows = tbody.querySelectorAll('tr');
+        if (existingRows.length > 0) {
+            console.log(`🧹 Clearing ${existingRows.length} existing row(s) before displaying new orders`);
+        }
         tbody.innerHTML = '';
         
         // Use DocumentFragment for faster DOM updates
@@ -6314,12 +6305,17 @@ function displayOrdersToTable(orders, tbody) {
 
         // Build HTML string
         const rowsHtml = orders.map(order => createOrderRow(order)).join('');
+        if (!rowsHtml || rowsHtml.trim() === '') {
+            console.warn('⚠️ No HTML generated for orders - createOrderRow might be returning empty strings');
+            return;
+        }
+        
         template.innerHTML = rowsHtml;
 
         // Move all rows to fragment
         fragment.appendChild(template.content);
 
-        // Append fragment to tbody
+        // Append fragment to tbody (table is already cleared above)
         tbody.appendChild(fragment);
         
         // Verify orders were actually added
@@ -6329,6 +6325,17 @@ function displayOrdersToTable(orders, tbody) {
         // Final verification - if rows don't match, log warning
         if (rowsAfter.length !== orders.length) {
             console.warn(`⚠️ Row count mismatch: Expected ${orders.length} rows, found ${rowsAfter.length} in DOM`);
+            console.warn(`⚠️ This might indicate duplicate orders or createOrderRow returning empty strings`);
+        }
+        
+        // Check for duplicate order IDs in DOM
+        const orderIdsInDOM = Array.from(rowsAfter).map(row => {
+            const firstCell = row.querySelector('td');
+            return firstCell ? firstCell.textContent : null;
+        }).filter(Boolean);
+        const uniqueIds = new Set(orderIdsInDOM);
+        if (orderIdsInDOM.length !== uniqueIds.size) {
+            console.warn(`⚠️ DUPLICATE DETECTED: Found ${orderIdsInDOM.length} rows but only ${uniqueIds.size} unique order IDs`);
         }
     } catch (error) {
         console.error('Error displaying orders:', error);
