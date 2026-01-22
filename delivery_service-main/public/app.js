@@ -1479,6 +1479,24 @@ function openGloriaFoodIntegrationModal(merchant = null, location = null) {
                     </div>
                     
                     <div class="form-group">
+                        <label class="input-label" for="merchantStoreId">
+                            Merchant Store ID <span style="color: #ef4444;">*</span>
+                        </label>
+                        <input 
+                            type="text" 
+                            id="merchantStoreId" 
+                            name="merchantStoreId" 
+                            value=""
+                            required 
+                            placeholder="Enter Merchant Store ID"
+                            class="form-input"
+                        >
+                        <small style="color: #64748b; font-size: 12px; margin-top: 4px; display: block;">
+                            This Store ID will be used to map incoming orders from GloriaFood
+                        </small>
+                    </div>
+                    
+                    <div class="form-group">
                         <label class="input-label" for="storeId">
                             Store ID (Restaurant Token) <span style="color: #ef4444;">*</span>
                         </label>
@@ -1649,6 +1667,7 @@ async function saveGloriaFoodIntegration(event, merchantId = null, locationId = 
     
     // Get form values
     const merchantName = document.getElementById('merchantName').value.trim();
+    const merchantStoreId = document.getElementById('merchantStoreId').value.trim();
     const storeId = document.getElementById('storeId').value.trim();
     const locationName = document.getElementById('locationName').value.trim();
     const apiKey = document.getElementById('apiKey').value.trim();
@@ -1663,8 +1682,8 @@ async function saveGloriaFoodIntegration(event, merchantId = null, locationId = 
     const actualLocationId = locationId || (locationIdInput ? parseInt(locationIdInput.value) : null);
     
     // Validate required fields
-    if (!merchantName || !storeId || !locationName) {
-        showNotification('Error', 'Please fill in all required fields (Merchant Name, Store ID, Location Name)', 'error');
+    if (!merchantName || !merchantStoreId || !storeId || !locationName) {
+        showNotification('Error', 'Please fill in all required fields (Merchant Name, Merchant Store ID, Store ID, Location Name)', 'error');
         return;
     }
     
@@ -1672,6 +1691,7 @@ async function saveGloriaFoodIntegration(event, merchantId = null, locationId = 
         // First, create/update merchant and location
         const merchantPayload = {
             merchant_name: merchantName,
+            merchant_store_id: merchantStoreId,
             store_id: storeId,
             api_key: apiKey || undefined,
             api_url: apiUrl || undefined,
