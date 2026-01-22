@@ -1675,7 +1675,8 @@ class GloriaFoodWebhookServer {
               if (total > 0) {
                 // There are orders but query returned 0 - this is a problem!
                 const sampleQuery = await client.query('SELECT gloriafood_order_id, user_id, status FROM orders ORDER BY fetched_at DESC LIMIT 3');
-                console.log(chalk.yellow(`⚠️  DEBUG: Sample orders in DB:`, sampleQuery.rows);
+                console.log(chalk.yellow(`⚠️  DEBUG: Sample orders in DB:`));
+                console.log(chalk.yellow(JSON.stringify(sampleQuery.rows, null, 2)));
                 console.log(chalk.yellow(`⚠️  DEBUG: Query should return orders but returned 0 - checking query logic...`));
               } else {
                 console.log(chalk.yellow(`ℹ️  Database has 0 orders - this is expected if no orders have been received yet`));
