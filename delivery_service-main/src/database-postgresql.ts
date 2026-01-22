@@ -1655,9 +1655,26 @@ export class OrderDatabasePostgreSQL {
         query += ' ORDER BY fetched_at DESC LIMIT $' + (params.length + 1);
         params.push(limit);
         
-        console.log(`🔍 getAllOrders query: ${query}, params: [${params.join(', ')}]`);
+        console.log(`🔍 getAllOrders query: ${query}`);
+        console.log(`🔍 getAllOrders params: [${params.map((p, i) => `$${i + 1}=${p}`).join(', ')}]`);
+        console.log(`🔍 getAllOrders userId: ${userId}, limit: ${limit}`);
+        
         const result = await client.query(query, params);
-        console.log(`✅ getAllOrders returned ${result.rows.length} row(s)`);
+        console.log(`✅ getAllOrders returned ${result.rows.length} row(s) from database`);
+        
+        // If 0 results, try a test query to see if there are any orders at all
+        if (result.rows.length === 0) {
+          const testResult = await client.query('SELECT COUNT(*) as count FROM orders');
+          const totalCount = parseInt(testResult.rows[0]?.count || '0');
+          console.log(`🔍 Test query: Total orders in database = ${totalCount}`);
+          
+          if (totalCount > 0) {
+            // There are orders but query returned 0 - show sample
+            const sampleResult = await client.query('SELECT gloriafood_order_id, user_id, fetched_at FROM orders ORDER BY fetched_at DESC LIMIT 5');
+            console.log(`🔍 Sample orders in DB:`, sampleResult.rows);
+            console.log(`⚠️ Query returned 0 but database has ${totalCount} orders - check query logic!`);
+          }
+        }
         
         // DEBUG: If 0 results and userId is 1, check total orders in database
         if (result.rows.length === 0 && userId === 1) {
