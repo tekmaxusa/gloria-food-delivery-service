@@ -3263,6 +3263,17 @@ async function getBusinessSettingsContent() {
                             <span class="slider"></span>
                     </label>
                 </div>
+                    
+                    <div class="business-toggle-field">
+                        <div class="business-toggle-content">
+                            <label class="business-toggle-label">Accept takeout orders from integrations</label>
+                            <p class="business-toggle-description">Seamlessly accept and manage takeout orders from integrated delivery platforms in one centralized hub.</p>
+            </div>
+                        <label class="switch">
+                            <input type="checkbox" id="takeoutOrdersToggle" ${acceptTakeoutOrders ? 'checked' : ''} onchange="toggleTakeoutOrders(this.checked)">
+                            <span class="slider"></span>
+                        </label>
+                </div>
                 </div>
                 
                 <!-- Service Times Section -->
