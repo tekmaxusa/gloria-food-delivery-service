@@ -1688,6 +1688,23 @@ class GloriaFoodWebhookServer {
           }
         }
         
+        // CRITICAL: Remove duplicates from orders array before any further processing
+        // This prevents duplicate orders from being returned to the client
+        const seenOrderIds = new Set<string>();
+        orders = orders.filter(order => {
+          const orderId = order.gloriafood_order_id;
+          if (!orderId) {
+            console.warn('⚠️ Order missing gloriafood_order_id:', order);
+            return false; // Skip orders without ID
+          }
+          if (seenOrderIds.has(orderId)) {
+            console.warn(`⚠️ Removing duplicate order from query result: ${orderId}`);
+            return false; // Skip duplicate
+          }
+          seenOrderIds.add(orderId);
+          return true;
+        });
+        
         // If user is logged in (or using default), also include orders with user_id = NULL that match user's merchants
         // This handles backward compatibility for orders saved before user_id was set
         if (userId && orders.length < limit) {
@@ -1732,6 +1749,19 @@ class GloriaFoodWebhookServer {
             // Continue with orders we already have
           }
         }
+        
+        // Final duplicate check before returning
+        const finalSeenIds = new Set<string>();
+        orders = orders.filter(order => {
+          const orderId = order.gloriafood_order_id;
+          if (!orderId) return false;
+          if (finalSeenIds.has(orderId)) {
+            console.warn(`⚠️ Final duplicate removal: ${orderId}`);
+            return false;
+          }
+          finalSeenIds.add(orderId);
+          return true;
+        });
         
         // Filter by store_id if provided
         if (storeId) {

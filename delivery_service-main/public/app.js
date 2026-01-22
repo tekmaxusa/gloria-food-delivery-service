@@ -6340,14 +6340,24 @@ function displayOrdersToTable(orders, tbody) {
             console.warn(`⚠️ This might indicate duplicate orders or createOrderRow returning empty strings`);
         }
         
-        // Check for duplicate order IDs in DOM
+        // Check for duplicate order IDs in DOM (check second cell which contains order number)
         const orderIdsInDOM = Array.from(rowsAfter).map(row => {
-            const firstCell = row.querySelector('td');
-            return firstCell ? firstCell.textContent : null;
+            // Skip checkbox column (first td), get order number from second td
+            const cells = row.querySelectorAll('td');
+            if (cells.length > 1) {
+                // Second cell contains order number (format: #1144620675)
+                const orderCell = cells[1];
+                const text = orderCell ? orderCell.textContent : '';
+                // Extract order ID from text (remove # if present)
+                return text ? text.replace(/^#/, '').trim() : null;
+            }
+            return null;
         }).filter(Boolean);
         const uniqueIds = new Set(orderIdsInDOM);
         if (orderIdsInDOM.length !== uniqueIds.size) {
-            console.warn(`⚠️ DUPLICATE DETECTED: Found ${orderIdsInDOM.length} rows but only ${uniqueIds.size} unique order IDs`);
+            console.warn(`⚠️ DUPLICATE DETECTED IN DOM: Found ${orderIdsInDOM.length} rows but only ${uniqueIds.size} unique order IDs`);
+            console.warn(`⚠️ Order IDs in DOM:`, Array.from(orderIdsInDOM));
+            console.warn(`⚠️ This indicates createOrderRow is creating duplicate rows or orders array has duplicates`);
         }
     } catch (error) {
         console.error('Error displaying orders:', error);
