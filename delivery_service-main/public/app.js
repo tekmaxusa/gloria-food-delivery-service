@@ -935,15 +935,19 @@ function showOrdersPage() {
     // Re-initialize event listeners
     initializeOrdersPage();
     
-    // Always load orders when Orders page is shown (refresh data)
-    console.log('📥 Orders page shown - loading orders...');
-    if (!isLoadingOrders) {
-        loadOrders();
-    } else {
-        // If already loading, just display what we have
-        console.log('Orders already loading, displaying cached orders');
-        filterAndDisplayOrders();
-    }
+    // Wait for DOM to be ready before loading orders
+    // Use setTimeout to ensure the table body element exists
+    setTimeout(() => {
+        // Always load orders when Orders page is shown (refresh data)
+        console.log('📥 Orders page shown - loading orders...');
+        if (!isLoadingOrders) {
+            loadOrders();
+        } else {
+            // If already loading, just display what we have
+            console.log('Orders already loading, displaying cached orders');
+            filterAndDisplayOrders();
+        }
+    }, 100); // Small delay to ensure DOM is ready
 }
 
 // Initialize Orders page event listeners
@@ -6125,14 +6129,42 @@ function filterAndDisplayOrders() {
 
 // Display orders in table (optimized with DocumentFragment for faster rendering)
 function displayOrders(orders) {
-    const tbody = document.getElementById('ordersTableBody');
-
-    // Silently return if orders table doesn't exist (we might be on a different page)
-    if (!tbody) {
-        console.warn('⚠️ ordersTableBody not found - might be on different page');
+    // Check if we're on the Orders page first
+    const mainContainer = document.querySelector('.main-container');
+    if (!mainContainer || !mainContainer.innerHTML.includes('ordersTableBody')) {
+        // Not on Orders page, silently return
         return;
     }
+    
+    const tbody = document.getElementById('ordersTableBody');
 
+    // If table body doesn't exist, try to find it or wait a bit
+    if (!tbody) {
+        console.warn('⚠️ ordersTableBody not found - retrying in 200ms...');
+        // Retry after a short delay in case DOM is still rendering
+        setTimeout(() => {
+            const retryTbody = document.getElementById('ordersTableBody');
+            if (retryTbody) {
+                console.log('✅ Found ordersTableBody on retry, displaying orders');
+                displayOrdersToTable(orders, retryTbody);
+            } else {
+                console.warn('⚠️ ordersTableBody still not found after retry');
+            }
+        }, 200);
+        return;
+    }
+    
+    displayOrdersToTable(orders, tbody);
+}
+
+// Helper function to actually display orders to the table
+function displayOrdersToTable(orders, tbody) {
+
+    if (!tbody) {
+        console.error('displayOrdersToTable: tbody is null');
+        return;
+    }
+    
     console.log(`📊 Displaying ${orders ? orders.length : 0} order(s) in table`);
 
     if (!orders || orders.length === 0) {
@@ -6174,6 +6206,8 @@ function displayOrders(orders) {
         // Clear and append in one operation
         tbody.innerHTML = '';
         tbody.appendChild(fragment);
+        
+        console.log(`✅ Successfully displayed ${orders.length} order(s) in table`);
     } catch (error) {
         console.error('Error displaying orders:', error);
         tbody.innerHTML = `
