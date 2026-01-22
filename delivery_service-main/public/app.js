@@ -5509,12 +5509,12 @@ async function loadOrders() {
             console.log(`Filtering and displaying orders with filter: ${currentStatusFilter || 'none'}`);
             console.log(`📦 Total orders loaded: ${allOrders.length}`);
             
-            // Force display even if we're not sure about the page state
-            // This ensures orders are shown when they're loaded
+            // Only try to display if we're on Orders page
+            // filterAndDisplayOrders will check if page is active
             filterAndDisplayOrders();
             
-            // CRITICAL: Also try to display directly if we're on Orders page
-            // This is a safety net to ensure orders are always displayed
+            // CRITICAL: Safety check - re-display if on Orders page
+            // This ensures orders are shown even if there was a timing issue
             setTimeout(() => {
                 const tbody = document.getElementById('ordersTableBody');
                 if (tbody && allOrders.length > 0) {
@@ -5523,7 +5523,7 @@ async function loadOrders() {
                 }
             }, 500);
             
-            // One more check after 1 second to be absolutely sure
+            // One more check after 1 second to be absolutely sure (only if on Orders page)
             setTimeout(() => {
                 const tbody = document.getElementById('ordersTableBody');
                 if (tbody && allOrders.length > 0) {
@@ -6063,6 +6063,15 @@ function getOrderCategory(order) {
 function filterAndDisplayOrders() {
     console.log(`🔍 Filtering orders: total=${allOrders ? allOrders.length : 0}, filter=${currentStatusFilter || 'none'}`);
     
+    // Check if we're on Orders page before trying to display
+    const ordersTableBody = document.getElementById('ordersTableBody');
+    const isOnOrdersPage = !!ordersTableBody;
+    
+    if (!isOnOrdersPage) {
+        console.log('ℹ️ Not on Orders page - skipping display (orders are loaded and ready)');
+        return; // Don't try to display if not on Orders page
+    }
+    
     if (!allOrders || allOrders.length === 0) {
         console.log('⚠️ No orders to filter - allOrders is empty');
         displayOrders([]);
@@ -6175,50 +6184,21 @@ function filterAndDisplayOrders() {
 
 // Display orders in table (optimized with DocumentFragment for faster rendering)
 function displayOrders(orders) {
-    // Always try to find the table body - don't give up easily
+    // Only try to display if we're actually on the Orders page
+    // This function should only be called from filterAndDisplayOrders which already checks
     let tbody = document.getElementById('ordersTableBody');
     
-    // If not found, check if we're on Orders page by looking for the table container
     if (!tbody) {
-        const tableContainer = document.querySelector('.table-container');
-        const ordersTable = document.querySelector('.orders-table');
-        
-        // If we have table elements but no tbody, the tbody might not be created yet
-        if (tableContainer || ordersTable) {
-            console.log('📋 Found Orders page elements, waiting for tbody...');
-            // Wait a bit longer for DOM to be ready
-            setTimeout(() => {
-                tbody = document.getElementById('ordersTableBody');
-                if (tbody) {
-                    console.log('✅ Found ordersTableBody after wait, displaying orders');
-                    displayOrdersToTable(orders, tbody);
-                } else {
-                    console.warn('⚠️ ordersTableBody still not found - Orders page might not be fully loaded');
-                    // Try one more time after a longer delay
-                    setTimeout(() => {
-                        tbody = document.getElementById('ordersTableBody');
-                        if (tbody) {
-                            console.log('✅ Found ordersTableBody on final retry, displaying orders');
-                            displayOrdersToTable(orders, tbody);
-                        } else {
-                            console.error('❌ Cannot display orders - ordersTableBody element not found');
-                        }
-                    }, 500);
-                }
-            }, 100);
-            return;
-        } else {
-            // Not on Orders page at all
-            console.log('ℹ️ Not on Orders page, skipping display');
-            return;
-        }
+        // If tbody doesn't exist, we're not on Orders page - silently return
+        // This is expected when auto-refresh runs while on Dashboard
+        return;
     }
     
-    // Found tbody immediately, display orders
+    // Found tbody, display orders immediately
     displayOrdersToTable(orders, tbody);
     
     // Log success for debugging
-    console.log(`✅ displayOrders: Called displayOrdersToTable with ${orders ? orders.length : 0} order(s)`);
+    console.log(`✅ displayOrders: Displayed ${orders ? orders.length : 0} order(s) in table`);
 }
 
 // Helper function to actually display orders to the table
@@ -7009,11 +6989,13 @@ function checkForNewOrders(orders) {
             loadDashboardData();
         }
         
-        // Update Orders page if on orders page
+        // Update Orders page if on orders page (filterAndDisplayOrders will check if page is active)
         const ordersTableBody = document.getElementById('ordersTableBody');
         if (ordersTableBody) {
             console.log('📋 Orders page active - refreshing order display');
             filterAndDisplayOrders();
+        } else {
+            console.log('ℹ️ Orders page not active - orders will display when page is opened');
         }
         
         // Update last order IDs
