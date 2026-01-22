@@ -2600,6 +2600,9 @@ export class OrderDatabasePostgreSQL {
         const getResult = await client.query(getQuery, [newMerchantId]);
         client.release();
         
+        // Declare updated variable before use
+        let updated: Merchant | null = null;
+        
         if (getResult.rows.length > 0) {
           const newMerchant = getResult.rows[0];
           // Get locations for this merchant (location might be created after merchant, so check both)

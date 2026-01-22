@@ -1128,9 +1128,24 @@ class GloriaFoodWebhookServer {
     });
   }
 
+  // Helper method to get current user from session
+  private getCurrentUser(req: Request): { userId: number; email: string } | null {
+    const sessionId = req.headers['x-session-id'] as string;
+    if (!sessionId) return null;
+    
+    const session = this.sessions.get(sessionId);
+    if (!session || session.expires < Date.now()) {
+      this.sessions.delete(sessionId);
+      return null;
+    }
+    
+    return { userId: session.userId, email: session.email };
+  }
+
   // Extract webhook handler logic to reusable method
   private async handleWebhookRequest(req: Request, res: Response): Promise<void> {
     console.log(chalk.cyan('\n🔵 WEBHOOK ENDPOINT CALLED'));
+    
     try {
       // Extract merchant_id from query params (for multi-merchant support)
       const merchantIdFromQuery = req.query.merchant_id ? parseInt(req.query.merchant_id as string) : null;
@@ -1261,7 +1276,7 @@ class GloriaFoodWebhookServer {
       // Now uses location lookup which is async
       if (!merchant) {
         try {
-          const user = getCurrentUser(req);
+          const user = this.getCurrentUser(req);
           merchant = await this.merchantManager.findMerchantForOrder(orderData, user?.userId);
           
           // Decrypt credentials if encrypted
@@ -1483,7 +1498,7 @@ class GloriaFoodWebhookServer {
     // Get all orders endpoint with filters
     this.app.get('/orders', async (req: Request, res: Response) => {
       try {
-        const user = getCurrentUser(req);
+        const user = this.getCurrentUser(req);
         const limit = parseInt(req.query.limit as string) || 50;
         const status = req.query.status as string | undefined;
         const storeId = req.query.store_id as string | undefined;
@@ -1598,24 +1613,10 @@ class GloriaFoodWebhookServer {
       }
     });
 
-    // Helper function to get current user from session
-    const getCurrentUser = (req: Request): { userId: number; email: string } | null => {
-      const sessionId = req.headers['x-session-id'] as string;
-      if (!sessionId) return null;
-      
-      const session = this.sessions.get(sessionId);
-      if (!session || session.expires < Date.now()) {
-        this.sessions.delete(sessionId);
-        return null;
-      }
-      
-      return { userId: session.userId, email: session.email };
-    };
-
     // Merchant management endpoints
     this.app.get('/merchants', async (req: Request, res: Response) => {
       try {
-        const user = getCurrentUser(req);
+        const user = this.getCurrentUser(req);
         if (!user) {
           console.log(chalk.yellow('⚠️  /merchants: No user session found'));
           console.log(chalk.gray(`   Headers: ${JSON.stringify(req.headers)}`));
@@ -1637,7 +1638,7 @@ class GloriaFoodWebhookServer {
 
     this.app.get('/merchants/:storeId', async (req: Request, res: Response) => {
       try {
-        const user = getCurrentUser(req);
+        const user = this.getCurrentUser(req);
         if (!user) {
           return res.status(401).json({ success: false, error: 'Not authenticated' });
         }
@@ -1654,7 +1655,7 @@ class GloriaFoodWebhookServer {
 
     this.app.post('/merchants', async (req: Request, res: Response) => {
       try {
-        const user = getCurrentUser(req);
+        const user = this.getCurrentUser(req);
         if (!user) {
           return res.status(401).json({ success: false, error: 'Not authenticated' });
         }
@@ -1695,7 +1696,7 @@ class GloriaFoodWebhookServer {
     // Generate API key for merchant
     this.app.post('/merchants/:storeId/generate-api-key', async (req: Request, res: Response) => {
       try {
-        const user = getCurrentUser(req);
+        const user = this.getCurrentUser(req);
         if (!user) {
           return res.status(401).json({ success: false, error: 'Not authenticated' });
         }
@@ -1751,7 +1752,7 @@ class GloriaFoodWebhookServer {
     // ============================================
     this.app.put('/merchants/:identifier', async (req: Request, res: Response) => {
       try {
-        const user = getCurrentUser(req);
+        const user = this.getCurrentUser(req);
         if (!user) {
           return res.status(401).json({ success: false, error: 'Not authenticated' });
         }
@@ -1859,7 +1860,7 @@ class GloriaFoodWebhookServer {
 
     this.app.delete('/merchants/:identifier', async (req: Request, res: Response) => {
       try {
-        const user = getCurrentUser(req);
+        const user = this.getCurrentUser(req);
         if (!user) {
           return res.status(401).json({ success: false, error: 'Not authenticated' });
         }
@@ -1887,7 +1888,7 @@ class GloriaFoodWebhookServer {
     // Get all locations for a merchant
     this.app.get('/merchants/:merchantId/locations', async (req: Request, res: Response) => {
       try {
-        const user = getCurrentUser(req);
+        const user = this.getCurrentUser(req);
         if (!user) {
           console.log(chalk.yellow(`⚠️  /merchants/${req.params.merchantId}/locations: No user session found`));
           return res.status(401).json({ success: false, error: 'Not authenticated. Please login first.' });
@@ -1909,7 +1910,7 @@ class GloriaFoodWebhookServer {
     // Create a new location
     this.app.post('/merchants/:merchantId/locations', async (req: Request, res: Response) => {
       try {
-        const user = getCurrentUser(req);
+        const user = this.getCurrentUser(req);
         if (!user) {
           return res.status(401).json({ success: false, error: 'Not authenticated' });
         }
@@ -1977,7 +1978,7 @@ class GloriaFoodWebhookServer {
     // Update a location
     this.app.put('/locations/:locationId', async (req: Request, res: Response) => {
       try {
-        const user = getCurrentUser(req);
+        const user = this.getCurrentUser(req);
         if (!user) {
           return res.status(401).json({ success: false, error: 'Not authenticated' });
         }
@@ -2029,7 +2030,7 @@ class GloriaFoodWebhookServer {
     // Delete a location
     this.app.delete('/locations/:locationId', async (req: Request, res: Response) => {
       try {
-        const user = getCurrentUser(req);
+        const user = this.getCurrentUser(req);
         if (!user) {
           return res.status(401).json({ success: false, error: 'Not authenticated' });
         }
@@ -2059,7 +2060,7 @@ class GloriaFoodWebhookServer {
     // Get order by ID endpoint
     this.app.get('/orders/:orderId', async (req: Request, res: Response) => {
       try {
-        const user = getCurrentUser(req);
+        const user = this.getCurrentUser(req);
         let order = await this.handleAsync(this.database.getOrderByGloriaFoodId(req.params.orderId, user?.userId));
         
         // If order not found and user is logged in, try to find order with NULL user_id that matches user's merchants
@@ -2098,7 +2099,7 @@ class GloriaFoodWebhookServer {
       try {
         const orderId = req.params.orderId;
         const { ready_for_pickup } = req.body;
-        const user = getCurrentUser(req);
+        const user = this.getCurrentUser(req);
         
         // Get order with user filtering
         let order = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId, user?.userId));
@@ -2313,7 +2314,7 @@ class GloriaFoodWebhookServer {
     // Get recent orders endpoint
     this.app.get('/orders/recent/:minutes?', async (req: Request, res: Response) => {
       try {
-        const user = getCurrentUser(req);
+        const user = this.getCurrentUser(req);
         const minutes = parseInt(req.params.minutes || '60', 10);
         const orders = await this.handleAsync(this.database.getRecentOrders(minutes, user?.userId));
         res.json({ 
@@ -2595,7 +2596,7 @@ class GloriaFoodWebhookServer {
 
     this.app.get('/api/dashboard/stats', async (req: Request, res: Response) => {
       try {
-        const user = getCurrentUser(req);
+        const user = this.getCurrentUser(req);
         const stats = await this.handleAsync(this.database.getDashboardStats(user?.userId));
         res.json({ success: true, stats });
       } catch (error: any) {
@@ -2626,7 +2627,7 @@ class GloriaFoodWebhookServer {
     // Get orders by status
     this.app.get('/orders/status/:status', async (req: Request, res: Response) => {
       try {
-        const user = getCurrentUser(req);
+        const user = this.getCurrentUser(req);
         const status = req.params.status;
         const orders = await this.handleAsync(this.database.getOrdersByStatus(status, user?.userId));
         res.json({ 
@@ -2643,7 +2644,7 @@ class GloriaFoodWebhookServer {
     // Statistics endpoint
     this.app.get('/stats', async (req: Request, res: Response) => {
       try {
-        const user = getCurrentUser(req);
+        const user = this.getCurrentUser(req);
         const totalOrders = await this.handleAsync(this.database.getOrderCount(user?.userId));
         const recentOrders = await this.handleAsync(this.database.getRecentOrders(60, user?.userId));
         const recentOrders24h = await this.handleAsync(this.database.getRecentOrders(1440, user?.userId));
@@ -2817,7 +2818,7 @@ class GloriaFoodWebhookServer {
     // Get orders summary
     this.app.get('/summary', async (req: Request, res: Response) => {
       try {
-        const user = getCurrentUser(req);
+        const user = this.getCurrentUser(req);
         const totalOrders = await this.handleAsync(this.database.getOrderCount(user?.userId));
         const recent1h = await this.handleAsync(this.database.getRecentOrders(60, user?.userId));
         const recent24h = await this.handleAsync(this.database.getRecentOrders(1440, user?.userId));
@@ -2975,7 +2976,7 @@ class GloriaFoodWebhookServer {
     // Get all users endpoint - only show users who share merchants with current user
     this.app.get('/api/auth/users', async (req: Request, res: Response) => {
       try {
-        const user = getCurrentUser(req);
+        const user = this.getCurrentUser(req);
         // Only return users who share at least one merchant with the current user
         const users = await this.handleAsync(this.database.getAllUsers(user?.userId));
         res.json({ success: true, users });
