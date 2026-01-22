@@ -1117,8 +1117,8 @@ class GloriaFoodWebhookServer {
       });
     });
 
-    // Webhook endpoint for receiving orders
-    this.app.post(this.config.webhookPath, async (req: Request, res: Response) => {
+    // Webhook handler function (shared by both endpoints)
+    const handleWebhook = async (req: Request, res: Response): Promise<void> => {
       console.log(chalk.cyan('\n🔵 WEBHOOK ENDPOINT CALLED'));
       try {
         // Extract merchant_id from query params (for multi-merchant support)
@@ -1142,7 +1142,7 @@ class GloriaFoodWebhookServer {
           console.log(chalk.gray('   Raw body (first 500 chars):'), JSON.stringify(req.body || {}).substring(0, 500));
           
           // Still return 200 to prevent retries, but log the issue
-          return res.status(200).json({ 
+          res.status(200).json({ 
             success: false, 
             error: 'Invalid payload - no order data found',
             received: {
@@ -1153,6 +1153,7 @@ class GloriaFoodWebhookServer {
               contentType: req.headers['content-type'] || 'N/A'
             }
           });
+          return;
         }
 
         // Try to find merchant by merchant_id from query params first (new multi-merchant approach)
@@ -1189,10 +1190,11 @@ class GloriaFoodWebhookServer {
                 if (merchant.webhook_secret !== webhookSecret) {
                   console.log(chalk.red(`   ❌ Webhook secret verification failed`));
                   client.release();
-                  return res.status(401).json({ 
+                  res.status(401).json({ 
                     success: false, 
                     error: 'Invalid webhook secret' 
                   });
+                  return;
                 }
                 console.log(chalk.green(`   ✅ Webhook secret verified`));
               }
@@ -1270,6 +1272,12 @@ class GloriaFoodWebhookServer {
 
         // Validate authentication - check merchant-specific API key or global keys
         if (merchant) {
+          // Get provided key for validation
+          const authHeader = req.headers['authorization'] || req.headers['x-api-key'];
+          const providedKey = authHeader?.toString().replace('Bearer ', '').trim() ||
+                            req.body?.api_key ||
+                            req.query?.token;
+          
           // Check merchant-specific API key first
           let isValid = false;
           if (merchant.api_key && providedKey) {
@@ -1434,7 +1442,8 @@ class GloriaFoodWebhookServer {
           }
         } else {
           console.error(chalk.red(`❌ Failed to store order: #${orderId}`));
-          return res.status(500).json({ error: 'Failed to store order' });
+          res.status(500).json({ error: 'Failed to store order' });
+          return;
         }
 
         // Respond with success (GloriaFood expects 200 status)
@@ -1459,7 +1468,13 @@ class GloriaFoodWebhookServer {
           error: error.message 
         });
       }
-    });
+    };
+
+    // Webhook endpoint for receiving orders (new endpoint: /webhook/gloriafood/orders)
+    this.app.post('/webhook/gloriafood/orders', handleWebhook);
+
+    // Webhook endpoint for receiving orders (legacy endpoint for backward compatibility)
+    this.app.post(this.config.webhookPath, handleWebhook);
 
     // Get all orders endpoint with filters
     this.app.get('/orders', async (req: Request, res: Response) => {
@@ -2161,16 +2176,21 @@ class GloriaFoodWebhookServer {
           
           // If no DoorDash delivery ID exists, send order to DoorDash immediately to assign driver
           if (!doorDashId) {
-            // Cancel any scheduled delivery since we're sending immediately
-            this.deliveryScheduler?.cancel(orderId, 'ready-for-pickup-manual-assign');
-            // DON'T cancel post-acceptance schedule - let it run but it will be bypassed
-            // The automatic 20-25 minute schedule will check if sent_to_doordash is true and skip if it is
-            // This way the automatic schedule is still there but will be bypassed if DoorDash was already called
-            
-            console.log(chalk.blue(`🚚 Order #${orderId} marked as ready - assigning DoorDash driver immediately...`));
-            console.log(chalk.gray(`   Note: Automatic 20-25 minute schedule will still run but will be bypassed if DoorDash call succeeds`));
-            
-            try {
+            // Check if order was already sent to DoorDash (prevent duplicate calls)
+            if ((order as any).sent_to_doordash) {
+              console.log(chalk.yellow(`⚠️  Order #${orderId} already sent to DoorDash, skipping duplicate call`));
+              // Still update ready_for_pickup status
+            } else {
+              // Cancel any scheduled delivery since we're sending immediately
+              this.deliveryScheduler?.cancel(orderId, 'ready-for-pickup-manual-assign');
+              // DON'T cancel post-acceptance schedule - let it run but it will be bypassed
+              // The automatic 20-25 minute schedule will check if sent_to_doordash is true and skip if it is
+              // This way the automatic schedule is still there but will be bypassed if DoorDash was already called
+              
+              console.log(chalk.blue(`🚚 Order #${orderId} marked as ready - assigning DoorDash driver immediately...`));
+              console.log(chalk.gray(`   Note: Automatic 20-25 minute schedule will still run but will be bypassed if DoorDash call succeeds`));
+              
+              try {
               // Prepare order data for DoorDash
               const orderDataForDoorDash = {
                 ...order,
@@ -2209,9 +2229,10 @@ class GloriaFoodWebhookServer {
                 console.log(chalk.yellow(`⚠️  Failed to send order #${orderId} to DoorDash. Order may not be a delivery type or DoorDash may be unavailable.`));
                 // If DoorDash call failed, keep the automatic schedule active so it can try again
               }
-            } catch (assignError: any) {
-              console.error(chalk.red(`❌ Error assigning DoorDash driver for order #${orderId}: ${assignError.message}`));
-              // If DoorDash call failed, keep the automatic schedule active so it can try again
+              } catch (assignError: any) {
+                console.error(chalk.red(`❌ Error assigning DoorDash driver for order #${orderId}: ${assignError.message}`));
+                // If DoorDash call failed, keep the automatic schedule active so it can try again
+              }
             }
           }
         }

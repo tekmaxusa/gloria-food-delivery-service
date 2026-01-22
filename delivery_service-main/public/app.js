@@ -919,6 +919,199 @@ function showDispatchPage() {
 }
 
 
+// Open Connect Merchant Modal
+function openConnectMerchantModal() {
+    const modal = document.createElement('div');
+    modal.id = 'connectMerchantModal';
+    modal.className = 'modal';
+    modal.style.display = 'flex';
+    
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2>Connect Merchant</h2>
+                <button class="modal-close" onclick="closeConnectMerchantModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="connectMerchantForm" onsubmit="saveMerchantConnection(event)">
+                    <div class="form-group" style="margin-bottom: 20px;">
+                        <label class="input-label" for="merchantName">
+                            Merchant Name <span style="color: #ef4444;">*</span>
+                        </label>
+                        <input 
+                            type="text" 
+                            id="merchantName" 
+                            name="merchantName" 
+                            required 
+                            placeholder="Enter Merchant Name"
+                            class="form-input"
+                            style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px;"
+                        >
+                    </div>
+                    
+                    <div class="form-group" style="margin-bottom: 20px;">
+                        <label class="input-label" for="merchantStoreId">
+                            Merchant Store ID <span style="color: #ef4444;">*</span>
+                        </label>
+                        <input 
+                            type="text" 
+                            id="merchantStoreId" 
+                            name="merchantStoreId" 
+                            required 
+                            placeholder="Enter Merchant Store ID"
+                            class="form-input"
+                            style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px;"
+                        >
+                        <small style="color: #64748b; font-size: 12px; margin-top: 4px; display: block;">
+                            This Store ID will be used to match incoming GloriaFood orders
+                        </small>
+                    </div>
+                    
+                    <div class="form-group" style="margin-bottom: 20px;">
+                        <label class="input-label" for="apiKey">
+                            GloriaFood API Key <span style="color: #ef4444;">*</span>
+                        </label>
+                        <input 
+                            type="text" 
+                            id="apiKey" 
+                            name="apiKey" 
+                            required 
+                            placeholder="Enter GloriaFood API Key"
+                            class="form-input"
+                            style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px;"
+                        >
+                    </div>
+                    
+                    <div class="form-group" style="margin-bottom: 20px;">
+                        <label class="input-label" for="apiUrl">
+                            API URL
+                        </label>
+                        <input 
+                            type="text" 
+                            id="apiUrl" 
+                            name="apiUrl" 
+                            placeholder="Enter API URL (optional)"
+                            class="form-input"
+                            style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px;"
+                        >
+                    </div>
+                    
+                    <div class="form-group" style="margin-bottom: 20px;">
+                        <label class="input-label" for="masterKey">
+                            Master Key
+                        </label>
+                        <input 
+                            type="text" 
+                            id="masterKey" 
+                            name="masterKey" 
+                            placeholder="Enter Master Key (optional)"
+                            class="form-input"
+                            style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px;"
+                        >
+                    </div>
+                    
+                    <div class="form-group" style="margin-bottom: 24px; display: flex; align-items: center; gap: 12px;">
+                        <label class="switch">
+                            <input type="checkbox" id="isActive" name="isActive" checked>
+                            <span class="slider"></span>
+                        </label>
+                        <label for="isActive" style="cursor: pointer; font-weight: 500;">
+                            Active
+                        </label>
+                    </div>
+                    
+                    <div id="merchantFormError" style="display: none; padding: 12px; background: #fee2e2; border: 1px solid #fecaca; border-radius: 8px; color: #dc2626; margin-bottom: 24px;"></div>
+                    
+                    <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                        <button type="button" class="btn-secondary" onclick="closeConnectMerchantModal()" style="padding: 12px 24px; border: 1px solid #e2e8f0; background: white; border-radius: 8px; cursor: pointer;">
+                            Cancel
+                        </button>
+                        <button type="submit" class="btn-primary" style="padding: 12px 24px; background: #3b82f6; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">
+                            Connect Merchant
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+}
+
+// Close Connect Merchant Modal
+function closeConnectMerchantModal() {
+    const modal = document.getElementById('connectMerchantModal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+// Save Merchant Connection
+async function saveMerchantConnection(event) {
+    event.preventDefault();
+    
+    const errorDiv = document.getElementById('merchantFormError');
+    if (errorDiv) {
+        errorDiv.style.display = 'none';
+    }
+    
+    const merchantName = document.getElementById('merchantName')?.value?.trim() || '';
+    const merchantStoreId = document.getElementById('merchantStoreId')?.value?.trim() || '';
+    const apiKey = document.getElementById('apiKey')?.value?.trim() || '';
+    const apiUrl = document.getElementById('apiUrl')?.value?.trim() || '';
+    const masterKey = document.getElementById('masterKey')?.value?.trim() || '';
+    const isActive = document.getElementById('isActive')?.checked || false;
+    
+    // Validate required fields
+    if (!merchantName || !merchantStoreId || !apiKey) {
+        if (errorDiv) {
+            errorDiv.textContent = 'Please fill in all required fields (Merchant Name, Merchant Store ID, API Key)';
+            errorDiv.style.display = 'block';
+        }
+        return;
+    }
+    
+    try {
+        const response = await authenticatedFetch(`${API_BASE}/merchants`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                merchant_name: merchantName,
+                store_id: merchantStoreId,
+                api_key: apiKey,
+                api_url: apiUrl || undefined,
+                master_key: masterKey || undefined,
+                is_active: isActive
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showNotification('Success', 'Merchant connected successfully!', 'success');
+            closeConnectMerchantModal();
+            showDashboardPage();
+        } else {
+            if (errorDiv) {
+                errorDiv.textContent = data.error || 'Failed to connect merchant';
+                errorDiv.style.display = 'block';
+            }
+        }
+    } catch (error) {
+        if (errorDiv) {
+            errorDiv.textContent = `Error: ${error.message || 'Failed to connect merchant'}`;
+            errorDiv.style.display = 'block';
+        }
+    }
+}
+
+// Make functions globally available
+window.openConnectMerchantModal = openConnectMerchantModal;
+window.closeConnectMerchantModal = closeConnectMerchantModal;
+window.saveMerchantConnection = saveMerchantConnection;
+
 // Delete merchant
 async function deleteMerchant(merchantId, merchantName) {
     if (!confirm(`Are you sure you want to delete merchant "${merchantName}"?\n\nThis will also delete all locations for this merchant. This action cannot be undone.`)) {
@@ -959,21 +1152,21 @@ async function deleteMerchant(merchantId, merchantName) {
 async function showDashboardPage() {
     const mainContainer = document.querySelector('.main-container');
     if (!mainContainer) {
-        console.error('Main container not found');
         return;
     }
 
-    // Get merchant name
+    // Check if merchant exists
+    let hasMerchant = false;
     let merchantName = 'Dashboard';
+    let merchant = null;
+    
     try {
         const response = await authenticatedFetch(`${API_BASE}/merchants`);
         const data = await response.json();
         if (data.success && data.merchants && data.merchants.length > 0) {
-            const merchant = data.merchants.find(m => m.is_active) || data.merchants[0];
-
-            // Safely check if merchant exists and has required properties
+            merchant = data.merchants.find(m => m.is_active) || data.merchants[0];
             if (merchant) {
-                // Check if merchant_name is valid (not empty, not null, and not the same as store_id)
+                hasMerchant = true;
                 const name = (merchant.merchant_name || '').toString();
                 const storeId = (merchant.store_id || '').toString();
                 
@@ -987,16 +1180,42 @@ async function showDashboardPage() {
                     name !== 'Unknown Merchant' &&
                     name !== 'N/A') {
                     merchantName = name.trim();
-                } else {
-                    // If merchant_name is missing or invalid, use store_id as fallback (don't check orders)
-                    merchantName = storeId ? `Merchant ${storeId}` : 'Dashboard';
+                } else if (storeId) {
+                    merchantName = `Merchant ${storeId}`;
                 }
             }
         }
     } catch (error) {
-        console.error('Error fetching merchant:', error);
+        // Silently handle error - will show connect merchant prompt
     }
 
+    // If no merchant, show connect merchant prompt
+    if (!hasMerchant) {
+        mainContainer.innerHTML = `
+            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; padding: 40px 20px;">
+                <div style="text-align: center; max-width: 500px;">
+                    <div style="margin-bottom: 24px;">
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: #64748b;">
+                            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="8.5" cy="7" r="4"></circle>
+                            <path d="M20 8v6M23 11h-6"></path>
+                        </svg>
+                    </div>
+                    <h1 style="font-size: 28px; font-weight: 600; color: #0f172a; margin-bottom: 12px;">Connect a Merchant</h1>
+                    <p style="font-size: 16px; color: #64748b; margin-bottom: 32px; line-height: 1.6;">
+                        Connect your GloriaFood merchant to start receiving orders automatically. 
+                        You'll need your Merchant Store ID and API credentials.
+                    </p>
+                    <button onclick="openConnectMerchantModal()" class="btn-primary" style="padding: 14px 32px; font-size: 16px; font-weight: 600;">
+                        Connect Merchant
+                    </button>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    // Merchant exists - show normal dashboard
     mainContainer.innerHTML = `
         <div class="orders-header">
             <h1 class="page-title">${escapeHtml(merchantName)}</h1>
