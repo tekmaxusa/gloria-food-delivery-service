@@ -1691,19 +1691,24 @@ class GloriaFoodWebhookServer {
         // CRITICAL: Remove duplicates from orders array before any further processing
         // This prevents duplicate orders from being returned to the client
         const seenOrderIds = new Set<string>();
+        const originalCount = orders.length;
         orders = orders.filter(order => {
           const orderId = order.gloriafood_order_id;
           if (!orderId) {
-            console.warn('⚠️ Order missing gloriafood_order_id:', order);
+            console.warn(chalk.yellow(`⚠️ Order missing gloriafood_order_id, skipping: ${JSON.stringify(order).substring(0, 100)}`));
             return false; // Skip orders without ID
           }
           if (seenOrderIds.has(orderId)) {
-            console.warn(`⚠️ Removing duplicate order from query result: ${orderId}`);
+            console.log(chalk.yellow(`⚠️ Removing duplicate order from query result: ${orderId}`));
             return false; // Skip duplicate
           }
           seenOrderIds.add(orderId);
           return true;
         });
+        
+        if (originalCount > orders.length) {
+          console.log(chalk.blue(`📊 Removed ${originalCount - orders.length} duplicate order(s), ${orders.length} unique order(s) remaining`));
+        }
         
         // If user is logged in (or using default), also include orders with user_id = NULL that match user's merchants
         // This handles backward compatibility for orders saved before user_id was set
@@ -1750,18 +1755,26 @@ class GloriaFoodWebhookServer {
           }
         }
         
-        // Final duplicate check before returning
+        // Final duplicate check before returning (safety net)
         const finalSeenIds = new Set<string>();
+        const beforeFinalCount = orders.length;
         orders = orders.filter(order => {
           const orderId = order.gloriafood_order_id;
-          if (!orderId) return false;
+          if (!orderId) {
+            console.warn(chalk.yellow(`⚠️ Final check: Order missing ID, skipping`));
+            return false;
+          }
           if (finalSeenIds.has(orderId)) {
-            console.warn(`⚠️ Final duplicate removal: ${orderId}`);
+            console.log(chalk.yellow(`⚠️ Final duplicate removal: ${orderId}`));
             return false;
           }
           finalSeenIds.add(orderId);
           return true;
         });
+        
+        if (beforeFinalCount > orders.length) {
+          console.log(chalk.blue(`📊 Final check: Removed ${beforeFinalCount - orders.length} more duplicate(s), ${orders.length} unique order(s) to return`));
+        }
         
         // Filter by store_id if provided
         if (storeId) {
@@ -1803,13 +1816,19 @@ class GloriaFoodWebhookServer {
         
         console.log(chalk.green(`✅ /orders: Returning ${enrichedOrders.length} order(s) to client`));
         
-        // CRITICAL: If 0 orders returned but we expect orders, log warning
-        if (enrichedOrders.length === 0 && userId === 1) {
-          console.log(chalk.yellow(`⚠️  WARNING: Returning 0 orders for userId=1. This might indicate:`));
+        // CRITICAL: If 0 orders returned but we expect orders, log detailed warning
+        if (enrichedOrders.length === 0) {
+          console.log(chalk.yellow(`⚠️  WARNING: Returning 0 orders. This might indicate:`));
           console.log(chalk.yellow(`   1. No orders in database`));
           console.log(chalk.yellow(`   2. Database connection issue`));
           console.log(chalk.yellow(`   3. Query execution problem`));
+          console.log(chalk.yellow(`   4. All orders were filtered out (check duplicate removal logs above)`));
           console.log(chalk.yellow(`   Check database logs above for query results`));
+          
+          // If userId is 1, this is unexpected - we should see all orders
+          if (userId === 1) {
+            console.log(chalk.red(`❌ CRITICAL: userId=1 should return ALL orders, but got 0. This is a problem!`));
+          }
         }
         
         res.json({ 
