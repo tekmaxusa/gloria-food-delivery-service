@@ -47,12 +47,9 @@ function authenticatedFetch(url, options = {}) {
     const currentSessionId = getSessionId();
     const headers = {
         'Content-Type': 'application/json',
-        ...(options.headers || {})
+        ...(options.headers || {}),
+        ...(currentSessionId ? { 'X-Session-Id': currentSessionId } : {})
     };
-
-    if (currentSessionId) {
-        headers['X-Session-Id'] = currentSessionId;
-    }
 
     return fetch(url, {
         ...options,
@@ -672,9 +669,6 @@ function navigateToPage(page) {
         case 'orders':
             showOrdersPage();
             break;
-        case 'integrations':
-            showIntegrationsPage();
-            break;
         case 'dispatch':
             showDispatchPage();
             break;
@@ -924,256 +918,6 @@ function showDispatchPage() {
     `;
 }
 
-// Show Integrations page
-function showIntegrationsPage() {
-    const mainContainer = document.querySelector('.main-container');
-    
-    mainContainer.innerHTML = `
-        <div class="page-header">
-            <h1>Add Integration</h1>
-            <p class="page-description">Connect your GloriaFood merchant to receive orders automatically</p>
-        </div>
-        
-        <div class="integrations-container" style="max-width: 600px; margin: 0 auto;">
-            <div class="integration-form-card" style="background: white; border-radius: 12px; padding: 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                <form id="newIntegrationForm" onsubmit="saveNewIntegration(event)">
-                    <div class="form-group" style="margin-bottom: 24px;">
-                        <label class="input-label" for="newMerchantName" style="display: block; margin-bottom: 8px; font-weight: 600; color: #1e293b;">
-                            Merchant Name <span style="color: #ef4444;">*</span>
-                        </label>
-                        <input 
-                            type="text" 
-                            id="newMerchantName" 
-                            name="merchantName" 
-                            required 
-                            placeholder="Enter Merchant Name"
-                            class="form-input"
-                            style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px;"
-                        >
-                    </div>
-                    
-                    <div class="form-group" style="margin-bottom: 24px;">
-                        <label class="input-label" for="newMerchantStoreId" style="display: block; margin-bottom: 8px; font-weight: 600; color: #1e293b;">
-                            Merchant Store ID <span style="color: #ef4444;">*</span>
-                        </label>
-                        <input 
-                            type="text" 
-                            id="newMerchantStoreId" 
-                            name="merchantStoreId" 
-                            required 
-                            placeholder="Enter Merchant Store ID"
-                            class="form-input"
-                            style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px;"
-                        >
-                    </div>
-                    
-                    <div class="form-group" style="margin-bottom: 24px;">
-                        <label class="input-label" for="newApiKey" style="display: block; margin-bottom: 8px; font-weight: 600; color: #1e293b;">
-                            API Key (Restaurant Key)
-                        </label>
-                        <input 
-                            type="text" 
-                            id="newApiKey" 
-                            name="apiKey" 
-                            placeholder="Enter API Key (Restaurant Key)"
-                            class="form-input"
-                            style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px;"
-                        >
-                    </div>
-                    
-                    <div class="form-group" style="margin-bottom: 32px;">
-                        <label class="input-label" for="newMasterKey" style="display: block; margin-bottom: 8px; font-weight: 600; color: #1e293b;">
-                            Master Key
-                        </label>
-                        <input 
-                            type="text" 
-                            id="newMasterKey" 
-                            name="masterKey" 
-                            placeholder="Enter Master Key"
-                            class="form-input"
-                            style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px;"
-                        >
-                    </div>
-                    
-                    <div id="integrationFormError" style="display: none; padding: 12px; background: #fee2e2; border: 1px solid #fecaca; border-radius: 8px; color: #dc2626; margin-bottom: 24px;"></div>
-                    
-                    <div style="display: flex; gap: 12px; justify-content: flex-end;">
-                        <button type="button" class="btn-secondary" onclick="clearIntegrationForm()" style="padding: 12px 24px; border: 1px solid #e2e8f0; background: white; border-radius: 8px; cursor: pointer;">
-                            Clear
-                        </button>
-                        <button type="submit" class="btn-primary" style="padding: 12px 24px; background: #3b82f6; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">
-                            Save Integration
-                        </button>
-                    </div>
-                </form>
-            </div>
-            
-            <div id="integrationsList" style="margin-top: 32px;">
-                <!-- Existing integrations will be listed here -->
-            </div>
-        </div>
-    `;
-    
-    // Load existing integrations
-    loadExistingIntegrations();
-}
-
-// Show Merchants page (legacy - redirects to integrations)
-function showMerchantsPage() {
-    showIntegrationsPage();
-}
-
-// Save new integration
-async function saveNewIntegration(event) {
-    event.preventDefault();
-    
-    const errorDiv = document.getElementById('integrationFormError');
-    errorDiv.style.display = 'none';
-    
-    // Get form values
-    const merchantName = document.getElementById('newMerchantName').value.trim();
-    const merchantStoreId = document.getElementById('newMerchantStoreId').value.trim();
-    const apiKey = document.getElementById('newApiKey').value.trim();
-    const masterKey = document.getElementById('newMasterKey').value.trim();
-    
-    // Validate required fields
-    if (!merchantName || !merchantStoreId) {
-        errorDiv.textContent = 'Please fill in all required fields (Merchant Name, Merchant Store ID)';
-        errorDiv.style.display = 'block';
-        return;
-    }
-    
-    try {
-        // Create merchant payload
-        const merchantPayload = {
-            merchant_name: merchantName,
-            store_id: merchantStoreId,
-            api_key: apiKey || undefined,
-            master_key: masterKey || undefined,
-            is_active: true
-        };
-        
-        // Create new merchant
-        const merchantResponse = await authenticatedFetch(`${API_BASE}/merchants`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(merchantPayload)
-        });
-        
-        const merchantData = await merchantResponse.json();
-        
-        if (!merchantData.success) {
-            errorDiv.textContent = merchantData.error || 'Failed to create integration';
-            errorDiv.style.display = 'block';
-            return;
-        }
-        
-        const createdMerchantId = merchantData.merchant?.id;
-        
-        if (!createdMerchantId) {
-            errorDiv.textContent = 'Failed to create merchant';
-            errorDiv.style.display = 'block';
-            return;
-        }
-        
-        // Connect to GloriaFood if API credentials provided
-        if (apiKey || masterKey) {
-            try {
-                const connectResponse = await authenticatedFetch(`${API_BASE}/api/integrations/gloriafood/connect`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        merchant_id: createdMerchantId,
-                        api_key: apiKey || undefined,
-                        master_key: masterKey || undefined,
-                        store_id: merchantStoreId
-                    })
-                });
-                
-                const connectData = await connectResponse.json();
-                
-                if (connectData.success) {
-                    showNotification('Success', 'Integration created and connected to GloriaFood successfully!', 'success');
-                    clearIntegrationForm();
-                    loadExistingIntegrations();
-                } else {
-                    showNotification('Warning', `Integration created but connection failed: ${connectData.error}`, 'warning');
-                    clearIntegrationForm();
-                    loadExistingIntegrations();
-                }
-            } catch (connectError) {
-                showNotification('Warning', 'Integration created but could not connect to GloriaFood. You can configure it later.', 'warning');
-                clearIntegrationForm();
-                loadExistingIntegrations();
-            }
-        } else {
-            showNotification('Success', 'Integration created successfully! Add API credentials to connect to GloriaFood.', 'success');
-            clearIntegrationForm();
-            loadExistingIntegrations();
-        }
-    } catch (error) {
-        errorDiv.textContent = `Error creating integration: ${error.message}`;
-        errorDiv.style.display = 'block';
-    }
-}
-
-// Clear integration form
-function clearIntegrationForm() {
-    document.getElementById('newMerchantName').value = '';
-    document.getElementById('newMerchantStoreId').value = '';
-    document.getElementById('newApiKey').value = '';
-    document.getElementById('newMasterKey').value = '';
-    document.getElementById('integrationFormError').style.display = 'none';
-}
-
-// Load existing integrations
-async function loadExistingIntegrations() {
-    const container = document.getElementById('integrationsList');
-    if (!container) return;
-    
-    try {
-        const response = await authenticatedFetch(`${API_BASE}/merchants`);
-        const data = await response.json();
-        
-        if (data.success && data.merchants && data.merchants.length > 0) {
-            container.innerHTML = `
-                <div style="background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                    <h2 style="margin: 0 0 20px 0; font-size: 20px; font-weight: 600;">Existing Integrations</h2>
-                    <div style="display: grid; gap: 16px;">
-                        ${data.merchants.map(merchant => `
-                            <div style="padding: 16px; border: 1px solid #e2e8f0; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
-                                <div>
-                                    <div style="font-weight: 600; margin-bottom: 4px;">${escapeHtml(merchant.merchant_name)}</div>
-                                    <div style="font-size: 14px; color: #64748b;">Store ID: ${escapeHtml(merchant.store_id || 'N/A')}</div>
-                                    <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">
-                                        Status: ${merchant.integration_status || 'disconnected'}
-                                    </div>
-                                </div>
-                                <div>
-                                    <span style="padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 500; background: ${merchant.is_active ? '#dcfce7' : '#fee2e2'}; color: ${merchant.is_active ? '#166534' : '#991b1b'};">
-                                        ${merchant.is_active ? 'Active' : 'Inactive'}
-                                    </span>
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-            `;
-        } else {
-            container.innerHTML = '';
-        }
-    } catch (error) {
-        container.innerHTML = '';
-    }
-}
-
-// Make functions globally available
-window.saveNewIntegration = saveNewIntegration;
-window.clearIntegrationForm = clearIntegrationForm;
 
 // Delete merchant
 async function deleteMerchant(merchantId, merchantName) {
@@ -1203,7 +947,6 @@ async function deleteMerchant(merchantId, merchantName) {
 
         if (data.success) {
             showNotification('Success', 'Merchant deleted successfully', 'success');
-            loadExistingIntegrations();
         } else {
             showNotification('Error', data.error || 'Failed to delete merchant', 'error');
         }
