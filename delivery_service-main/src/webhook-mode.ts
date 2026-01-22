@@ -1117,141 +1117,127 @@ class GloriaFoodWebhookServer {
       });
     });
 
-    // Webhook handler function (shared by both endpoints)
-    const handleWebhook = async (req: Request, res: Response): Promise<void> => {
-      console.log(chalk.cyan('\n🔵 WEBHOOK ENDPOINT CALLED'));
-      try {
-        // Extract merchant_id from query params (for multi-merchant support)
-        const merchantIdFromQuery = req.query.merchant_id ? parseInt(req.query.merchant_id as string) : null;
+    // Webhook endpoint for receiving orders (new endpoint: /webhook/gloriafood/orders)
+    this.app.post('/webhook/gloriafood/orders', async (req: Request, res: Response) => {
+      await this.handleWebhookRequest(req, res);
+    });
+
+    // Webhook endpoint for receiving orders (legacy endpoint for backward compatibility)
+    this.app.post(this.config.webhookPath, async (req: Request, res: Response) => {
+      await this.handleWebhookRequest(req, res);
+    });
+  }
+
+  // Extract webhook handler logic to reusable method
+  private async handleWebhookRequest(req: Request, res: Response): Promise<void> {
+    console.log(chalk.cyan('\n🔵 WEBHOOK ENDPOINT CALLED'));
+    try {
+      // Extract merchant_id from query params (for multi-merchant support)
+      const merchantIdFromQuery = req.query.merchant_id ? parseInt(req.query.merchant_id as string) : null;
+      
+      // Extract order data from request first (needed to identify merchant)
+      // Try body first, then query params, then raw body
+      let orderData = this.extractOrderData(req.body);
+      
+      // If body is empty, try query params
+      if (!orderData && Object.keys(req.query).length > 0) {
+        console.log(chalk.yellow('   ⚠️  Body is empty, trying query params...'));
+        orderData = this.extractOrderData(req.query);
+      }
+      
+      if (!orderData) {
+        console.warn(chalk.yellow('⚠ Invalid webhook payload - no order data found'));
+        console.log(chalk.gray('   Request body keys:'), Object.keys(req.body || {}));
+        console.log(chalk.gray('   Request query keys:'), Object.keys(req.query || {}));
+        console.log(chalk.gray('   Content-Type:'), req.headers['content-type'] || 'N/A');
+        console.log(chalk.gray('   Raw body (first 500 chars):'), JSON.stringify(req.body || {}).substring(0, 500));
         
-        // Extract order data from request first (needed to identify merchant)
-        // Try body first, then query params, then raw body
-        let orderData = this.extractOrderData(req.body);
-        
-        // If body is empty, try query params
-        if (!orderData && Object.keys(req.query).length > 0) {
-          console.log(chalk.yellow('   ⚠️  Body is empty, trying query params...'));
-          orderData = this.extractOrderData(req.query);
-        }
-        
-        if (!orderData) {
-          console.warn(chalk.yellow('⚠ Invalid webhook payload - no order data found'));
-          console.log(chalk.gray('   Request body keys:'), Object.keys(req.body || {}));
-          console.log(chalk.gray('   Request query keys:'), Object.keys(req.query || {}));
-          console.log(chalk.gray('   Content-Type:'), req.headers['content-type'] || 'N/A');
-          console.log(chalk.gray('   Raw body (first 500 chars):'), JSON.stringify(req.body || {}).substring(0, 500));
+        // Still return 200 to prevent retries, but log the issue
+        res.status(200).json({ 
+          success: false, 
+          error: 'Invalid payload - no order data found',
+          received: {
+            hasBody: !!req.body,
+            bodyKeys: Object.keys(req.body || {}),
+            hasQuery: Object.keys(req.query || {}).length > 0,
+            queryKeys: Object.keys(req.query || {}),
+            contentType: req.headers['content-type'] || 'N/A'
+          }
+        });
+        return;
+      }
+
+      // Try to find merchant by merchant_id from query params first (new multi-merchant approach)
+      let merchant = null;
+      const client = await (this.database as any).pool?.connect();
+      
+      if (merchantIdFromQuery && client) {
+        try {
+          const merchantResult = await client.query(
+            `SELECT * FROM merchants WHERE id = $1 AND is_active = TRUE`,
+            [merchantIdFromQuery]
+          );
           
-          // Still return 200 to prevent retries, but log the issue
-          res.status(200).json({ 
-            success: false, 
-            error: 'Invalid payload - no order data found',
-            received: {
-              hasBody: !!req.body,
-              bodyKeys: Object.keys(req.body || {}),
-              hasQuery: Object.keys(req.query || {}).length > 0,
-              queryKeys: Object.keys(req.query || {}),
-              contentType: req.headers['content-type'] || 'N/A'
-            }
-          });
-          return;
-        }
-
-        // Try to find merchant by merchant_id from query params first (new multi-merchant approach)
-        let merchant = null;
-        const client = await (this.database as any).pool?.connect();
-        
-        if (merchantIdFromQuery && client) {
-          try {
-            const merchantResult = await client.query(
-              `SELECT * FROM merchants WHERE id = $1 AND is_active = TRUE`,
-              [merchantIdFromQuery]
-            );
+          if (merchantResult.rows.length > 0) {
+            merchant = merchantResult.rows[0];
             
-            if (merchantResult.rows.length > 0) {
-              merchant = merchantResult.rows[0];
-              
-              // Decrypt credentials if encrypted
-              if (merchant.credentials_encrypted) {
-                const { EncryptionService } = await import('./encryption-service');
-                const decrypted = EncryptionService.decryptCredentials({
-                  apiKey: merchant.api_key,
-                  apiUrl: merchant.api_url,
-                  masterKey: merchant.master_key,
-                  webhookSecret: merchant.webhook_secret
-                });
-                merchant = { ...merchant, ...decrypted };
-              }
-              
-              console.log(chalk.green(`   ✅ Found merchant by merchant_id: ${merchant.merchant_name} (ID: ${merchant.id})`));
-              
-              // Verify webhook secret if provided
-              const webhookSecret = req.headers['x-webhook-secret'] || req.headers['webhook-secret'] || req.query?.webhook_secret;
-              if (merchant.webhook_secret && webhookSecret) {
-                if (merchant.webhook_secret !== webhookSecret) {
-                  console.log(chalk.red(`   ❌ Webhook secret verification failed`));
-                  client.release();
-                  res.status(401).json({ 
-                    success: false, 
-                    error: 'Invalid webhook secret' 
-                  });
-                  return;
-                }
-                console.log(chalk.green(`   ✅ Webhook secret verified`));
-              }
-              
-              // Update last_webhook_received timestamp
-              await client.query(`
-                UPDATE merchants 
-                SET last_webhook_received = CURRENT_TIMESTAMP,
-                    integration_status = CASE 
-                      WHEN integration_status = 'error' THEN 'connected'
-                      ELSE integration_status
-                    END
-                WHERE id = $1
-              `, [merchantIdFromQuery]);
+            // Decrypt credentials if encrypted
+            if (merchant.credentials_encrypted) {
+              const { EncryptionService } = await import('./encryption-service');
+              const decrypted = EncryptionService.decryptCredentials({
+                apiKey: merchant.api_key,
+                apiUrl: merchant.api_url,
+                masterKey: merchant.master_key,
+                webhookSecret: merchant.webhook_secret
+              });
+              merchant = { ...merchant, ...decrypted };
             }
-            client.release();
-          } catch (merchantError: any) {
-            if (client) client.release();
-            console.log(chalk.yellow(`   ⚠️  Could not lookup merchant by ID: ${merchantError.message}`));
-          }
-        }
-
-        // Fallback: Extract API key from request for merchant identification
-        if (!merchant) {
-          const authHeader = req.headers['authorization'] || req.headers['x-api-key'];
-          const providedKey = authHeader?.toString().replace('Bearer ', '').trim() ||
-                            req.body?.api_key ||
-                            req.query?.token;
-
-          if (providedKey) {
-            try {
-              merchant = await this.handleAsync(this.database.getMerchantByApiKey(providedKey));
-              
-              // Decrypt credentials if encrypted
-              if (merchant && (merchant as any).credentials_encrypted) {
-                const { EncryptionService } = await import('./encryption-service');
-                const decrypted = EncryptionService.decryptCredentials({
-                  apiKey: merchant.api_key,
-                  apiUrl: merchant.api_url,
-                  masterKey: merchant.master_key,
-                  webhookSecret: (merchant as any).webhook_secret
+            
+            console.log(chalk.green(`   ✅ Found merchant by merchant_id: ${merchant.merchant_name} (ID: ${merchant.id})`));
+            
+            // Verify webhook secret if provided
+            const webhookSecret = req.headers['x-webhook-secret'] || req.headers['webhook-secret'] || req.query?.webhook_secret;
+            if (merchant.webhook_secret && webhookSecret) {
+              if (merchant.webhook_secret !== webhookSecret) {
+                console.log(chalk.red(`   ❌ Webhook secret verification failed`));
+                client.release();
+                res.status(401).json({ 
+                  success: false, 
+                  error: 'Invalid webhook secret' 
                 });
-                merchant = { ...merchant, ...decrypted };
+                return;
               }
-            } catch (dbError: any) {
-              console.log(chalk.yellow(`   ⚠️  Could not lookup merchant by API key (database error): ${dbError.message}`));
-              // Continue - we'll try store_id lookup
+              console.log(chalk.green(`   ✅ Webhook secret verified`));
             }
+            
+            // Update last_webhook_received timestamp
+            await client.query(`
+              UPDATE merchants 
+              SET last_webhook_received = CURRENT_TIMESTAMP,
+                  integration_status = CASE 
+                    WHEN integration_status = 'error' THEN 'connected'
+                    ELSE integration_status
+                  END
+              WHERE id = $1
+            `, [merchantIdFromQuery]);
           }
+          client.release();
+        } catch (merchantError: any) {
+          if (client) client.release();
+          console.log(chalk.yellow(`   ⚠️  Could not lookup merchant by ID: ${merchantError.message}`));
         }
-        
-        // Fallback: Try to find merchant by store_id (for backward compatibility)
-        // Now uses location lookup which is async
-        if (!merchant) {
+      }
+
+      // Fallback: Extract API key from request for merchant identification
+      if (!merchant) {
+        const authHeader = req.headers['authorization'] || req.headers['x-api-key'];
+        const providedKey = authHeader?.toString().replace('Bearer ', '').trim() ||
+                          req.body?.api_key ||
+                          req.query?.token;
+
+        if (providedKey) {
           try {
-            const user = getCurrentUser(req);
-            merchant = await this.merchantManager.findMerchantForOrder(orderData, user?.userId);
+            merchant = await this.handleAsync(this.database.getMerchantByApiKey(providedKey));
             
             // Decrypt credentials if encrypted
             if (merchant && (merchant as any).credentials_encrypted) {
@@ -1264,217 +1250,235 @@ class GloriaFoodWebhookServer {
               });
               merchant = { ...merchant, ...decrypted };
             }
-          } catch (error: any) {
-            console.log(chalk.yellow(`   ⚠️  Could not lookup merchant by store_id: ${error.message}`));
-            // Continue without merchant
+          } catch (dbError: any) {
+            console.log(chalk.yellow(`   ⚠️  Could not lookup merchant by API key (database error): ${dbError.message}`));
+            // Continue - we'll try store_id lookup
           }
         }
+      }
+      
+      // Fallback: Try to find merchant by store_id (for backward compatibility)
+      // Now uses location lookup which is async
+      if (!merchant) {
+        try {
+          const user = getCurrentUser(req);
+          merchant = await this.merchantManager.findMerchantForOrder(orderData, user?.userId);
+          
+          // Decrypt credentials if encrypted
+          if (merchant && (merchant as any).credentials_encrypted) {
+            const { EncryptionService } = await import('./encryption-service');
+            const decrypted = EncryptionService.decryptCredentials({
+              apiKey: merchant.api_key,
+              apiUrl: merchant.api_url,
+              masterKey: merchant.master_key,
+              webhookSecret: (merchant as any).webhook_secret
+            });
+            merchant = { ...merchant, ...decrypted };
+          }
+        } catch (error: any) {
+          console.log(chalk.yellow(`   ⚠️  Could not lookup merchant by store_id: ${error.message}`));
+          // Continue without merchant
+        }
+      }
 
-        // Validate authentication - check merchant-specific API key or global keys
-        if (merchant) {
-          // Get provided key for validation
-          const authHeader = req.headers['authorization'] || req.headers['x-api-key'];
-          const providedKey = authHeader?.toString().replace('Bearer ', '').trim() ||
-                            req.body?.api_key ||
-                            req.query?.token;
-          
-          // Check merchant-specific API key first
-          let isValid = false;
-          if (merchant.api_key && providedKey) {
-            isValid = providedKey === merchant.api_key;
-          }
-          
-          // Also check master key (global) or global API key
-          if (!isValid) {
-            isValid = 
-              providedKey === this.config.apiKey ||
-              providedKey === this.config.masterKey ||
-              req.headers['x-master-key'] === this.config.masterKey ||
-              req.headers['master-key'] === this.config.masterKey ||
-              req.body?.api_key === merchant.api_key ||
-              req.body?.api_key === this.config.apiKey ||
-              req.body?.master_key === this.config.masterKey ||
-              req.query?.token === merchant.api_key ||
-              req.query?.token === this.config.apiKey;
-          }
-
-          // Log authentication status (but don't block - some webhooks don't send auth)
-          if (!isValid && (merchant.api_key || this.config.masterKey || this.config.apiKey)) {
-            console.log(chalk.yellow(`   ⚠️  Authentication check failed for merchant ${merchant.merchant_name}, but processing order anyway`));
-          } else if (isValid) {
-            console.log(chalk.green(`   ✅ Authentication validated for merchant ${merchant.merchant_name}`));
-          }
-        } else if (this.config.masterKey || this.config.apiKey) {
-          // Fallback to global authentication if merchant not found
-          const authHeader = req.headers['authorization'] || req.headers['x-api-key'];
-          const providedKey = authHeader?.toString().replace('Bearer ', '').trim();
-          
-          const isValid = 
+      // Validate authentication - check merchant-specific API key or global keys
+      if (merchant) {
+        // Get provided key for validation
+        const authHeader = req.headers['authorization'] || req.headers['x-api-key'];
+        const providedKey = authHeader?.toString().replace('Bearer ', '').trim() ||
+                          req.body?.api_key ||
+                          req.query?.token;
+        
+        // Check merchant-specific API key first
+        let isValid = false;
+        if (merchant.api_key && providedKey) {
+          isValid = providedKey === merchant.api_key;
+        }
+        
+        // Also check master key (global) or global API key
+        if (!isValid) {
+          isValid = 
             providedKey === this.config.apiKey ||
             providedKey === this.config.masterKey ||
             req.headers['x-master-key'] === this.config.masterKey ||
             req.headers['master-key'] === this.config.masterKey ||
+            req.body?.api_key === merchant.api_key ||
             req.body?.api_key === this.config.apiKey ||
             req.body?.master_key === this.config.masterKey ||
+            req.query?.token === merchant.api_key ||
             req.query?.token === this.config.apiKey;
-
-          if (!isValid) {
-            console.log(chalk.yellow(`   ⚠️  Global authentication check failed, but processing order anyway`));
-          }
         }
 
-        // Log received order
-        const orderId = orderData.id || orderData.order_id || 'unknown';
-        const receivedStoreId = this.merchantManager.extractStoreIdFromOrder(orderData) || 'NOT FOUND';
-        
-        console.log(chalk.green(`\n✅ Order data extracted successfully from GloriaFood: #${orderId}`));
-        console.log(chalk.green(`   ✅ Connected to GloriaFood - Order received!`));
-        console.log(chalk.cyan(`   📦 Store ID from order: ${receivedStoreId}`));
-        console.log(chalk.gray(`   📋 Order data keys: ${Object.keys(orderData).join(', ')}`));
-        
-        if (merchant) {
-          console.log(chalk.cyan(`   🏪 Merchant: ${merchant.merchant_name} (${merchant.store_id || 'no store_id'})`));
-          // Add merchant name to orderData
-          orderData.merchant_name = merchant.merchant_name;
-        } else {
-          console.log(chalk.yellow(`   ⚠️  Merchant not found for store_id: ${receivedStoreId}`));
-          console.log(chalk.gray(`   💡 Checking if store_id matches any location in database...`));
-          
-          // Try to find location directly to help debug
-          try {
-            const location = await this.merchantManager.findLocationForOrder(orderData);
-            if (location) {
-              console.log(chalk.green(`   ✅ Found location: ${location.location_name} (store_id: ${location.store_id})`));
-            } else {
-              console.log(chalk.red(`   ❌ No location found with store_id: ${receivedStoreId}`));
-              console.log(chalk.gray(`   💡 Make sure the Store ID in your Integration matches exactly: ${receivedStoreId}`));
-            }
-          } catch (locError: any) {
-            console.log(chalk.yellow(`   ⚠️  Could not check location: ${locError.message}`));
-          }
-          
-          console.log(chalk.gray(`   💡 Add this merchant to Integrations page with Store ID: ${receivedStoreId}`));
+        // Log authentication status (but don't block - some webhooks don't send auth)
+        if (!isValid && (merchant.api_key || this.config.masterKey || this.config.apiKey)) {
+          console.log(chalk.yellow(`   ⚠️  Authentication check failed for merchant ${merchant.merchant_name}, but processing order anyway`));
+        } else if (isValid) {
+          console.log(chalk.green(`   ✅ Authentication validated for merchant ${merchant.merchant_name}`));
         }
-
-        // Determine if this is a new order BEFORE saving
-        // Get user_id from merchant if available
-        const orderUserId = merchant?.user_id || undefined;
+      } else if (this.config.masterKey || this.config.apiKey) {
+        // Fallback to global authentication if merchant not found
+        const authHeader = req.headers['authorization'] || req.headers['x-api-key'];
+        const providedKey = authHeader?.toString().replace('Bearer ', '').trim();
         
-        // Try to get existing order (but don't fail if database is unavailable)
-        let existingBefore = null;
-        try {
-          existingBefore = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId.toString(), orderUserId));
-        } catch (dbError: any) {
-          console.log(chalk.yellow(`   ⚠️  Could not check existing order (database error): ${dbError.message}`));
-          // Continue processing - we'll treat it as a new order
+        const isValid = 
+          providedKey === this.config.apiKey ||
+          providedKey === this.config.masterKey ||
+          req.headers['x-master-key'] === this.config.masterKey ||
+          req.headers['master-key'] === this.config.masterKey ||
+          req.body?.api_key === this.config.apiKey ||
+          req.body?.master_key === this.config.masterKey ||
+          req.query?.token === this.config.apiKey;
+
+        if (!isValid) {
+          console.log(chalk.yellow(`   ⚠️  Global authentication check failed, but processing order anyway`));
         }
-        
-        // Store order in database (handle both sync SQLite and async MySQL)
-        console.log(chalk.blue(`💾 Saving order to database...`));
-        let savedOrder = null;
-        try {
-          savedOrder = await this.handleAsync(this.database.insertOrUpdateOrder(orderData, orderUserId));
-          console.log(chalk.blue(`💾 Database save result: ${savedOrder ? 'SUCCESS' : 'FAILED'}`));
-        } catch (dbError: any) {
-          console.error(chalk.red(`❌ Database error while saving order: ${dbError.message}`));
-          console.log(chalk.yellow(`   ⚠️  Order received but could not be saved to database`));
-          // Continue - we'll still return 200 to prevent retries
-          savedOrder = null;
-        }
-
-        if (savedOrder) {
-          const isNew = !existingBefore;
-          const newStatus = (orderData.status || orderData.order_status || '').toString().toLowerCase();
-          const prevStatus = (existingBefore?.status || '').toString().toLowerCase();
-          const isCancelled = this.isCancelledStatus(newStatus);
-          const statusChanged = newStatus !== prevStatus;
-          const wasNotSent = !(existingBefore as any)?.sent_to_doordash;
-          
-          // Check if this is a delivery order
-          const orderType = (orderData.type || orderData.order_type || '').toString().toLowerCase();
-          const isDeliveryOrder = orderType === 'delivery';
-          
-          if (isNew) {
-            await this.displayOrder(savedOrder, true, orderData);
-          } else {
-            console.log(chalk.blue(`🔄 Order updated in database: #${orderId}`));
-            await this.displayOrder(savedOrder, false, orderData);
-          }
-
-          const orderIdStr = orderId.toString();
-          const currentStatusLabel = newStatus || orderData.status || 'pending';
-          const previousStatusLabel = prevStatus || existingBefore?.status || 'unknown';
-
-          if (this.emailService?.isEnabled()) {
-            if (isNew) {
-              await this.notifyMerchant(orderData, {
-                event: 'new-order',
-                currentStatus: currentStatusLabel,
-              });
-            } else if (statusChanged) {
-              await this.notifyMerchant(orderData, {
-                event: isCancelled ? 'cancelled' : 'status-update',
-                previousStatus: previousStatusLabel,
-                currentStatus: currentStatusLabel,
-              });
-            }
-          }
-
-          // Handle order acceptance - schedule DoorDash call 20-25 minutes after acceptance
-          if (statusChanged && newStatus === 'accepted' && prevStatus !== 'accepted' && isDeliveryOrder) {
-            console.log(chalk.cyan(`📦 Order #${orderIdStr} accepted - scheduling DoorDash call in 20-25 minutes...`));
-            await this.schedulePostAcceptanceDoorDash(orderIdStr, orderData);
-          }
-
-          if (isCancelled) {
-            this.deliveryScheduler?.cancel(orderIdStr, 'order-cancelled');
-            this.cancelPostAcceptanceSchedule(orderIdStr);
-          } else if (!isDeliveryOrder) {
-            this.deliveryScheduler?.cancel(orderIdStr, 'non-delivery');
-            this.cancelPostAcceptanceSchedule(orderIdStr);
-          } else if (isNew || wasNotSent) {
-            // Don't schedule immediately if order is already accepted - let post-acceptance scheduler handle it
-            if (newStatus !== 'accepted') {
-              await this.scheduleDoorDashDelivery(orderData, isNew ? 'new-order' : 'update-order');
-            }
-          } else {
-            this.deliveryScheduler?.cancel(orderIdStr, 'already-sent');
-          }
-        } else {
-          console.error(chalk.red(`❌ Failed to store order: #${orderId}`));
-          res.status(500).json({ error: 'Failed to store order' });
-          return;
-        }
-
-        // Respond with success (GloriaFood expects 200 status)
-        res.status(200).json({ 
-          success: true, 
-          message: 'Order received and processed',
-          order_id: orderId
-        });
-
-      } catch (error: any) {
-        console.error(chalk.red.bold(`\n❌❌❌ WEBHOOK ERROR ❌❌❌`));
-        console.error(chalk.red(`Error message: ${error.message}`));
-        console.error(chalk.red(`Error stack: ${error.stack}`));
-        console.error(chalk.yellow(`Request body keys: ${Object.keys(req.body || {}).join(', ')}`));
-        console.error(chalk.yellow(`Request path: ${req.path}`));
-        console.error(chalk.yellow(`Request method: ${req.method}`));
-        
-        // Still return 200 to prevent GloriaFood from retrying
-        // (unless you want retries, then use 5xx status)
-        res.status(200).json({ 
-          success: false, 
-          error: error.message 
-        });
       }
-    };
 
-    // Webhook endpoint for receiving orders (new endpoint: /webhook/gloriafood/orders)
-    this.app.post('/webhook/gloriafood/orders', handleWebhook);
+      // Log received order
+      const orderId = orderData.id || orderData.order_id || 'unknown';
+      const receivedStoreId = this.merchantManager.extractStoreIdFromOrder(orderData) || 'NOT FOUND';
+      
+      console.log(chalk.green(`\n✅ Order data extracted successfully from GloriaFood: #${orderId}`));
+      console.log(chalk.green(`   ✅ Connected to GloriaFood - Order received!`));
+      console.log(chalk.cyan(`   📦 Store ID from order: ${receivedStoreId}`));
+      console.log(chalk.gray(`   📋 Order data keys: ${Object.keys(orderData).join(', ')}`));
+      
+      if (merchant) {
+        console.log(chalk.cyan(`   🏪 Merchant: ${merchant.merchant_name} (${merchant.store_id || 'no store_id'})`));
+        // Add merchant name to orderData
+        orderData.merchant_name = merchant.merchant_name;
+      } else {
+        console.log(chalk.yellow(`   ⚠️  Merchant not found for store_id: ${receivedStoreId}`));
+        console.log(chalk.gray(`   💡 Checking if store_id matches any location in database...`));
+        
+        // Try to find location directly to help debug
+        try {
+          const location = await this.merchantManager.findLocationForOrder(orderData);
+          if (location) {
+            console.log(chalk.green(`   ✅ Found location: ${location.location_name} (store_id: ${location.store_id})`));
+          } else {
+            console.log(chalk.red(`   ❌ No location found with store_id: ${receivedStoreId}`));
+            console.log(chalk.gray(`   💡 Make sure the Store ID in your Integration matches exactly: ${receivedStoreId}`));
+          }
+        } catch (locError: any) {
+          console.log(chalk.yellow(`   ⚠️  Could not check location: ${locError.message}`));
+        }
+        
+        console.log(chalk.gray(`   💡 Add this merchant to Integrations page with Store ID: ${receivedStoreId}`));
+      }
 
-    // Webhook endpoint for receiving orders (legacy endpoint for backward compatibility)
-    this.app.post(this.config.webhookPath, handleWebhook);
+      // Determine if this is a new order BEFORE saving
+      // Get user_id from merchant if available
+      const orderUserId = merchant?.user_id || undefined;
+      
+      // Try to get existing order (but don't fail if database is unavailable)
+      let existingBefore = null;
+      try {
+        existingBefore = await this.handleAsync(this.database.getOrderByGloriaFoodId(orderId.toString(), orderUserId));
+      } catch (dbError: any) {
+        console.log(chalk.yellow(`   ⚠️  Could not check existing order (database error): ${dbError.message}`));
+        // Continue processing - we'll treat it as a new order
+      }
+      
+      // Store order in database (handle both sync SQLite and async MySQL)
+      console.log(chalk.blue(`💾 Saving order to database...`));
+      let savedOrder = null;
+      try {
+        savedOrder = await this.handleAsync(this.database.insertOrUpdateOrder(orderData, orderUserId));
+        console.log(chalk.blue(`💾 Database save result: ${savedOrder ? 'SUCCESS' : 'FAILED'}`));
+      } catch (dbError: any) {
+        console.error(chalk.red(`❌ Database error while saving order: ${dbError.message}`));
+        console.log(chalk.yellow(`   ⚠️  Order received but could not be saved to database`));
+        // Continue - we'll still return 200 to prevent retries
+        savedOrder = null;
+      }
+
+      if (savedOrder) {
+        const isNew = !existingBefore;
+        const newStatus = (orderData.status || orderData.order_status || '').toString().toLowerCase();
+        const prevStatus = (existingBefore?.status || '').toString().toLowerCase();
+        const isCancelled = this.isCancelledStatus(newStatus);
+        const statusChanged = newStatus !== prevStatus;
+        const wasNotSent = !(existingBefore as any)?.sent_to_doordash;
+        
+        // Check if this is a delivery order
+        const orderType = (orderData.type || orderData.order_type || '').toString().toLowerCase();
+        const isDeliveryOrder = orderType === 'delivery';
+        
+        if (isNew) {
+          await this.displayOrder(savedOrder, true, orderData);
+        } else {
+          console.log(chalk.blue(`🔄 Order updated in database: #${orderId}`));
+          await this.displayOrder(savedOrder, false, orderData);
+        }
+
+        const orderIdStr = orderId.toString();
+        const currentStatusLabel = newStatus || orderData.status || 'pending';
+        const previousStatusLabel = prevStatus || existingBefore?.status || 'unknown';
+
+        if (this.emailService?.isEnabled()) {
+          if (isNew) {
+            await this.notifyMerchant(orderData, {
+              event: 'new-order',
+              currentStatus: currentStatusLabel,
+            });
+          } else if (statusChanged) {
+            await this.notifyMerchant(orderData, {
+              event: isCancelled ? 'cancelled' : 'status-update',
+              previousStatus: previousStatusLabel,
+              currentStatus: currentStatusLabel,
+            });
+          }
+        }
+
+        // Handle order acceptance - schedule DoorDash call 20-25 minutes after acceptance
+        if (statusChanged && newStatus === 'accepted' && prevStatus !== 'accepted' && isDeliveryOrder) {
+          console.log(chalk.cyan(`📦 Order #${orderIdStr} accepted - scheduling DoorDash call in 20-25 minutes...`));
+          await this.schedulePostAcceptanceDoorDash(orderIdStr, orderData);
+        }
+
+        if (isCancelled) {
+          this.deliveryScheduler?.cancel(orderIdStr, 'order-cancelled');
+          this.cancelPostAcceptanceSchedule(orderIdStr);
+        } else if (!isDeliveryOrder) {
+          this.deliveryScheduler?.cancel(orderIdStr, 'non-delivery');
+          this.cancelPostAcceptanceSchedule(orderIdStr);
+        } else if (isNew || wasNotSent) {
+          // Don't schedule immediately if order is already accepted - let post-acceptance scheduler handle it
+          if (newStatus !== 'accepted') {
+            await this.scheduleDoorDashDelivery(orderData, isNew ? 'new-order' : 'update-order');
+          }
+        } else {
+          this.deliveryScheduler?.cancel(orderIdStr, 'already-sent');
+        }
+      } else {
+        console.error(chalk.red(`❌ Failed to store order: #${orderId}`));
+        res.status(500).json({ error: 'Failed to store order' });
+        return;
+      }
+
+      // Respond with success (GloriaFood expects 200 status)
+      res.status(200).json({ 
+        success: true, 
+        message: 'Order received and processed',
+        order_id: orderId
+      });
+
+    } catch (error: any) {
+      console.error(chalk.red.bold(`\n❌❌❌ WEBHOOK ERROR ❌❌❌`));
+      console.error(chalk.red(`Error message: ${error.message}`));
+      console.error(chalk.red(`Error stack: ${error.stack}`));
+      console.error(chalk.yellow(`Request body keys: ${Object.keys(req.body || {}).join(', ')}`));
+      console.error(chalk.yellow(`Request path: ${req.path}`));
+      console.error(chalk.yellow(`Request method: ${req.method}`));
+      
+      // Still return 200 to prevent GloriaFood from retrying
+      // (unless you want retries, then use 5xx status)
+      res.status(200).json({ 
+        success: false, 
+        error: error.message 
+      });
+    }
 
     // Get all orders endpoint with filters
     this.app.get('/orders', async (req: Request, res: Response) => {
