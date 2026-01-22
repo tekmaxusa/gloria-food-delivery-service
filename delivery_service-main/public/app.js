@@ -1675,24 +1675,33 @@ async function loadDashboardData() {
         }
 
         // Load recent orders
-        const ordersResponse = await authenticatedFetch(`${API_BASE}/orders?limit=10`);
-        if (ordersResponse.ok) {
-            const ordersData = await ordersResponse.json();
-            if (ordersData.success !== false) {
+        const ordersResponse = await authenticatedFetch(`${API_BASE}/orders?limit=10`).catch(() => null);
+        if (ordersResponse && ordersResponse.ok) {
+            let ordersData;
+            try {
+                ordersData = await safeJsonParse(ordersResponse);
+            } catch (parseError) {
+                console.warn('Dashboard orders API returned invalid response, using empty array');
+                displayDashboardOrders([]);
+                return;
+            }
+            
+            if (ordersData && ordersData.success !== false) {
                 // Handle both formats: { orders: [...] } or direct array
-                const orders = ordersData.orders || ordersData || [];
+                const orders = ordersData.orders || (Array.isArray(ordersData) ? ordersData : []);
+                console.log(`Loaded ${orders.length} order(s) for dashboard`);
                 displayDashboardOrders(orders.slice(0, 10));
             } else {
-                console.error('Orders API returned error:', ordersData);
+                console.warn('Dashboard orders API returned error:', ordersData);
                 displayDashboardOrders([]);
             }
-        } else if (ordersResponse.status === 401) {
+        } else if (ordersResponse && ordersResponse.status === 401) {
             // Handle 401 Unauthorized - session expired
             console.warn('Session expired, redirecting to login');
             showLogin();
             return;
         } else {
-            console.error('Failed to load orders:', ordersResponse.status);
+            console.warn('Failed to load dashboard orders:', ordersResponse?.status || 'network error');
             displayDashboardOrders([]);
         }
     } catch (error) {
@@ -5411,10 +5420,21 @@ async function loadOrders() {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        const data = await response.json();
+        let data;
+        try {
+            data = await safeJsonParse(response);
+        } catch (parseError) {
+            console.warn('Orders API returned invalid response, using empty array');
+            allOrders = [];
+            filterAndDisplayOrders();
+            return;
+        }
 
-        if (data.success !== false && (data.orders || Array.isArray(data))) {
-            allOrders = data.orders || data || [];
+        // Handle response format: { success: true, orders: [...] } or { orders: [...] } or direct array
+        if (data && (data.success !== false) && (data.orders || Array.isArray(data))) {
+            allOrders = data.orders || (Array.isArray(data) ? data : []);
+            
+            console.log(`Loaded ${allOrders.length} order(s) from API`);
 
             // Pre-process orders: cache parsed raw_data to avoid repeated parsing
             allOrders.forEach(order => {
@@ -5435,7 +5455,7 @@ async function loadOrders() {
             // Filter and display
             filterAndDisplayOrders();
         } else {
-            showError('Failed to load orders: ' + (data.error || 'Unknown error'));
+            console.warn('Orders API response format unexpected:', data);
             allOrders = [];
             filterAndDisplayOrders();
         }
