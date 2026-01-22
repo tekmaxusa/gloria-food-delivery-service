@@ -2460,6 +2460,7 @@ class GloriaFoodWebhookServer {
       try {
         console.log(chalk.blue(`🔵 LOGIN HANDLER CALLED - Login request received at ${new Date().toISOString()}`));
         console.log(chalk.gray(`   Request body: ${JSON.stringify(req.body)}`));
+        
         const { email, password } = req.body;
         
         if (!email || !password) {
@@ -2469,9 +2470,26 @@ class GloriaFoodWebhookServer {
         
         console.log(chalk.gray(`   Email: ${email}`));
         
-        const userResult = await this.handleAsync(this.database.verifyPassword(email, password));
+        // Check if database is available
+        if (!this.database) {
+          console.error(chalk.red(`   ❌ Database not initialized`));
+          return res.status(500).json({ success: false, error: 'Database not available. Please check server configuration.' });
+        }
         
-        console.log(chalk.gray(`   verifyPassword result type: ${typeof userResult}, value: ${userResult ? 'exists' : 'null/false'}`));
+        // Verify password with better error handling
+        let userResult;
+        try {
+          userResult = await this.handleAsync(this.database.verifyPassword(email, password));
+          console.log(chalk.gray(`   verifyPassword completed, result type: ${typeof userResult}`));
+        } catch (dbError: any) {
+          console.error(chalk.red(`   ❌ Database error during password verification: ${dbError.message}`));
+          console.error(chalk.red(`   Stack: ${dbError.stack}`));
+          return res.status(500).json({ 
+            success: false, 
+            error: 'Database error. Please try again later.',
+            details: process.env.NODE_ENV === 'development' ? dbError.message : undefined
+          });
+        }
         
         // verifyPassword can return boolean, null, or User
         // Check if result is falsy, boolean, or not a User object
@@ -2507,7 +2525,16 @@ class GloriaFoodWebhookServer {
       } catch (error: any) {
         console.error(chalk.red(`❌ Login error: ${error.message}`));
         console.error(chalk.red(`   Stack: ${error.stack}`));
-        res.status(500).json({ success: false, error: error.message || 'Failed to login' });
+        
+        // Don't expose internal error details in production
+        const errorMessage = process.env.NODE_ENV === 'production' 
+          ? 'An error occurred during login. Please try again.' 
+          : error.message;
+        
+        res.status(500).json({ 
+          success: false, 
+          error: errorMessage || 'Failed to login'
+        });
       }
     });
 

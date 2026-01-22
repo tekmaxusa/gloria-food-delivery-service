@@ -1862,35 +1862,55 @@ export class OrderDatabasePostgreSQL {
 
   async verifyPassword(email: string, password: string): Promise<boolean | User | null> {
     try {
+      // Check if pool is available
+      if (!this.pool) {
+        console.error('Database pool not initialized');
+        throw new Error('Database connection not available');
+      }
+
       const crypto = require('crypto');
       const hashedPassword = crypto.createHash('sha256').update(password).digest('hex');
 
       const user = await this.getUserByEmail(email);
       if (!user) {
+        console.log(`User not found for email: ${email}`);
         return null;
       }
 
-      const client = await this.pool.connect();
-      const result = await client.query(
-        'SELECT password FROM users WHERE email = $1',
-        [email]
-      );
-      client.release();
+      let client;
+      try {
+        client = await this.pool.connect();
+        const result = await client.query(
+          'SELECT password FROM users WHERE email = $1',
+          [email]
+        );
 
-      if (result.rows[0]?.password === hashedPassword) {
-        return {
-          id: user.id,
-          email: user.email,
-          full_name: user.full_name,
-          role: user.role,
-          created_at: user.created_at
-        };
+        if (result.rows.length === 0) {
+          console.log(`No password found for user: ${email}`);
+          return false;
+        }
+
+        if (result.rows[0]?.password === hashedPassword) {
+          return {
+            id: user.id,
+            email: user.email,
+            full_name: user.full_name,
+            role: user.role,
+            created_at: user.created_at
+          };
+        }
+
+        return false;
+      } finally {
+        if (client) {
+          client.release();
+        }
       }
-
-      return false;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error verifying password:', error);
-      return false;
+      console.error('Error details:', error.message, error.stack);
+      // Re-throw the error so the caller can handle it properly
+      throw error;
     }
   }
 
