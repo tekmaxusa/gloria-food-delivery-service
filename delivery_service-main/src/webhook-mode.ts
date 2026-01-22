@@ -1471,8 +1471,9 @@ class GloriaFoodWebhookServer {
       }
 
       // Determine if this is a new order BEFORE saving
-      // Get user_id from merchant if available
-      const orderUserId = merchant?.user_id || undefined;
+      // Get user_id from merchant if available, otherwise use default user ID 1
+      // This ensures orders are visible even without a merchant user_id
+      const orderUserId = merchant?.user_id || 1;
       
       // Try to get existing order (but don't fail if database is unavailable)
       let existingBefore = null;

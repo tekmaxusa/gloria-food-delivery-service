@@ -1639,14 +1639,6 @@ async function showDashboardPage() {
 
     // Load dashboard data
     loadDashboardData();
-    
-    // Also load orders for the orders page (if user navigates there)
-    // This ensures orders are available when switching to Orders page
-    setTimeout(() => {
-        if (typeof loadOrders === 'function') {
-            loadOrders();
-        }
-    }, 500);
 }
 
 // Load dashboard data

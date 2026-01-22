@@ -1641,8 +1641,15 @@ export class OrderDatabasePostgreSQL {
         const params: any[] = [];
         
         if (userId !== undefined) {
-          query += ' WHERE user_id = $1';
-          params.push(userId);
+          // If userId is 1 (default user), also include orders with NULL user_id
+          // This ensures orders saved without a user session are visible
+          if (userId === 1) {
+            query += ' WHERE (user_id = $1 OR user_id IS NULL)';
+            params.push(userId);
+          } else {
+            query += ' WHERE user_id = $1';
+            params.push(userId);
+          }
         }
         
         query += ' ORDER BY fetched_at DESC LIMIT $' + (params.length + 1);
@@ -1667,8 +1674,14 @@ export class OrderDatabasePostgreSQL {
       const params: any[] = [];
       
       if (userId !== undefined) {
-        query += ' AND user_id = $1';
-        params.push(userId);
+        // If userId is 1 (default user), also include orders with NULL user_id
+        if (userId === 1) {
+          query += ' AND (user_id = $1 OR user_id IS NULL)';
+          params.push(userId);
+        } else {
+          query += ' AND user_id = $1';
+          params.push(userId);
+        }
       }
       
       query += ' ORDER BY fetched_at DESC';
@@ -1690,8 +1703,14 @@ export class OrderDatabasePostgreSQL {
       const params: any[] = [status];
       
       if (userId !== undefined) {
-        query += ' AND user_id = $2';
-        params.push(userId);
+        // If userId is 1 (default user), also include orders with NULL user_id
+        if (userId === 1) {
+          query += ' AND (user_id = $2 OR user_id IS NULL)';
+          params.push(userId);
+        } else {
+          query += ' AND user_id = $2';
+          params.push(userId);
+        }
       }
       
       query += ' ORDER BY fetched_at DESC';
