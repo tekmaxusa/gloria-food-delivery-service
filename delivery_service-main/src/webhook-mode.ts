@@ -939,25 +939,17 @@ class GloriaFoodWebhookServer {
       console.log(chalk.blue('🔵 Serving static files from: dist/public'));
       const resolvedPath = path.resolve(distPublicPath);
       console.log(chalk.gray(`   Resolved path: ${resolvedPath}`));
-      // Add cache-busting for app.js to force browser refresh
-      // Only serve static files for non-API paths
-      this.app.use((req, res, next) => {
-        // Skip static file serving for API routes
-        if (req.path.startsWith('/api/')) {
-          return next();
-        }
-        // Use express.static middleware
-        const staticMiddleware = express.static(resolvedPath, {
-          setHeaders: (res, filePath) => {
-            if (filePath.endsWith('app.js')) {
-              res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-              res.setHeader('Pragma', 'no-cache');
-              res.setHeader('Expires', '0');
-            }
+      // Serve static files - express.static will automatically skip if file doesn't exist
+      // API routes are already registered, so they take precedence
+      this.app.use(express.static(resolvedPath, {
+        setHeaders: (res, filePath) => {
+          if (filePath.endsWith('app.js')) {
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
           }
-        });
-        staticMiddleware(req, res, next);
-      });
+        }
+      }));
       
       // Also check if index.html exists
       const indexPath = path.join(distPublicPath, 'index.html');
@@ -970,31 +962,24 @@ class GloriaFoodWebhookServer {
       console.log(chalk.blue('🔵 Serving static files from: public'));
       const resolvedPath = path.resolve(publicPath);
       console.log(chalk.gray(`   Resolved path: ${resolvedPath}`));
-      // Add cache-busting for app.js to force browser refresh
-      // Only serve static files for non-API paths
-      this.app.use((req, res, next) => {
-        // Skip static file serving for API routes
-        if (req.path.startsWith('/api/')) {
-          return next();
-        }
-        // Use express.static middleware
-        const staticMiddleware = express.static(resolvedPath, {
-          setHeaders: (res, filePath) => {
-            if (filePath.endsWith('app.js')) {
-              res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-              res.setHeader('Pragma', 'no-cache');
-              res.setHeader('Expires', '0');
-            }
+      // Serve static files - express.static will automatically skip if file doesn't exist
+      // API routes are already registered, so they take precedence
+      this.app.use(express.static(resolvedPath, {
+        setHeaders: (res, filePath) => {
+          if (filePath.endsWith('app.js')) {
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
           }
-        });
-        staticMiddleware(req, res, next);
-      });
+        }
+      }));
     } else {
       console.log(chalk.yellow('⚠️  Public directory not found, dashboard may not be available'));
     }
     
     // Catch-all route for SPA - serve index.html for any non-API GET request that doesn't match a route
     // IMPORTANT: This must be the last route registered to avoid interfering with API routes
+    // Static files should have been served by express.static above, so this only handles SPA routes
     this.app.get('*', (req: Request, res: Response, next: any) => {
       // Skip if it's an API route (should have been handled by routes above)
       if (req.path.startsWith('/api/')) {
@@ -1007,6 +992,14 @@ class GloriaFoodWebhookServer {
           req.path.startsWith('/stats') || req.path.startsWith('/summary') ||
           req.path.startsWith('/doordash')) {
         return next();
+      }
+      
+      // Skip if it looks like a static file request (has a file extension)
+      // express.static should have handled these, but if not, don't serve index.html
+      const staticFileExtensions = ['.js', '.css', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.woff', '.woff2', '.ttf', '.eot', '.json', '.xml', '.txt'];
+      const hasExtension = staticFileExtensions.some(ext => req.path.toLowerCase().endsWith(ext));
+      if (hasExtension) {
+        return res.status(404).send('File not found');
       }
       
       // Try to serve index.html for SPA routing
