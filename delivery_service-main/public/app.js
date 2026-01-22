@@ -941,6 +941,7 @@ function showOrdersPage() {
         setTimeout(() => {
             // Always load orders when Orders page is shown (refresh data)
             console.log('📥 Orders page shown - loading orders...');
+            console.log('📋 Checking for ordersTableBody element...');
             
             // Ensure tbody exists before loading
             const tbody = document.getElementById('ordersTableBody');
@@ -948,20 +949,35 @@ function showOrdersPage() {
                 console.warn('⚠️ ordersTableBody not found yet, waiting...');
                 // Wait a bit more
                 setTimeout(() => {
-                    loadOrdersIfReady();
+                    const retryTbody = document.getElementById('ordersTableBody');
+                    if (retryTbody) {
+                        console.log('✅ Found ordersTableBody on retry, loading orders...');
+                        loadOrdersIfReady();
+                    } else {
+                        console.error('❌ ordersTableBody still not found after retry - this should not happen!');
+                        // Still try to load orders - they might display when tbody is created
+                        loadOrdersIfReady();
+                    }
                 }, 200);
             } else {
+                console.log('✅ ordersTableBody found immediately, loading orders...');
                 loadOrdersIfReady();
             }
         }, 50); // Small delay to ensure DOM is ready
     });
     
     function loadOrdersIfReady() {
+        console.log(`📋 loadOrdersIfReady: isLoadingOrders=${isLoadingOrders}, allOrders.length=${allOrders.length}`);
+        
         if (!isLoadingOrders) {
+            console.log('🔄 Calling loadOrders()...');
             loadOrders();
         } else {
             // If already loading, just display what we have
             console.log('Orders already loading, displaying cached orders');
+            if (allOrders.length > 0) {
+                console.log(`📋 Displaying ${allOrders.length} cached order(s)`);
+            }
             filterAndDisplayOrders();
         }
     }
