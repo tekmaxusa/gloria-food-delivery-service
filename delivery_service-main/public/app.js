@@ -4853,18 +4853,24 @@ async function loadSettings() {
         const response = await authenticatedFetch(`${API_BASE}/api/settings`).catch(() => null);
         if (!response) {
             console.warn('Settings endpoint not available, skipping');
-            return;
+            return {};
         }
-        const data = await response.json();
-        if (data.success && data.settings) {
-            // Update localStorage with settings from backend
-            Object.entries(data.settings).forEach(([key, value]) => {
-                localStorage.setItem(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
-            });
-            return data.settings;
+        try {
+            const data = await safeJsonParse(response);
+            if (data && data.success && data.settings) {
+                // Update localStorage with settings from backend
+                Object.entries(data.settings).forEach(([key, value]) => {
+                    localStorage.setItem(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
+                });
+                return data.settings;
+            }
+        } catch (parseError) {
+            // Silently handle JSON parsing errors
+            console.warn('Settings API returned invalid response, using empty settings');
         }
     } catch (error) {
-        console.error('Error loading settings:', error);
+        // Silently handle errors - don't block the app
+        console.warn('Settings not available, continuing without settings');
     }
     return {};
 }
