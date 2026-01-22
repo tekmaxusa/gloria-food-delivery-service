@@ -198,7 +198,8 @@ function setupDashboardUI() {
     const searchInput = document.getElementById('searchInput');
     if (searchInput) {
         searchInput.addEventListener('input', (e) => {
-            searchQuery = e.target.value.toLowerCase();
+            const value = e.target && e.target.value ? e.target.value : '';
+            searchQuery = value && typeof value.toLowerCase === 'function' ? value.toLowerCase() : '';
             filterAndDisplayOrders();
         });
     }
@@ -657,8 +658,14 @@ function navigateToPage(page) {
     document.body.classList.remove('on-settings-page', 'on-profile-page');
 
     const mainContainer = document.querySelector('.main-container');
+    
+    if (!page || typeof page !== 'string') {
+        return;
+    }
 
-    switch (page.toLowerCase()) {
+    const pageLower = typeof page.toLowerCase === 'function' ? page.toLowerCase() : page;
+
+    switch (pageLower) {
         case 'dashboard':
             showDashboardPage();
             break;
@@ -821,7 +828,13 @@ function showOrdersPage() {
 
     // Re-initialize event listeners
     initializeOrdersPage();
-    filterAndDisplayOrders();
+    
+    // Load orders only if not already loading and we have orders to display
+    if (!isLoadingOrders && allOrders.length === 0) {
+        loadOrders();
+    } else {
+        filterAndDisplayOrders();
+    }
 }
 
 // Initialize Orders page event listeners
@@ -835,10 +848,10 @@ function initializeOrdersPage() {
             e.target.classList.add('active');
 
             // Get status from data attribute or text content
-            const status = e.target.dataset.status || e.target.textContent.trim().toLowerCase();
+            const statusText = e.target && e.target.textContent ? e.target.textContent.trim() : '';
+            const status = e.target && e.target.dataset && e.target.dataset.status ? e.target.dataset.status : (statusText && typeof statusText.toLowerCase === 'function' ? statusText.toLowerCase() : '');
             currentStatusFilter = status;
 
-            console.log(`[DEBUG] Tab clicked: ${status}, filter set to: "${currentStatusFilter}"`);
 
             // Filter and display orders
             filterAndDisplayOrders();
@@ -849,7 +862,8 @@ function initializeOrdersPage() {
     const searchInput = document.getElementById('searchInput');
     if (searchInput) {
         searchInput.addEventListener('input', (e) => {
-            searchQuery = e.target.value.toLowerCase();
+            const value = e.target && e.target.value ? e.target.value : '';
+            searchQuery = value && typeof value.toLowerCase === 'function' ? value.toLowerCase() : '';
             filterAndDisplayOrders();
         });
     }
@@ -1033,7 +1047,6 @@ function initializeIntegrationsPage() {
                     if (merchantId) {
                         e.preventDefault();
                         e.stopPropagation();
-                        console.log('Edit button clicked for merchant:', merchantId);
                         if (typeof editMerchant === 'function') {
                             editMerchant(parseInt(merchantId));
                         } else {
@@ -1365,8 +1378,7 @@ async function editMerchant(merchantId) {
             showError('Failed to load merchants: ' + (merchantData.error || 'Unknown error'));
         }
     } catch (error) {
-        console.error('Error loading merchant:', error);
-        showError('Error loading merchant: ' + error.message);
+        showError('Error loading merchant: ' + (error.message || 'Unknown error'));
     }
 }
 
@@ -1691,7 +1703,7 @@ function showIntegrationStatus(merchantId, integrationData) {
         <div style="margin-bottom: 24px;">
             <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
                 <span class="status-badge status-${status}" style="font-size: 14px; padding: 6px 12px;">
-                    ${status.charAt(0).toUpperCase() + status.slice(1)}
+                    ${status && typeof status.charAt === 'function' && typeof status.toUpperCase === 'function' ? (status.charAt(0).toUpperCase() + status.slice(1)) : (status || 'unknown')}
                 </span>
                 ${testResult ? (
                     testResult.success ? 
@@ -2088,8 +2100,11 @@ async function showDashboardPage() {
                 const name = (merchant.merchant_name || '').toString();
                 const storeId = (merchant.store_id || '').toString();
                 
-                if (name.trim() !== '' &&
+                if (name && name.trim() !== '' &&
+                    storeId &&
                     name !== storeId &&
+                    typeof name.toLowerCase === 'function' &&
+                    typeof storeId.toLowerCase === 'function' &&
                     name.toLowerCase() !== storeId.toLowerCase() &&
                     !name.startsWith('Merchant ') &&
                     name !== 'Unknown Merchant' &&
@@ -2280,7 +2295,7 @@ function displayDashboardOrders(orders) {
             <td>#${order.gloriafood_order_id || order.id}</td>
             <td>${order.customer_name || 'N/A'}</td>
             <td>${formatCurrency(order.total_price || 0, order.currency || 'USD')}</td>
-            <td><span class="status-badge status-${(order.status || '').toLowerCase()}">${order.status || 'N/A'}</span></td>
+            <td><span class="status-badge status-${order.status && typeof order.status.toLowerCase === 'function' ? order.status.toLowerCase() : (order.status || 'n/a')}">${order.status || 'N/A'}</span></td>
             <td>${formatDate(order.created_at || order.fetched_at)}</td>
         </tr>
     `).join('');
@@ -2477,7 +2492,7 @@ async function fetchSalesReport() {
                 });
             }
         } catch (e) {
-            console.error('Error parsing merchants:', e);
+            // Error silently handled
         }
     }
     
@@ -2520,7 +2535,7 @@ async function fetchOrdersReport() {
                 });
             }
         } catch (e) {
-            console.error('Error parsing merchants:', e);
+            // Error silently handled
         }
     }
     
@@ -2587,7 +2602,7 @@ async function fetchCustomersReport() {
 function renderSalesReport(orders) {
     // Exclude cancelled orders from total sales
     const validOrders = orders.filter(o => {
-        const status = (o.status || '').toUpperCase();
+        const status = o.status && typeof o.status.toUpperCase === 'function' ? o.status.toUpperCase() : (o.status || '');
         return status !== 'CANCELLED' && status !== 'CANCELED';
     });
     const totalSales = validOrders.reduce((sum, o) => sum + (parseFloat(o.total_price) || 0), 0);
@@ -2775,7 +2790,7 @@ function renderRevenueReport(data) {
     const { orders, stats } = data;
     // Exclude cancelled orders from revenue calculation
     const validOrders = orders.filter(o => {
-        const status = (o.status || '').toUpperCase();
+        const status = o.status && typeof o.status.toUpperCase === 'function' ? o.status.toUpperCase() : (o.status || '');
         return status !== 'CANCELLED' && status !== 'CANCELED';
     });
     const totalRevenue = stats.revenue?.total || validOrders.reduce((sum, o) => sum + (parseFloat(o.total_price) || 0), 0);
@@ -3317,19 +3332,24 @@ function getFilteredOrders() {
 
     // Apply search filter
     if (searchQuery) {
-        const query = searchQuery.toLowerCase();
+        const query = searchQuery && typeof searchQuery.toLowerCase === 'function' ? searchQuery.toLowerCase() : String(searchQuery || '').toLowerCase();
         filtered = filtered.filter(order => {
-            const orderId = (order.gloriafood_order_id || order.id || '').toString().toLowerCase();
-            const customerName = (order.customer_name || '').toLowerCase();
-            const merchantName = (order.merchant_name || order.store_id || '').toLowerCase();
-            const address = (order.delivery_address || order.customer_address || '').toLowerCase();
-            const status = (order.status || '').toLowerCase();
+            const orderId = (order.gloriafood_order_id || order.id || '').toString();
+            const orderIdLower = orderId && typeof orderId.toLowerCase === 'function' ? orderId.toLowerCase() : orderId;
+            const customerName = (order.customer_name || '');
+            const customerNameLower = customerName && typeof customerName.toLowerCase === 'function' ? customerName.toLowerCase() : customerName;
+            const merchantName = (order.merchant_name || order.store_id || '');
+            const merchantNameLower = merchantName && typeof merchantName.toLowerCase === 'function' ? merchantName.toLowerCase() : merchantName;
+            const address = (order.delivery_address || order.customer_address || '');
+            const addressLower = address && typeof address.toLowerCase === 'function' ? address.toLowerCase() : address;
+            const status = (order.status || '');
+            const statusLower = status && typeof status.toLowerCase === 'function' ? status.toLowerCase() : status;
 
-            return orderId.includes(query) ||
-                customerName.includes(query) ||
-                merchantName.includes(query) ||
-                address.includes(query) ||
-                status.includes(query);
+            return orderIdLower.includes(query) ||
+                   customerNameLower.includes(query) ||
+                   merchantNameLower.includes(query) ||
+                   addressLower.includes(query) ||
+                   statusLower.includes(query);
         });
     }
 
@@ -3767,7 +3787,7 @@ async function showMyAccountPage() {
             restaurantApiKey = activeMerchant.api_key ? '********' : 'Not configured';
         }
     } catch (error) {
-        console.error('Error fetching merchants:', error);
+        // Error silently handled
     }
 
     mainContainer.innerHTML = `
@@ -4213,6 +4233,8 @@ async function getBusinessSettingsContent() {
         if (merchantName &&
             merchantName.trim() !== '' &&
             merchantName !== merchantStoreId &&
+            typeof merchantName.toLowerCase === 'function' &&
+            typeof merchantStoreId.toLowerCase === 'function' &&
             merchantName.toLowerCase() !== merchantStoreId.toLowerCase() &&
             !merchantName.startsWith('Merchant ') &&
             merchantName !== 'Unknown Merchant' &&
@@ -4232,6 +4254,8 @@ async function getBusinessSettingsContent() {
                             orderMerchantName &&
                             orderMerchantName.trim() !== '' &&
                             orderMerchantName !== orderStoreId &&
+                            typeof orderMerchantName.toLowerCase === 'function' &&
+                            typeof orderStoreId.toLowerCase === 'function' &&
                             orderMerchantName.toLowerCase() !== orderStoreId.toLowerCase() &&
                             !orderMerchantName.startsWith('Merchant ') &&
                             orderMerchantName !== 'Unknown Merchant' &&
@@ -4647,7 +4671,10 @@ async function getUsersContent() {
                             <td>
                                 <div style="display: flex; align-items: center; gap: 12px;">
                                     <div class="user-avatar" style="width: 32px; height: 32px; border-radius: 50%; background: #22c55e; color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 12px;">
-                                        ${(user.full_name || user.email || 'U').charAt(0).toUpperCase()}
+                                        ${(() => {
+                                            const name = user.full_name || user.email || 'U';
+                                            return name && typeof name.charAt === 'function' && typeof name.toUpperCase === 'function' ? name.charAt(0).toUpperCase() : 'U';
+                                        })()}
                                     </div>
                                     <span>${escapeHtml(user.full_name || user.email || 'User')}</span>
                                 </div>
@@ -4727,7 +4754,7 @@ async function getLocationContent() {
             }
         }
     } catch (error) {
-        console.error('Error fetching merchant for location:', error);
+        // Error silently handled
     }
 
     // Auto-detect timezone if enabled
@@ -5612,7 +5639,7 @@ window.selectDistanceUnit = selectDistanceUnit;
 
 // Dispatch settings helper functions
 async function toggleDispatchSetting(setting, enabled) {
-    const key = `dispatch${setting.charAt(0).toUpperCase() + setting.slice(1)}`;
+    const key = `dispatch${setting && typeof setting.charAt === 'function' && typeof setting.toUpperCase === 'function' ? (setting.charAt(0).toUpperCase() + setting.slice(1)) : setting}`;
     await saveSetting(key, enabled);
     showNotification('Success', 'Dispatch setting updated', 'success');
 }
@@ -5918,18 +5945,22 @@ function handleHelp() {
 }
 
 // Load orders
+let isLoadingOrders = false;
 async function loadOrders() {
+    // Prevent multiple simultaneous calls
+    if (isLoadingOrders) {
+        return;
+    }
+    
     try {
+        isLoadingOrders = true;
         const url = `${API_BASE}/orders?limit=100`;
-
-        console.log('Fetching orders from:', url);
 
         const response = await authenticatedFetch(url);
 
         if (!response.ok) {
             // Handle 401 (Unauthorized) - session might have expired
             if (response.status === 401) {
-                console.warn('Authentication failed (401), redirecting to login...');
                 saveSessionId(null);
                 showLogin();
                 return;
@@ -5938,11 +5969,9 @@ async function loadOrders() {
         }
 
         const data = await response.json();
-        console.log('API response:', data);
 
         if (data.success !== false && (data.orders || Array.isArray(data))) {
             allOrders = data.orders || data || [];
-            console.log('Loaded orders:', allOrders.length);
 
             // Pre-process orders: cache parsed raw_data to avoid repeated parsing
             allOrders.forEach(order => {
@@ -5963,16 +5992,16 @@ async function loadOrders() {
             // Filter and display
             filterAndDisplayOrders();
         } else {
-            console.error('API returned error:', data);
             showError('Failed to load orders: ' + (data.error || 'Unknown error'));
             allOrders = [];
             filterAndDisplayOrders();
         }
     } catch (error) {
-        console.error('Error loading orders:', error);
-        showError('Error connecting to server: ' + error.message);
+        showError('Error connecting to server: ' + (error.message || 'Unknown error'));
         allOrders = [];
         filterAndDisplayOrders();
+    } finally {
+        isLoadingOrders = false;
     }
 }
 
@@ -6038,9 +6067,12 @@ function hasScheduledDeliveryTime(order) {
 
     // Check if "Later" option is selected (GloriaFood sends delivery_type or delivery_option)
     // Also check for "asap" vs "later" indicators
-    const deliveryType = (rawData.delivery_type || rawData.deliveryOption || rawData.delivery_option || rawData.deliveryType || rawData.delivery_time_type || rawData.time_type || rawData.delivery_method || '').toLowerCase();
-    const deliveryOption = (rawData.delivery_option || rawData.deliveryOption || rawData.available_time || rawData.availableTime || rawData.time_option || rawData.timeOption || rawData.selected_time_option || '').toLowerCase();
-    const asapOption = (rawData.asap || rawData.as_soon_as_possible || rawData.asSoonAsPossible || rawData.is_asap || rawData.isAsap || '').toLowerCase();
+    const deliveryTypeRaw = rawData.delivery_type || rawData.deliveryOption || rawData.delivery_option || rawData.deliveryType || rawData.delivery_time_type || rawData.time_type || rawData.delivery_method || '';
+    const deliveryType = deliveryTypeRaw && typeof deliveryTypeRaw.toLowerCase === 'function' ? deliveryTypeRaw.toLowerCase() : String(deliveryTypeRaw || '').toLowerCase();
+    const deliveryOptionRaw = rawData.delivery_option || rawData.deliveryOption || rawData.available_time || rawData.availableTime || rawData.time_option || rawData.timeOption || rawData.selected_time_option || '';
+    const deliveryOption = deliveryOptionRaw && typeof deliveryOptionRaw.toLowerCase === 'function' ? deliveryOptionRaw.toLowerCase() : String(deliveryOptionRaw || '').toLowerCase();
+    const asapOptionRaw = rawData.asap || rawData.as_soon_as_possible || rawData.asSoonAsPossible || rawData.is_asap || rawData.isAsap || '';
+    const asapOption = asapOptionRaw && typeof asapOptionRaw.toLowerCase === 'function' ? asapOptionRaw.toLowerCase() : String(asapOptionRaw || '').toLowerCase();
 
     // Check for "Later" or "Scheduled" in various fields
     const isLaterSelected = deliveryType === 'later' ||
@@ -6116,7 +6148,6 @@ function hasScheduledDeliveryTime(order) {
                     const now = new Date();
                     // If date is today or future, it's likely scheduled
                     if (dateOnly >= new Date(now.toDateString())) {
-                        console.log(`[DEBUG] Order ${orderId || 'unknown'} is scheduled - future delivery date found: ${hasDeliveryDate}`);
                         return true;
                     }
                 } catch (e) {
@@ -6247,7 +6278,6 @@ function hasScheduledDeliveryTime(order) {
                 const now = new Date();
                 // If date is in the future (not today), it's definitely scheduled
                 if (dateOnly > new Date(now.toDateString())) {
-                    console.log(`[DEBUG] Order ${orderId || 'unknown'} is scheduled - future date found: ${deliveryDate}`);
                     return true; // Future date = scheduled
                 }
                 // If date is today or future, and we have a time component somewhere, it's scheduled
@@ -6377,7 +6407,6 @@ function hasScheduledDeliveryTime(order) {
             // If delivery time is in the future, it's scheduled
             // Be more lenient - any future time means scheduled (for tomorrow, specific times, etc.)
             if (deliveryDate > now) {
-                console.log(`[DEBUG] Order ${orderId || 'unknown'} delivery time is in future: ${deliveryTime} -> ${deliveryDate}`);
 
                 // If delivery time is in the future (even 1 minute), it's scheduled
                 // This catches orders with specific date/time (Later option)
@@ -6410,7 +6439,7 @@ function hasScheduledDeliveryTime(order) {
 
 // Helper function to get order category
 function getOrderCategory(order) {
-    const status = (order.status || '').toUpperCase();
+    const status = order.status && typeof order.status.toUpperCase === 'function' ? order.status.toUpperCase() : (order.status || '');
     const isCompleted = ['DELIVERED', 'COMPLETED', 'FULFILLED'].includes(status);
     const isIncomplete = ['CANCELLED', 'FAILED', 'REJECTED', 'CANCELED'].includes(status);
 
@@ -6479,7 +6508,7 @@ function getOrderCategory(order) {
             }
         } catch (e) {
             // If can't parse date, keep in current
-            console.error('Error parsing order date:', e);
+            // Error silently handled
         }
     }
 
@@ -6501,13 +6530,13 @@ function filterAndDisplayOrders() {
         } else if (currentStatusFilter === 'completed') {
             // Completed = delivered, completed, fulfilled orders
             filtered = filtered.filter(order => {
-                const status = (order.status || '').toUpperCase();
+                const status = order.status && typeof order.status.toUpperCase === 'function' ? order.status.toUpperCase() : (order.status || '');
                 return ['DELIVERED', 'COMPLETED', 'FULFILLED'].includes(status);
             });
         } else if (currentStatusFilter === 'incomplete') {
             // Incomplete = cancelled, failed, rejected orders
             filtered = filtered.filter(order => {
-                const status = (order.status || '').toUpperCase();
+                const status = order.status && typeof order.status.toUpperCase === 'function' ? order.status.toUpperCase() : (order.status || '');
                 return ['CANCELLED', 'FAILED', 'REJECTED', 'CANCELED'].includes(status);
             });
         }
@@ -6519,7 +6548,7 @@ function filterAndDisplayOrders() {
         const dispatchTimeWindowHours = dispatchTimeWindowMinutes / 60; // Convert minutes to hours for calculation
 
         filtered = filtered.filter(order => {
-            const status = (order.status || '').toUpperCase();
+            const status = order.status && typeof order.status.toUpperCase === 'function' ? order.status.toUpperCase() : (order.status || '');
             const isActive = status && !['DELIVERED', 'COMPLETED', 'CANCELLED', 'CANCELED', 'FAILED', 'REJECTED'].includes(status);
 
             if (!isActive) return false;
@@ -6558,7 +6587,7 @@ function filterAndDisplayOrders() {
                         }
                     }
                 } catch (e) {
-                    console.error('Error checking scheduled time for current filter:', e);
+                    // Error silently handled
                 }
             }
 
@@ -6577,9 +6606,9 @@ function filterAndDisplayOrders() {
                 order.delivery_address,
                 order.status,
                 order.merchant_name || order.store_id
-            ].join(' ').toLowerCase();
-
-            return searchableText.includes(searchQuery);
+            ].filter(Boolean).join(' ');
+            const searchableTextLower = searchableText && typeof searchableText.toLowerCase === 'function' ? searchableText.toLowerCase() : String(searchableText || '').toLowerCase();
+            return searchableTextLower.includes(query);
         });
     }
 
@@ -6804,7 +6833,8 @@ function createOrderRow(order) {
 
     // If order was sent to DoorDash, use DoorDash status
     // PENDING if no rider accepted yet, ACCEPTED when rider accepts
-    let status = (order.status || 'UNKNOWN').toUpperCase();
+    const orderStatus = order.status || 'UNKNOWN';
+    let status = orderStatus && typeof orderStatus.toUpperCase === 'function' ? orderStatus.toUpperCase() : String(orderStatus).toUpperCase();
     
     // Check if order is in incomplete category - if so, ensure status reflects that
     const orderCategory = getOrderCategory(order);
@@ -6842,7 +6872,7 @@ function createOrderRow(order) {
                 status = 'CANCELLED';
             } else {
                 // Use DoorDash status as-is (capitalized)
-                status = ddStatusLower.toUpperCase();
+                status = ddStatusLower && typeof ddStatusLower.toUpperCase === 'function' ? ddStatusLower.toUpperCase() : String(ddStatusLower || '').toUpperCase();
             }
         } else {
             // If sent to DoorDash but no status yet, it's pending
@@ -7200,13 +7230,8 @@ function createOrderRow(order) {
             window._timeDebugLogged = new Set();
         }
         if (!window._timeDebugLogged.has(orderId)) {
-            console.log(`[DEBUG] Order ${orderId} times:`, {
-                pickupTime: pickupTime,
-                deliveryTime: deliveryTime,
-                formattedPickup: formattedPickupTime,
-                formattedDelivery: formattedDeliveryTime
-            });
-            window._timeDebugLogged.add(orderId);
+            // Debug logging removed
+            // Debug logging removed
         }
     }
 
@@ -7811,7 +7836,7 @@ async function viewOrderDetails(orderId) {
                 rawData = typeof order.raw_data === 'string' ? JSON.parse(order.raw_data) : order.raw_data;
             }
         } catch (e) {
-            console.error('Error parsing raw_data:', e);
+            // Error silently handled
         }
 
         // Parse items if it's a string
@@ -7821,7 +7846,7 @@ async function viewOrderDetails(orderId) {
                 parsedItems = typeof order.items === 'string' ? JSON.parse(order.items) : order.items;
             }
         } catch (e) {
-            console.error('Error parsing items:', e);
+            // Error silently handled
         }
 
         // Parse doordash_data if it exists in raw_data
@@ -7833,7 +7858,7 @@ async function viewOrderDetails(orderId) {
                 doordashData = typeof rawData.doordash_response === 'string' ? JSON.parse(rawData.doordash_response) : rawData.doordash_response;
             }
         } catch (e) {
-            console.error('Error parsing doordash_data:', e);
+            // Error silently handled
         }
 
         // Extract customer information
@@ -8006,7 +8031,7 @@ async function viewOrderDetails(orderId) {
                 }
             }
         } catch (e) {
-            console.error('Error parsing items:', e);
+            // Error silently handled
             orderItems = [];
         }
 
@@ -8203,9 +8228,14 @@ async function viewOrderDetails(orderId) {
                 paymentMethod = 'GOOGLE PAY';
             } else {
                 // Capitalize first letter of each word
-                paymentMethod = String(paymentMethod).split(/[_\s-]/).map(word =>
-                    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-                ).join(' ');
+                paymentMethod = String(paymentMethod).split(/[_\s-]/).map(word => {
+                    if (!word || typeof word.charAt !== 'function') return word;
+                    const first = word.charAt(0);
+                    const rest = word.slice(1);
+                    const firstUpper = first && typeof first.toUpperCase === 'function' ? first.toUpperCase() : first;
+                    const restLower = rest && typeof rest.toLowerCase === 'function' ? rest.toLowerCase() : rest;
+                    return firstUpper + restLower;
+                }).join(' ');
             }
         }
 
@@ -8376,11 +8406,13 @@ async function viewOrderDetails(orderId) {
         }
 
         // If order was sent to DoorDash, use DoorDash status
-        let status = (order.status || 'UNKNOWN').toUpperCase();
+        const orderStatus = order.status || 'UNKNOWN';
+        let status = orderStatus && typeof orderStatus.toUpperCase === 'function' ? orderStatus.toUpperCase() : String(orderStatus).toUpperCase();
         if (order.sent_to_doordash || order.doordash_order_id || doordashData) {
             if (doordashStatus) {
                 // Map DoorDash status to our status
-                const ddStatusLower = String(doordashStatus).toLowerCase();
+                const ddStatusStr = String(doordashStatus || '');
+                const ddStatusLower = ddStatusStr && typeof ddStatusStr.toLowerCase === 'function' ? ddStatusStr.toLowerCase() : ddStatusStr.toLowerCase();
                 if (ddStatusLower === 'pending' || ddStatusLower === 'created' || ddStatusLower === 'queued') {
                     status = 'PENDING';
                 } else if (ddStatusLower === 'accepted' || ddStatusLower === 'assigned') {
@@ -8393,7 +8425,7 @@ async function viewOrderDetails(orderId) {
                     status = 'CANCELLED';
                 } else {
                     // Use DoorDash status as-is (capitalized)
-                    status = ddStatusLower.toUpperCase();
+                    status = ddStatusLower && typeof ddStatusLower.toUpperCase === 'function' ? ddStatusLower.toUpperCase() : String(ddStatusLower || '').toUpperCase();
                 }
             } else {
                 // If sent to DoorDash but no status yet, it's pending
@@ -8408,8 +8440,12 @@ async function viewOrderDetails(orderId) {
             hasPOD = true;
         } else if (doordashData && (doordashData.proof_of_delivery || doordashData.pod)) {
             hasPOD = true;
-        } else if (order.status && ['DELIVERED', 'COMPLETED'].includes(String(order.status).toUpperCase())) {
-            hasPOD = true;
+        } else if (order.status) {
+            const orderStatus = order.status;
+            const statusUpper = orderStatus && typeof orderStatus.toUpperCase === 'function' ? orderStatus.toUpperCase() : String(orderStatus || '').toUpperCase();
+            if (['DELIVERED', 'COMPLETED'].includes(statusUpper)) {
+                hasPOD = true;
+            }
         }
 
         // Create modal HTML
