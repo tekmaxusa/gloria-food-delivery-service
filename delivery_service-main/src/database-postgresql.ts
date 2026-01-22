@@ -1788,7 +1788,7 @@ export class OrderDatabasePostgreSQL {
              OR (raw_data::text LIKE '%doordash%' OR raw_data::text LIKE '%tracking%')
            )
              AND status NOT IN ('CANCELLED', 'CANCELED', 'DELIVERED', 'COMPLETED')
-           ORDER BY fetched_at DESC
+           ORDER BY COALESCE(fetched_at, created_at, updated_at) DESC
            LIMIT $1`,
           [limit]
         );
