@@ -1589,6 +1589,53 @@ class GloriaFoodWebhookServer {
   private setupApiRoutes(): void {
     console.log(chalk.blue('🔵 Setting up API routes...'));
     
+    // Debug endpoint to check database orders count
+    this.app.get('/api/debug/orders-count', async (req: Request, res: Response) => {
+      try {
+        const client = await (this.database as any).pool?.connect();
+        if (!client) {
+          return res.json({ error: 'Database connection not available' });
+        }
+        
+        try {
+          // Get total count
+          const totalResult = await client.query('SELECT COUNT(*) as total FROM orders');
+          const total = parseInt(totalResult.rows[0]?.total || '0');
+          
+          // Get count by user_id
+          const nullCount = await client.query('SELECT COUNT(*) as total FROM orders WHERE user_id IS NULL');
+          const user1Count = await client.query('SELECT COUNT(*) as total FROM orders WHERE user_id = 1');
+          const otherCount = await client.query('SELECT COUNT(*) as total FROM orders WHERE user_id IS NOT NULL AND user_id != 1');
+          
+          // Get sample orders
+          const sampleOrders = await client.query('SELECT gloriafood_order_id, user_id, status, fetched_at FROM orders ORDER BY fetched_at DESC LIMIT 5');
+          
+          client.release();
+          
+          res.json({
+            success: true,
+            total_orders: total,
+            by_user_id: {
+              null: parseInt(nullCount.rows[0]?.total || '0'),
+              user_1: parseInt(user1Count.rows[0]?.total || '0'),
+              other: parseInt(otherCount.rows[0]?.total || '0')
+            },
+            sample_orders: sampleOrders.rows,
+            query_info: {
+              getAllOrders_with_userId_1: 'Should return ALL orders (no user_id filter)',
+              getAllOrders_with_userId_other: 'Should return only orders with that user_id'
+            }
+          });
+        } catch (dbError: any) {
+          client.release();
+          throw dbError;
+        }
+      } catch (error: any) {
+        console.error('Error in debug endpoint:', error);
+        res.json({ error: error.message });
+      }
+    });
+
     // Get all orders endpoint with filters
     this.app.get('/orders', async (req: Request, res: Response) => {
       try {
