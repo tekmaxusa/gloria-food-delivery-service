@@ -1768,7 +1768,7 @@ class GloriaFoodWebhookServer {
 
         // Create/update merchant
         const merchant = await this.handleAsync(this.database.insertOrUpdateMerchant({
-          user_id: user.userId,
+          user_id: userId,
           store_id,
           merchant_name,
           api_key,
