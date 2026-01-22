@@ -901,6 +901,19 @@ class GloriaFoodWebhookServer {
   }
 
   private setupBodyParsing(): void {
+    // CORS middleware - allow requests from any origin
+    this.app.use((req, res, next) => {
+      res.header('Access-Control-Allow-Origin', '*');
+      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+      res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Session-Id');
+      
+      // Handle preflight requests
+      if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+      }
+      next();
+    });
+    
     // Parse JSON bodies
     this.app.use(express.json());
     // Also parse URL-encoded bodies (some webhooks use this)
