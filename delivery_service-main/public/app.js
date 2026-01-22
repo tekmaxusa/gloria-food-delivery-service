@@ -42,6 +42,32 @@ function clearSession() {
     currentUser = null;
 }
 
+// Helper function to safely parse JSON response (handles HTML/404 pages)
+async function safeJsonParse(response) {
+    const contentType = response.headers.get('content-type') || '';
+    
+    // Check if response is actually JSON
+    if (!contentType.includes('application/json')) {
+        // Try to read as text to see what we got
+        const text = await response.text();
+        if (text.includes('<!DOCTYPE') || text.includes('<html')) {
+            throw new Error(`Server returned HTML instead of JSON (likely 404). Status: ${response.status}`);
+        }
+        throw new Error(`Expected JSON but got ${contentType}. Status: ${response.status}`);
+    }
+    
+    try {
+        return await response.json();
+    } catch (parseError) {
+        // If JSON parsing fails, try to get the text
+        const text = await response.text();
+        if (text.includes('<!DOCTYPE') || text.includes('<html')) {
+            throw new Error(`Server returned HTML instead of JSON (likely 404). Status: ${response.status}`);
+        }
+        throw new Error(`Failed to parse JSON: ${parseError.message}`);
+    }
+}
+
 // Helper function for authenticated fetch requests
 function authenticatedFetch(url, options = {}) {
     const currentSessionId = getSessionId();
@@ -66,8 +92,9 @@ function authenticatedFetch(url, options = {}) {
             return Promise.reject(new Error('Session expired. Please login again.'));
         }
         
-        // Show error notification for other HTTP errors (only if on dashboard)
-        if (!response.ok && response.status >= 400 && response.status !== 401) {
+        // Don't show error notifications for 404s - they're expected if API doesn't exist
+        // Only show for other errors
+        if (!response.ok && response.status >= 400 && response.status !== 401 && response.status !== 404) {
             const errorMsg = `Request failed: ${response.status} ${response.statusText}`;
             // Only show notification if on dashboard
             if (isOnDashboard()) {
@@ -77,14 +104,7 @@ function authenticatedFetch(url, options = {}) {
         
         return response;
     }).catch(error => {
-        // Show network/connection errors (only if on dashboard)
-        if (isOnDashboard()) {
-            if (error.message && (error.message.includes('fetch') || error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
-                showNotification('Connection Error', 'Unable to connect to server. Please check your connection.', 'error');
-            } else if (error.message && !error.message.includes('Session expired')) {
-                showNotification('Error', error.message || 'An unexpected error occurred', 'error');
-            }
-        }
+        // Don't show notifications for network errors - they're expected if server is down
         // Re-throw the error so callers can handle it if needed
         throw error;
     });
@@ -1179,21 +1199,31 @@ async function saveMerchantConnection(event) {
             })
         });
         
-        const data = await response.json();
+        // Safely parse JSON response
+        let data;
+        try {
+            data = await safeJsonParse(response);
+        } catch (parseError) {
+            // If parsing fails, show user-friendly error
+            throw new Error('Unable to connect merchant. The API endpoint may not be available.');
+        }
         
-        if (data.success) {
+        if (data && data.success) {
             showNotification('Success', 'Merchant connected successfully!', 'success');
             closeConnectMerchantModal();
             showDashboardPage();
         } else {
             if (errorDiv) {
-                errorDiv.textContent = data.error || 'Failed to connect merchant';
+                errorDiv.textContent = (data && data.error) || 'Failed to connect merchant. Please check if the API endpoint is available.';
                 errorDiv.style.display = 'block';
             }
         }
     } catch (error) {
+        console.error('Error connecting merchant:', error);
         if (errorDiv) {
-            errorDiv.textContent = `Error: ${error.message || 'Failed to connect merchant'}`;
+            const errorMsg = error.message || 'Failed to connect merchant';
+            // Don't show technical details, just user-friendly message
+            errorDiv.textContent = `Unable to connect merchant. Please check your connection and try again.`;
             errorDiv.style.display = 'block';
         }
     }
@@ -1319,16 +1349,32 @@ async function showIntegrationsPage() {
         return;
     }
 
-    // Load merchants
+    // Load merchants - handle errors gracefully
     let merchants = [];
     try {
-        const response = await authenticatedFetch(`${API_BASE}/merchants`);
-        const data = await response.json();
-        if (data.success && data.merchants) {
-            merchants = data.merchants;
+        const response = await authenticatedFetch(`${API_BASE}/merchants`).catch(() => null);
+        if (response) {
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                try {
+                    const data = await response.json();
+                    if (data && data.success && data.merchants) {
+                        merchants = data.merchants;
+                    }
+                } catch (parseError) {
+                    // If JSON parsing fails, check if it's HTML
+                    const text = await response.text().catch(() => '');
+                    if (text.includes('<!DOCTYPE') || text.includes('<html')) {
+                        console.warn('Merchants API returned HTML instead of JSON (likely 404)');
+                    } else {
+                        console.error('Error parsing merchants JSON:', parseError);
+                    }
+                }
+            }
         }
     } catch (error) {
-        console.error('Error loading merchants:', error);
+        // Silently handle errors - don't block the page
+        console.warn('Merchants API not available, continuing without merchants list');
     }
 
     mainContainer.innerHTML = `
@@ -1446,12 +1492,14 @@ async function showDashboardPage() {
     let merchant = null;
     
     try {
-        const response = await authenticatedFetch(`${API_BASE}/merchants`);
-        const data = await response.json();
-        if (data.success && data.merchants && data.merchants.length > 0) {
-            merchant = data.merchants.find(m => m.is_active) || data.merchants[0];
-            if (merchant) {
-                hasMerchant = true;
+        const response = await authenticatedFetch(`${API_BASE}/merchants`).catch(() => null);
+        if (response) {
+            try {
+                const data = await safeJsonParse(response);
+                if (data && data.success && data.merchants && data.merchants.length > 0) {
+                    merchant = data.merchants.find(m => m.is_active) || data.merchants[0];
+                    if (merchant) {
+                        hasMerchant = true;
                 const name = (merchant.merchant_name || '').toString();
                 const storeId = (merchant.store_id || '').toString();
                 
