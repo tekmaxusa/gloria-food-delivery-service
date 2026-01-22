@@ -5536,28 +5536,20 @@ async function loadOrders() {
             // filterAndDisplayOrders will check if page is active
             filterAndDisplayOrders();
             
-            // CRITICAL: Safety check - re-display if on Orders page
-            // This ensures orders are shown even if there was a timing issue
-            setTimeout(() => {
-                const tbody = document.getElementById('ordersTableBody');
-                if (tbody && allOrders.length > 0) {
-                    console.log('🔄 Safety check: Re-displaying orders to ensure they show up');
-                    filterAndDisplayOrders();
-                }
-            }, 500);
-            
-            // One more check after 1 second to be absolutely sure (only if on Orders page)
+            // Single safety check - only re-display if table is actually empty
             setTimeout(() => {
                 const tbody = document.getElementById('ordersTableBody');
                 if (tbody && allOrders.length > 0) {
                     const currentRows = tbody.querySelectorAll('tr');
-                    // If table is empty but we have orders, force display
-                    if (currentRows.length === 0 || (currentRows.length === 1 && currentRows[0].querySelector('.empty-state'))) {
-                        console.log('🔄 Final safety check: Table appears empty, forcing order display');
+                    // Only re-display if table is empty or shows empty state
+                    const isEmpty = currentRows.length === 0 || 
+                                   (currentRows.length === 1 && currentRows[0].querySelector('.empty-state'));
+                    if (isEmpty) {
+                        console.log('🔄 Safety check: Table appears empty, re-displaying orders');
                         filterAndDisplayOrders();
                     }
                 }
-            }, 1000);
+            }, 500);
         } else {
             console.warn('Orders API response format unexpected:', data);
             allOrders = [];
@@ -6083,7 +6075,14 @@ function getOrderCategory(order) {
 }
 
 // Filter and display orders
+let isDisplayingOrders = false; // Flag to prevent duplicate displays
 function filterAndDisplayOrders() {
+    // Prevent duplicate calls
+    if (isDisplayingOrders) {
+        console.log('⏸️ Already displaying orders, skipping duplicate call');
+        return;
+    }
+    
     console.log(`🔍 Filtering orders: total=${allOrders ? allOrders.length : 0}, filter=${currentStatusFilter || 'none'}`);
     
     // Check if we're on Orders page before trying to display
@@ -6101,6 +6100,7 @@ function filterAndDisplayOrders() {
         return;
     }
     
+    isDisplayingOrders = true; // Set flag to prevent duplicates
     console.log(`📋 Starting filter with ${allOrders.length} order(s)`);
 
     let filtered = [...allOrders];
@@ -6203,6 +6203,11 @@ function filterAndDisplayOrders() {
 
     console.log(`✅ Final filtered orders: ${filtered.length} (will display)`);
     displayOrders(filtered);
+    
+    // Reset flag after a short delay to allow display to complete
+    setTimeout(() => {
+        isDisplayingOrders = false;
+    }, 100);
 }
 
 // Display orders in table (optimized with DocumentFragment for faster rendering)
@@ -6265,6 +6270,9 @@ function displayOrdersToTable(orders, tbody) {
     console.log(`✅ About to display ${orders.length} order(s) - creating rows...`);
 
     try {
+        // Clear table first to prevent duplicates
+        tbody.innerHTML = '';
+        
         // Use DocumentFragment for faster DOM updates
         const fragment = document.createDocumentFragment();
         // Use template element which can hold tr tags without stripping them
@@ -6277,8 +6285,7 @@ function displayOrdersToTable(orders, tbody) {
         // Move all rows to fragment
         fragment.appendChild(template.content);
 
-        // Clear and append in one operation
-        tbody.innerHTML = '';
+        // Append fragment to tbody
         tbody.appendChild(fragment);
         
         // Verify orders were actually added
@@ -7019,11 +7026,13 @@ function checkForNewOrders(orders) {
             loadDashboardData();
         }
         
-        // Update Orders page if on orders page (filterAndDisplayOrders will check if page is active)
+        // Update Orders page if on orders page
+        // Note: Don't call filterAndDisplayOrders here - it will be called by auto-refresh
+        // This prevents duplicate displays
         const ordersTableBody = document.getElementById('ordersTableBody');
         if (ordersTableBody) {
-            console.log('📋 Orders page active - refreshing order display');
-            filterAndDisplayOrders();
+            console.log('📋 Orders page active - orders will refresh on next auto-refresh cycle');
+            // Auto-refresh will handle the display, no need to call filterAndDisplayOrders here
         } else {
             console.log('ℹ️ Orders page not active - orders will display when page is opened');
         }
