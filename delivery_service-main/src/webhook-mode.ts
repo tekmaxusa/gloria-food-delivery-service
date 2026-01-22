@@ -108,14 +108,20 @@ class GloriaFoodWebhookServer {
       this.merchantManager = new MerchantManager(this.database);
     }
     
-    // Setup middleware first (body parsing), then routes
-    console.log(chalk.blue('🔵 Setting up middleware...'));
-    this.setupMiddleware();
-    console.log(chalk.green('✅ Middleware setup complete'));
+    // Setup body parsing middleware first (needed for routes)
+    console.log(chalk.blue('🔵 Setting up body parsing middleware...'));
+    this.setupBodyParsing();
+    console.log(chalk.green('✅ Body parsing middleware setup complete'));
     
+    // Setup API routes BEFORE static file serving
     console.log(chalk.blue('🔵 Setting up routes...'));
     this.setupRoutes();
     console.log(chalk.green('✅ Routes setup complete'));
+    
+    // Setup static file serving AFTER routes (so API routes take precedence)
+    console.log(chalk.blue('🔵 Setting up static file serving...'));
+    this.setupStaticFiles();
+    console.log(chalk.green('✅ Static file serving setup complete'));
     console.log(chalk.green('✅ Server initialization complete\n'));
   }
 
@@ -894,59 +900,7 @@ class GloriaFoodWebhookServer {
     }
   }
 
-  private setupMiddleware(): void {
-    // Serve static files from public directory (for dashboard)
-    // Try dist/public first (production), then public (development)
-    const publicPath = path.join(__dirname, '..', 'public');
-    const distPublicPath = path.join(__dirname, 'public');
-    const fs = require('fs');
-    
-    // Debug: Log what we're checking
-    console.log(chalk.blue('🔵 Checking for public directory...'));
-    console.log(chalk.gray(`   dist/public: ${distPublicPath} (exists: ${fs.existsSync(distPublicPath)})`));
-    console.log(chalk.gray(`   public: ${publicPath} (exists: ${fs.existsSync(publicPath)})`));
-    console.log(chalk.gray(`   __dirname: ${__dirname}`));
-    
-    if (fs.existsSync(distPublicPath)) {
-      console.log(chalk.blue('🔵 Serving static files from: dist/public'));
-      const resolvedPath = path.resolve(distPublicPath);
-      console.log(chalk.gray(`   Resolved path: ${resolvedPath}`));
-      // Add cache-busting for app.js to force browser refresh
-      this.app.use(express.static(resolvedPath, {
-        setHeaders: (res, filePath) => {
-          if (filePath.endsWith('app.js')) {
-            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-            res.setHeader('Pragma', 'no-cache');
-            res.setHeader('Expires', '0');
-          }
-        }
-      }));
-      
-      // Also check if index.html exists
-      const indexPath = path.join(distPublicPath, 'index.html');
-      if (fs.existsSync(indexPath)) {
-        console.log(chalk.green(`   ✅ index.html found at: ${indexPath}`));
-      } else {
-        console.log(chalk.yellow(`   ⚠️  index.html not found at: ${indexPath}`));
-      }
-    } else if (fs.existsSync(publicPath)) {
-      console.log(chalk.blue('🔵 Serving static files from: public'));
-      const resolvedPath = path.resolve(publicPath);
-      console.log(chalk.gray(`   Resolved path: ${resolvedPath}`));
-      // Add cache-busting for app.js to force browser refresh
-      this.app.use(express.static(publicPath, {
-        setHeaders: (res, filePath) => {
-          if (filePath.endsWith('app.js')) {
-            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-            res.setHeader('Pragma', 'no-cache');
-            res.setHeader('Expires', '0');
-          }
-        }
-      }));
-    } else {
-      console.log(chalk.yellow('⚠️  Public directory not found, dashboard may not be available'));
-    }
-    
+  private setupBodyParsing(): void {
     // Parse JSON bodies
     this.app.use(express.json());
     // Also parse URL-encoded bodies (some webhooks use this)
@@ -963,6 +917,108 @@ class GloriaFoodWebhookServer {
         console.log(chalk.gray(`   Body size: ${JSON.stringify(req.body || {}).length} chars`));
         console.log(chalk.gray(`   Body keys: ${Object.keys(req.body || {}).join(', ')}`));
       }
+      next();
+    });
+  }
+
+  private setupStaticFiles(): void {
+    // Serve static files from public directory (for dashboard)
+    // Try dist/public first (production), then public (development)
+    // IMPORTANT: This is called AFTER routes so API routes take precedence
+    const publicPath = path.join(__dirname, '..', 'public');
+    const distPublicPath = path.join(__dirname, 'public');
+    const fs = require('fs');
+    
+    // Debug: Log what we're checking
+    console.log(chalk.blue('🔵 Checking for public directory...'));
+    console.log(chalk.gray(`   dist/public: ${distPublicPath} (exists: ${fs.existsSync(distPublicPath)})`));
+    console.log(chalk.gray(`   public: ${publicPath} (exists: ${fs.existsSync(publicPath)})`));
+    console.log(chalk.gray(`   __dirname: ${__dirname}`));
+    
+    if (fs.existsSync(distPublicPath)) {
+      console.log(chalk.blue('🔵 Serving static files from: dist/public'));
+      const resolvedPath = path.resolve(distPublicPath);
+      console.log(chalk.gray(`   Resolved path: ${resolvedPath}`));
+      // Add cache-busting for app.js to force browser refresh
+      // Only serve static files for non-API paths
+      this.app.use((req, res, next) => {
+        // Skip static file serving for API routes
+        if (req.path.startsWith('/api/')) {
+          return next();
+        }
+        // Use express.static middleware
+        const staticMiddleware = express.static(resolvedPath, {
+          setHeaders: (res, filePath) => {
+            if (filePath.endsWith('app.js')) {
+              res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+              res.setHeader('Pragma', 'no-cache');
+              res.setHeader('Expires', '0');
+            }
+          }
+        });
+        staticMiddleware(req, res, next);
+      });
+      
+      // Also check if index.html exists
+      const indexPath = path.join(distPublicPath, 'index.html');
+      if (fs.existsSync(indexPath)) {
+        console.log(chalk.green(`   ✅ index.html found at: ${indexPath}`));
+      } else {
+        console.log(chalk.yellow(`   ⚠️  index.html not found at: ${indexPath}`));
+      }
+    } else if (fs.existsSync(publicPath)) {
+      console.log(chalk.blue('🔵 Serving static files from: public'));
+      const resolvedPath = path.resolve(publicPath);
+      console.log(chalk.gray(`   Resolved path: ${resolvedPath}`));
+      // Add cache-busting for app.js to force browser refresh
+      // Only serve static files for non-API paths
+      this.app.use((req, res, next) => {
+        // Skip static file serving for API routes
+        if (req.path.startsWith('/api/')) {
+          return next();
+        }
+        // Use express.static middleware
+        const staticMiddleware = express.static(resolvedPath, {
+          setHeaders: (res, filePath) => {
+            if (filePath.endsWith('app.js')) {
+              res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+              res.setHeader('Pragma', 'no-cache');
+              res.setHeader('Expires', '0');
+            }
+          }
+        });
+        staticMiddleware(req, res, next);
+      });
+    } else {
+      console.log(chalk.yellow('⚠️  Public directory not found, dashboard may not be available'));
+    }
+    
+    // Catch-all route for SPA - serve index.html for any non-API GET request that doesn't match a route
+    this.app.get('*', (req: Request, res: Response, next: any) => {
+      // Skip if it's an API route (should have been handled by routes above)
+      if (req.path.startsWith('/api/')) {
+        return res.status(404).json({ success: false, error: 'API endpoint not found' });
+      }
+      
+      // Skip if it's a known API endpoint pattern
+      if (req.path.startsWith('/webhook') || req.path.startsWith('/orders') || 
+          req.path.startsWith('/merchants') || req.path.startsWith('/health') ||
+          req.path.startsWith('/stats') || req.path.startsWith('/summary') ||
+          req.path.startsWith('/doordash')) {
+        return next();
+      }
+      
+      // Try to serve index.html for SPA routing
+      const fs = require('fs');
+      const distPublicPath = path.join(__dirname, 'public', 'index.html');
+      const publicPath = path.join(__dirname, '..', 'public', 'index.html');
+      
+      if (fs.existsSync(distPublicPath)) {
+        return res.sendFile(path.resolve(distPublicPath));
+      } else if (fs.existsSync(publicPath)) {
+        return res.sendFile(path.resolve(publicPath));
+      }
+      
       next();
     });
   }
@@ -2416,26 +2472,52 @@ class GloriaFoodWebhookServer {
       res.json({ success: true });
     });
 
-    this.app.get('/api/auth/me', (req: Request, res: Response) => {
-      const sessionId = req.headers['x-session-id'] as string;
-      if (!sessionId) {
-        return res.status(401).json({ success: false, error: 'Not authenticated' });
+    this.app.get('/api/auth/me', async (req: Request, res: Response) => {
+      try {
+        const sessionId = req.headers['x-session-id'] as string;
+        if (!sessionId) {
+          return res.status(401).json({ success: false, error: 'Not authenticated' });
+        }
+        
+        const session = this.sessions.get(sessionId);
+        if (!session || session.expires < Date.now()) {
+          this.sessions.delete(sessionId);
+          return res.status(401).json({ success: false, error: 'Session expired' });
+        }
+        
+        // Fetch full user details from database
+        const db = this.database as any;
+        if (db.query) {
+          // MySQL/PostgreSQL database
+          const [rows]: any = await db.query(
+            'SELECT id, email, full_name, role FROM users WHERE id = ?',
+            [session.userId]
+          );
+          
+          if (rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'User not found' });
+          }
+          
+          res.json({ 
+            success: true, 
+            user: rows[0],
+            sessionId: sessionId
+          });
+        } else {
+          // SQLite or fallback - return session data only
+          res.json({ 
+            success: true, 
+            user: {
+              id: session.userId,
+              email: session.email
+            },
+            sessionId: sessionId
+          });
+        }
+      } catch (error: any) {
+        console.error('Error in /api/auth/me:', error);
+        res.status(500).json({ success: false, error: error.message });
       }
-      
-      const session = this.sessions.get(sessionId);
-      if (!session || session.expires < Date.now()) {
-        this.sessions.delete(sessionId);
-        return res.status(401).json({ success: false, error: 'Session expired' });
-      }
-      
-      res.json({ 
-        success: true, 
-        user: {
-          id: session.userId,
-          email: session.email
-        },
-        sessionId: sessionId
-      });
     });
 
     // Dashboard stats endpoint
@@ -2857,121 +2939,7 @@ class GloriaFoodWebhookServer {
       }
     });
 
-    // Authentication endpoints
-    this.app.post('/api/auth/signup', async (req: Request, res: Response) => {
-      try {
-        const { email, password, full_name } = req.body;
-        
-        if (!email || !password || !full_name) {
-          return res.status(400).json({ success: false, error: 'Email, password, and full name are required' });
-        }
-
-        // Hash password
-        const hashedPassword = this.hashPassword(password);
-        
-        // Insert user into database
-        const db = this.database as any;
-        if (db.query) {
-          // MySQL database
-          const [rows]: any = await db.query(
-            'INSERT INTO users (email, password, full_name) VALUES (?, ?, ?)',
-            [email, hashedPassword, full_name]
-          );
-          
-          const sessionToken = this.createSession(rows.insertId, email);
-          res.json({ success: true, token: sessionToken, user: { id: rows.insertId, email, full_name } });
-        } else {
-          // SQLite - use a simple approach
-          res.status(500).json({ success: false, error: 'User registration not supported with SQLite. Please use MySQL.' });
-        }
-      } catch (error: any) {
-        if (error.code === 'ER_DUP_ENTRY' || error.message.includes('UNIQUE')) {
-          res.status(400).json({ success: false, error: 'Email already exists' });
-        } else {
-          res.status(500).json({ success: false, error: error.message });
-        }
-      }
-    });
-
-    this.app.post('/api/auth/login', async (req: Request, res: Response) => {
-      try {
-        const { email, password } = req.body;
-        
-        if (!email || !password) {
-          return res.status(400).json({ success: false, error: 'Email and password are required' });
-        }
-
-        const db = this.database as any;
-        if (db.query) {
-          // MySQL database
-          const [rows]: any = await db.query(
-            'SELECT id, email, password, full_name, role FROM users WHERE email = ?',
-            [email]
-          );
-          
-          if (rows.length === 0) {
-            return res.status(401).json({ success: false, error: 'Invalid email or password' });
-          }
-          
-          const user = rows[0];
-          if (!this.verifyPassword(password, user.password)) {
-            return res.status(401).json({ success: false, error: 'Invalid email or password' });
-          }
-          
-          const sessionToken = this.createSession(user.id, user.email);
-          res.json({ 
-            success: true, 
-            token: sessionToken, 
-            user: { id: user.id, email: user.email, full_name: user.full_name, role: user.role } 
-          });
-        } else {
-          res.status(500).json({ success: false, error: 'Login not supported with SQLite. Please use MySQL.' });
-        }
-      } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
-      }
-    });
-
-    this.app.post('/api/auth/logout', (req: Request, res: Response) => {
-      const token = req.headers.authorization?.replace('Bearer ', '');
-      if (token) {
-        this.sessions.delete(token);
-      }
-      res.json({ success: true });
-    });
-
-    this.app.get('/api/auth/me', async (req: Request, res: Response) => {
-      try {
-        const token = req.headers.authorization?.replace('Bearer ', '');
-        if (!token) {
-          return res.status(401).json({ success: false, error: 'Not authenticated' });
-        }
-        
-        const session = this.sessions.get(token);
-        if (!session || session.expires < Date.now()) {
-          this.sessions.delete(token);
-          return res.status(401).json({ success: false, error: 'Session expired' });
-        }
-        
-        const db = this.database as any;
-        if (db.query) {
-          const [rows]: any = await db.query(
-            'SELECT id, email, full_name, role FROM users WHERE id = ?',
-            [session.userId]
-          );
-          
-          if (rows.length === 0) {
-            return res.status(404).json({ success: false, error: 'User not found' });
-          }
-          
-          res.json({ success: true, user: rows[0] });
-        } else {
-          res.status(500).json({ success: false, error: 'Not supported with SQLite' });
-        }
-      } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
-      }
-    });
+    // Duplicate authentication endpoints removed - using the ones defined earlier that use X-Session-Id header
 
     // Get all users endpoint - only show users who share merchants with current user
     this.app.get('/api/auth/users', async (req: Request, res: Response) => {
