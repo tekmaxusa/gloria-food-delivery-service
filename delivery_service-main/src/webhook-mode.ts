@@ -1060,7 +1060,7 @@ class GloriaFoodWebhookServer {
         endpoint: this.config.webhookPath,
         timestamp: new Date().toISOString(),
         instructions: {
-          step1: 'Copy the webhook URL from the Integrations page',
+          step1: 'Copy the webhook URL above',
           step2: 'Go to GloriaFood Admin Dashboard → Settings → Integrations',
           step3: 'Paste the webhook URL in the webhook configuration',
           step4: 'Save and test with a new order'
@@ -1102,16 +1102,16 @@ class GloriaFoodWebhookServer {
           step1: 'Copy the webhook URL above',
           step2: 'Go to GloriaFood Admin Dashboard → Settings → Integrations/Webhooks',
           step3: 'Paste the webhook URL in the webhook configuration field',
-          step4: 'Make sure you have added a merchant in the Integrations page with the correct Store ID',
+          step4: 'Make sure you have added a merchant with the correct Store ID',
           step5: 'Save and test with a new order',
           step6: 'Check server logs to see if orders are being received'
         },
         troubleshooting: {
           no_orders: 'If orders are not received:',
           check1: '1. Verify webhook URL is correctly configured in GloriaFood',
-          check2: '2. Verify Store ID in Integration matches the Store ID from GloriaFood',
+          check2: '2. Verify Store ID matches the Store ID from GloriaFood',
           check3: '3. Check server logs when placing a test order',
-          check4: '4. Make sure merchant is set to "Active" in Integrations page'
+          check4: '4. Make sure merchant is set to "Active"'
         },
         timestamp: new Date().toISOString()
       });
@@ -1200,11 +1200,7 @@ class GloriaFoodWebhookServer {
               // Update last_webhook_received timestamp
               await client.query(`
                 UPDATE merchants 
-                SET last_webhook_received = CURRENT_TIMESTAMP,
-                    integration_status = CASE 
-                      WHEN integration_status = 'error' THEN 'connected'
-                      ELSE integration_status
-                    END
+                SET last_webhook_received = CURRENT_TIMESTAMP
                 WHERE id = $1
               `, [merchantIdFromQuery]);
             }
@@ -1339,13 +1335,13 @@ class GloriaFoodWebhookServer {
               console.log(chalk.green(`   ✅ Found location: ${location.location_name} (store_id: ${location.store_id})`));
             } else {
               console.log(chalk.red(`   ❌ No location found with store_id: ${receivedStoreId}`));
-              console.log(chalk.gray(`   💡 Make sure the Store ID in your Integration matches exactly: ${receivedStoreId}`));
+              console.log(chalk.gray(`   💡 Make sure the Store ID matches exactly: ${receivedStoreId}`));
             }
           } catch (locError: any) {
             console.log(chalk.yellow(`   ⚠️  Could not check location: ${locError.message}`));
           }
           
-          console.log(chalk.gray(`   💡 Add this merchant to Integrations page with Store ID: ${receivedStoreId}`));
+          console.log(chalk.gray(`   💡 Add this merchant with Store ID: ${receivedStoreId}`));
         }
 
         // Determine if this is a new order BEFORE saving
@@ -3818,7 +3814,7 @@ async function main() {
   } else if (!autoLoadMerchants) {
     console.log(chalk.cyan('ℹ️  AUTO_LOAD_MERCHANTS is not set or false'));
     console.log(chalk.cyan('   Merchants will be loaded from database only'));
-    console.log(chalk.cyan('   Add merchants through the Integrations page in the UI\n'));
+    console.log(chalk.cyan('   Add merchants through the UI\n'));
   }
   
   console.log(chalk.green('✅ Environment variables check passed\n'));
