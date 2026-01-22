@@ -901,6 +901,14 @@ class GloriaFoodWebhookServer {
   }
 
   private setupBodyParsing(): void {
+    // Request logging middleware - log all API requests for debugging
+    this.app.use((req, res, next) => {
+      if (req.path.startsWith('/api/')) {
+        console.log(chalk.cyan(`📥 ${req.method} ${req.path} - ${new Date().toISOString()}`));
+      }
+      next();
+    });
+    
     // CORS middleware - allow requests from any origin
     this.app.use((req, res, next) => {
       res.header('Access-Control-Allow-Origin', '*');
@@ -993,10 +1001,14 @@ class GloriaFoodWebhookServer {
     // Catch-all route for SPA - serve index.html for any non-API GET request that doesn't match a route
     // IMPORTANT: This must be the last route registered to avoid interfering with API routes
     // Static files should have been served by express.static above, so this only handles SPA routes
+    // NOTE: This is GET only, so POST/PUT/DELETE API routes are not affected
     this.app.get('*', (req: Request, res: Response, next: any) => {
+      // Only handle GET requests - API POST/PUT/DELETE routes are handled by setupRoutes()
       // Skip if it's an API route (should have been handled by routes above)
-      if (req.path.startsWith('/api/')) {
-        return res.status(404).json({ success: false, error: 'API endpoint not found' });
+      // But only return 404 for GET requests to /api/* that weren't handled
+      if (req.path.startsWith('/api/') && req.method === 'GET') {
+        // Let it fall through to next() to allow API routes to handle it
+        return next();
       }
       
       // Skip if it's a known API endpoint pattern
@@ -2393,6 +2405,13 @@ class GloriaFoodWebhookServer {
 
     // Authentication endpoints
     console.log(chalk.blue('🔵 Registering authentication routes...'));
+    
+    // Test route to verify API routes are working
+    this.app.get('/api/test', (req: Request, res: Response) => {
+      res.json({ success: true, message: 'API routes are working!', timestamp: new Date().toISOString() });
+    });
+    console.log(chalk.green('   ✅ GET /api/test registered (for debugging)'));
+    
     this.app.post('/api/auth/signup', async (req: Request, res: Response) => {
       try {
         // Support both fullName and full_name for compatibility
@@ -2546,6 +2565,13 @@ class GloriaFoodWebhookServer {
       }
     });
     console.log(chalk.green('   ✅ GET /api/auth/me registered'));
+    
+    // Log summary of all authentication routes
+    console.log(chalk.cyan('   📝 Authentication routes summary:'));
+    console.log(chalk.gray('      POST /api/auth/signup ✅'));
+    console.log(chalk.gray('      POST /api/auth/login ✅'));
+    console.log(chalk.gray('      POST /api/auth/logout ✅'));
+    console.log(chalk.gray('      GET  /api/auth/me ✅'));
 
     // Dashboard stats endpoint
     // Manual DoorDash sync endpoint - trigger sync immediately
