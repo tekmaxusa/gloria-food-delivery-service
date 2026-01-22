@@ -1641,11 +1641,12 @@ export class OrderDatabasePostgreSQL {
         const params: any[] = [];
         
         if (userId !== undefined) {
-          // If userId is 1 (default user), also include orders with NULL user_id
-          // This ensures orders saved without a user session are visible
+          // If userId is 1 (default user), show ALL orders (user_id = 1 OR user_id IS NULL OR any user_id)
+          // This ensures all orders are visible for the default user
           if (userId === 1) {
-            query += ' WHERE (user_id = $1 OR user_id IS NULL)';
-            params.push(userId);
+            // Don't filter by user_id at all for default user - show all orders
+            // This handles cases where orders might have NULL, 1, or other user_ids
+            // No WHERE clause needed - we want all orders
           } else {
             query += ' WHERE user_id = $1';
             params.push(userId);
@@ -1676,10 +1677,11 @@ export class OrderDatabasePostgreSQL {
       const params: any[] = [];
       
       if (userId !== undefined) {
-        // If userId is 1 (default user), also include orders with NULL user_id
+        // If userId is 1 (default user), show ALL orders (no user_id filter)
+        // This ensures all orders are visible for the default user
         if (userId === 1) {
-          query += ' AND (user_id = $1 OR user_id IS NULL)';
-          params.push(userId);
+          // Don't filter by user_id - show all recent orders
+          // No additional WHERE clause needed
         } else {
           query += ' AND user_id = $1';
           params.push(userId);
@@ -1705,10 +1707,11 @@ export class OrderDatabasePostgreSQL {
       const params: any[] = [status];
       
       if (userId !== undefined) {
-        // If userId is 1 (default user), also include orders with NULL user_id
+        // If userId is 1 (default user), show ALL orders (no user_id filter)
+        // This ensures all orders are visible for the default user
         if (userId === 1) {
-          query += ' AND (user_id = $2 OR user_id IS NULL)';
-          params.push(userId);
+          // Don't filter by user_id - show all orders with this status
+          // No additional WHERE clause needed
         } else {
           query += ' AND user_id = $2';
           params.push(userId);
