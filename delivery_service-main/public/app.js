@@ -1757,14 +1757,6 @@ function displayDashboardOrders(orders) {
         return;
     }
 
-    // Helper function to escape HTML (if not already defined)
-    const escapeHtml = (text) => {
-        if (!text) return '';
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    };
-    
     tbody.innerHTML = orders.map(order => {
         const orderId = order.gloriafood_order_id || order.id || 'N/A';
         const customerName = order.customer_name || order.client_first_name || order.client_name || 'N/A';
