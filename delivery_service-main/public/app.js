@@ -5487,6 +5487,13 @@ async function loadOrders() {
             console.log(`✅ Loaded ${allOrders.length} order(s) from API`);
             if (allOrders.length > 0) {
                 console.log('Sample order:', allOrders[0]);
+                console.log('All order IDs:', allOrders.map(o => o.gloriafood_order_id || o.id));
+            } else {
+                console.warn('⚠️ WARNING: API returned 0 orders. This could mean:');
+                console.warn('   1. No orders in database');
+                console.warn('   2. Backend query issue');
+                console.warn('   3. Database connection issue');
+                console.warn('   Check backend logs for database query results');
             }
 
             // Pre-process orders: cache parsed raw_data to avoid repeated parsing
@@ -6194,6 +6201,8 @@ function displayOrders(orders) {
         return;
     }
     
+    console.log(`📊 displayOrders called with ${orders ? orders.length : 0} order(s), tbody found: ${!!tbody}`);
+    
     // Found tbody, display orders immediately
     displayOrdersToTable(orders, tbody);
     
@@ -6210,8 +6219,11 @@ function displayOrdersToTable(orders, tbody) {
     }
     
     console.log(`📊 Displaying ${orders ? orders.length : 0} order(s) in table`);
+    console.log(`📋 tbody element:`, tbody);
+    console.log(`📋 Orders array:`, orders);
 
     if (!orders || orders.length === 0) {
+        console.log('⚠️ No orders to display - showing empty state');
         tbody.innerHTML = `
             <tr>
                 <td colspan="14" class="empty-state-cell">
@@ -6233,6 +6245,8 @@ function displayOrdersToTable(orders, tbody) {
         `;
         return;
     }
+    
+    console.log(`✅ About to display ${orders.length} order(s) - creating rows...`);
 
     try {
         // Use DocumentFragment for faster DOM updates

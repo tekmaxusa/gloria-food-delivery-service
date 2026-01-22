@@ -1659,6 +1659,18 @@ export class OrderDatabasePostgreSQL {
         console.log(`🔍 getAllOrders query: ${query}, params: [${params.join(', ')}]`);
         const result = await client.query(query, params);
         console.log(`✅ getAllOrders returned ${result.rows.length} row(s)`);
+        
+        // DEBUG: If 0 results and userId is 1, check total orders in database
+        if (result.rows.length === 0 && userId === 1) {
+          const countResult = await client.query('SELECT COUNT(*) as total FROM orders');
+          console.log(`🔍 DEBUG: Total orders in database: ${countResult.rows[0]?.total || 0}`);
+          
+          // Also check orders with different user_id values
+          const nullUserCount = await client.query('SELECT COUNT(*) as total FROM orders WHERE user_id IS NULL');
+          const user1Count = await client.query('SELECT COUNT(*) as total FROM orders WHERE user_id = 1');
+          const otherUserCount = await client.query('SELECT COUNT(*) as total FROM orders WHERE user_id IS NOT NULL AND user_id != 1');
+          console.log(`🔍 DEBUG: Orders by user_id - NULL: ${nullUserCount.rows[0]?.total || 0}, 1: ${user1Count.rows[0]?.total || 0}, Other: ${otherUserCount.rows[0]?.total || 0}`);
+        }
 
         client.release();
         return result.rows.map(row => this.mapRowToOrder(row));
