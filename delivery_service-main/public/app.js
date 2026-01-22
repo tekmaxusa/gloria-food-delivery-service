@@ -1781,16 +1781,8 @@ function displayDashboardOrders(orders) {
     
     const tbody = document.getElementById('dashboardOrdersTableBody');
     if (!tbody) {
-        // If tbody doesn't exist, wait a bit and retry (dashboard might still be loading)
-        setTimeout(() => {
-            const retryTbody = document.getElementById('dashboardOrdersTableBody');
-            if (retryTbody) {
-                console.log('✅ Found dashboardOrdersTableBody on retry, displaying orders');
-                displayDashboardOrdersToTable(orders, retryTbody);
-            } else {
-                console.warn('⚠️ dashboardOrdersTableBody not found - dashboard might not be fully loaded yet');
-            }
-        }, 200);
+        // If tbody doesn't exist, silently return (not on dashboard or dashboard not loaded)
+        // Don't log warning as this is expected when not on dashboard page
         return;
     }
     
@@ -5537,7 +5529,27 @@ async function loadOrders() {
             console.log(`✅ Loaded ${allOrders.length} order(s) from API`);
             if (allOrders.length > 0) {
                 console.log('Sample order:', allOrders[0]);
-                console.log('All order IDs:', allOrders.map(o => o.gloriafood_order_id || o.id));
+                const orderIds = allOrders.map(o => o.gloriafood_order_id || o.id);
+                console.log('All order IDs:', orderIds);
+                
+                // Check for duplicate order IDs in the response
+                const uniqueIds = new Set(orderIds);
+                if (orderIds.length !== uniqueIds.size) {
+                    console.warn(`⚠️ DUPLICATE ORDER IDs in API response: ${orderIds.length} orders but only ${uniqueIds.size} unique IDs`);
+                    console.warn('⚠️ This might indicate duplicate orders in database or API issue');
+                    // Remove duplicates by keeping only first occurrence of each order ID
+                    const seenIds = new Set();
+                    allOrders = allOrders.filter(order => {
+                        const orderId = order.gloriafood_order_id || order.id;
+                        if (seenIds.has(orderId)) {
+                            console.warn(`⚠️ Removing duplicate order: ${orderId}`);
+                            return false;
+                        }
+                        seenIds.add(orderId);
+                        return true;
+                    });
+                    console.log(`✅ After removing duplicates: ${allOrders.length} unique order(s)`);
+                }
             } else {
                 console.warn('⚠️ WARNING: API returned 0 orders. This could mean:');
                 console.warn('   1. No orders in database');
@@ -7325,8 +7337,14 @@ function startAutoRefresh() {
         loadOrders();
         
         // Also refresh dashboard data if on dashboard page (for stats)
+        // Only refresh if dashboard is actually visible and loaded
         if (isOnDashboard()) {
-            loadDashboardData();
+            const dashboardTbody = document.getElementById('dashboardOrdersTableBody');
+            if (dashboardTbody) {
+                // Dashboard is loaded, refresh data
+                loadDashboardData();
+            }
+            // If dashboard not loaded yet, skip (will load when dashboard is shown)
         }
     }, REFRESH_INTERVAL);
     
