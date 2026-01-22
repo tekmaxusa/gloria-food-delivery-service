@@ -905,6 +905,7 @@ class GloriaFoodWebhookServer {
     this.app.use((req, res, next) => {
       if (req.path.startsWith('/api/')) {
         console.log(chalk.cyan(`📥 ${req.method} ${req.path} - ${new Date().toISOString()}`));
+        console.log(chalk.gray(`   Route will be matched by Express router`));
       }
       next();
     });
@@ -2453,9 +2454,12 @@ class GloriaFoodWebhookServer {
     });
 
     console.log(chalk.green('   ✅ POST /api/auth/signup registered'));
+    
+    // Register login route
     this.app.post('/api/auth/login', async (req: Request, res: Response) => {
       try {
-        console.log(chalk.blue(`📥 Login request received at ${new Date().toISOString()}`));
+        console.log(chalk.blue(`🔵 LOGIN HANDLER CALLED - Login request received at ${new Date().toISOString()}`));
+        console.log(chalk.gray(`   Request body: ${JSON.stringify(req.body)}`));
         const { email, password } = req.body;
         
         if (!email || !password) {
@@ -2508,6 +2512,20 @@ class GloriaFoodWebhookServer {
     });
 
     console.log(chalk.green('   ✅ POST /api/auth/login registered'));
+    console.log(chalk.cyan('   🔍 Verifying route registration...'));
+    
+    // Verify route is actually registered
+    const routes = this.app._router?.stack || [];
+    const loginRoute = routes.find((layer: any) => 
+      layer.route && 
+      layer.route.path === '/api/auth/login' && 
+      layer.route.methods.post
+    );
+    if (loginRoute) {
+      console.log(chalk.green('   ✅ Login route verified in Express router'));
+    } else {
+      console.log(chalk.yellow('   ⚠️  Login route NOT found in Express router!'));
+    }
     this.app.post('/api/auth/logout', (req: Request, res: Response) => {
       const sessionId = req.headers['x-session-id'] as string;
       if (sessionId) {
