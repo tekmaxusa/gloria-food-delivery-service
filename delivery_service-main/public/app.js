@@ -6959,10 +6959,8 @@ function createOrderRow(order) {
 
 // Check for new orders and show notifications
 function checkForNewOrders(orders) {
-    // Only check for new orders if user is on dashboard
-    if (!isOnDashboard()) {
-        return;
-    }
+    // Check for new orders regardless of which page user is on
+    // This ensures orders appear automatically on any page
     
     const currentOrderIds = new Set(orders.map(o => o.gloriafood_order_id || o.id));
 
@@ -6970,6 +6968,7 @@ function checkForNewOrders(orders) {
     if (isInitialLoad) {
         lastOrderIds = new Set(currentOrderIds);
         isInitialLoad = false;
+        console.log(`📋 Initial load: Tracking ${currentOrderIds.size} order(s)`);
         return;
     }
 
@@ -6980,26 +6979,47 @@ function checkForNewOrders(orders) {
     });
 
     if (newOrders.length > 0) {
+        console.log(`🆕 Detected ${newOrders.length} new order(s)!`);
+        
         // Play a short notification sound once per batch of new orders
         playNotificationSound();
 
-        // Add notification for each new order
-        newOrders.forEach(order => {
-            const orderId = order.gloriafood_order_id || order.id;
-            const customerName = order.customer_name || 'Customer';
-            const totalPrice = formatCurrency(order.total_price || 0, order.currency || 'USD');
-            const message = `${customerName} - ${totalPrice}`;
+        // Add notification for each new order (only show on dashboard)
+        if (isOnDashboard()) {
+            newOrders.forEach(order => {
+                const orderId = order.gloriafood_order_id || order.id;
+                const customerName = order.customer_name || 'Customer';
+                const totalPrice = formatCurrency(order.total_price || 0, order.currency || 'USD');
+                const message = `${customerName} - ${totalPrice}`;
 
-            // Show toast pop-up notification only for new notifications (will check if on dashboard internally)
-            // Pass orderId as notificationId to track which notifications have been shown
-            showNotification(`New Order #${orderId}`, message, 'info', `order-${orderId}`);
+                // Show toast pop-up notification
+                showNotification(`New Order #${orderId}`, message, 'info', `order-${orderId}`);
 
-            // Show browser notification (optional - system notification)
-            showBrowserNotification(order);
-        });
-
+                // Show browser notification (optional - system notification)
+                showBrowserNotification(order);
+            });
+        }
+        
+        // CRITICAL: Force UI update immediately when new orders are detected
+        // This ensures orders appear automatically on both Dashboard and Orders page
+        console.log('🔄 New orders detected - forcing UI update...');
+        
+        // Update Dashboard if on dashboard page
+        if (isOnDashboard()) {
+            loadDashboardData();
+        }
+        
+        // Update Orders page if on orders page
+        const ordersTableBody = document.getElementById('ordersTableBody');
+        if (ordersTableBody) {
+            console.log('📋 Orders page active - refreshing order display');
+            filterAndDisplayOrders();
+        }
+        
         // Update last order IDs
         lastOrderIds = currentOrderIds;
+        
+        console.log(`✅ UI updated with ${newOrders.length} new order(s)`);
     } else {
         // Update last order IDs even if no new orders (in case orders were removed)
         lastOrderIds = currentOrderIds;
@@ -7226,9 +7246,29 @@ function startAutoRefresh() {
         clearInterval(autoRefreshInterval);
     }
 
+    console.log('🔄 Starting auto-refresh (every 5 seconds)');
+    
+    // Load orders immediately on start
+    loadOrders();
+    
+    // Also load dashboard data if on dashboard
+    if (isOnDashboard()) {
+        loadDashboardData();
+    }
+
     autoRefreshInterval = setInterval(() => {
+        console.log('🔄 Auto-refresh: Loading orders...');
+        
+        // Always load orders - this will automatically update UI when new orders are detected
         loadOrders();
+        
+        // Also refresh dashboard data if on dashboard page (for stats)
+        if (isOnDashboard()) {
+            loadDashboardData();
+        }
     }, REFRESH_INTERVAL);
+    
+    console.log('✅ Auto-refresh started - orders will update automatically every 5 seconds');
 }
 
 // Stop auto-refresh
