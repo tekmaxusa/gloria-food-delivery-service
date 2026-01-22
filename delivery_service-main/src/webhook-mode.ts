@@ -1652,7 +1652,7 @@ class GloriaFoodWebhookServer {
           console.log(chalk.yellow(`⚠️  /orders: No user session found, using default user ID ${userId}`));
         }
         
-        console.log(chalk.blue(`📥 /orders: Fetching orders for user_id=${userId}, limit=${limit}`));
+        console.log(chalk.blue(`📥 /orders: Fetching orders for user_id=${userId}, limit=${limit}, status=${status || 'all'}`));
         
         let orders;
         if (status) {
@@ -1662,6 +1662,30 @@ class GloriaFoodWebhookServer {
         }
         
         console.log(chalk.blue(`📊 /orders: Found ${orders.length} order(s) from database query`));
+        
+        // CRITICAL DEBUG: If 0 orders, check database directly
+        if (orders.length === 0) {
+          try {
+            const client = await (this.database as any).pool?.connect();
+            if (client) {
+              const countResult = await client.query('SELECT COUNT(*) as total FROM orders');
+              const total = parseInt(countResult.rows[0]?.total || '0');
+              console.log(chalk.yellow(`⚠️  DEBUG: Total orders in database: ${total}`));
+              
+              if (total > 0) {
+                // There are orders but query returned 0 - this is a problem!
+                const sampleQuery = await client.query('SELECT gloriafood_order_id, user_id, status FROM orders ORDER BY fetched_at DESC LIMIT 3');
+                console.log(chalk.yellow(`⚠️  DEBUG: Sample orders in DB:`, sampleQuery.rows);
+                console.log(chalk.yellow(`⚠️  DEBUG: Query should return orders but returned 0 - checking query logic...`));
+              } else {
+                console.log(chalk.yellow(`ℹ️  Database has 0 orders - this is expected if no orders have been received yet`));
+              }
+              client.release();
+            }
+          } catch (debugError: any) {
+            console.error('Error in debug check:', debugError);
+          }
+        }
         
         // If user is logged in (or using default), also include orders with user_id = NULL that match user's merchants
         // This handles backward compatibility for orders saved before user_id was set
