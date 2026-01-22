@@ -1636,6 +1636,14 @@ async function showDashboardPage() {
 
     // Load dashboard data
     loadDashboardData();
+    
+    // Also load orders for the orders page (if user navigates there)
+    // This ensures orders are available when switching to Orders page
+    setTimeout(() => {
+        if (typeof loadOrders === 'function') {
+            loadOrders();
+        }
+    }, 500);
 }
 
 // Load dashboard data
@@ -5434,7 +5442,10 @@ async function loadOrders() {
         if (data && (data.success !== false) && (data.orders || Array.isArray(data))) {
             allOrders = data.orders || (Array.isArray(data) ? data : []);
             
-            console.log(`Loaded ${allOrders.length} order(s) from API`);
+            console.log(`✅ Loaded ${allOrders.length} order(s) from API`);
+            if (allOrders.length > 0) {
+                console.log('Sample order:', allOrders[0]);
+            }
 
             // Pre-process orders: cache parsed raw_data to avoid repeated parsing
             allOrders.forEach(order => {
@@ -5453,6 +5464,7 @@ async function loadOrders() {
             checkForNewOrders(allOrders);
 
             // Filter and display
+            console.log(`Filtering and displaying orders with filter: ${currentStatusFilter || 'none'}`);
             filterAndDisplayOrders();
         } else {
             console.warn('Orders API response format unexpected:', data);
@@ -6060,6 +6072,7 @@ function filterAndDisplayOrders() {
 
     // Apply search filter
     if (searchQuery) {
+        const beforeSearch = filtered.length;
         filtered = filtered.filter(order => {
             const searchableText = [
                 order.gloriafood_order_id || order.id,
@@ -6073,8 +6086,10 @@ function filterAndDisplayOrders() {
             const searchableTextLower = searchableText && typeof searchableText.toLowerCase === 'function' ? searchableText.toLowerCase() : String(searchableText || '').toLowerCase();
             return searchableTextLower.includes(query);
         });
+        console.log(`After search filter: ${filtered.length} orders (was ${beforeSearch})`);
     }
 
+    console.log(`✅ Final filtered orders: ${filtered.length} (will display)`);
     displayOrders(filtered);
 }
 
@@ -6084,8 +6099,11 @@ function displayOrders(orders) {
 
     // Silently return if orders table doesn't exist (we might be on a different page)
     if (!tbody) {
+        console.warn('⚠️ ordersTableBody not found - might be on different page');
         return;
     }
+
+    console.log(`📊 Displaying ${orders ? orders.length : 0} order(s) in table`);
 
     if (!orders || orders.length === 0) {
         tbody.innerHTML = `
