@@ -5551,11 +5551,16 @@ async function loadOrders() {
                     console.log(`✅ After removing duplicates: ${allOrders.length} unique order(s)`);
                 }
             } else {
-                console.warn('⚠️ WARNING: API returned 0 orders. This could mean:');
-                console.warn('   1. No orders in database');
-                console.warn('   2. Backend query issue');
-                console.warn('   3. Database connection issue');
-                console.warn('   Check backend logs for database query results');
+                // Only log warning once per session to avoid spam
+                if (!window._hasLoggedZeroOrdersWarning) {
+                    console.warn('⚠️ WARNING: API returned 0 orders. This could mean:');
+                    console.warn('   1. No orders in database');
+                    console.warn('   2. Backend query issue');
+                    console.warn('   3. Database connection issue');
+                    console.warn('   Check backend logs for database query results');
+                    console.warn('   Use /api/debug/orders-count endpoint to check database');
+                    window._hasLoggedZeroOrdersWarning = true;
+                }
             }
 
             // Pre-process orders: cache parsed raw_data to avoid repeated parsing
