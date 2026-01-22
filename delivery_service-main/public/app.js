@@ -935,10 +935,13 @@ function showOrdersPage() {
     // Re-initialize event listeners
     initializeOrdersPage();
     
-    // Load orders only if not already loading and we have orders to display
-    if (!isLoadingOrders && allOrders.length === 0) {
+    // Always load orders when Orders page is shown (refresh data)
+    console.log('📥 Orders page shown - loading orders...');
+    if (!isLoadingOrders) {
         loadOrders();
     } else {
+        // If already loading, just display what we have
+        console.log('Orders already loading, displaying cached orders');
         filterAndDisplayOrders();
     }
 }
@@ -1682,8 +1685,13 @@ async function loadDashboardData() {
             return;
         }
 
-        // Load recent orders
-        const ordersResponse = await authenticatedFetch(`${API_BASE}/orders?limit=10`).catch(() => null);
+        // Load recent orders for dashboard
+        console.log('📥 Loading orders for dashboard...');
+        const ordersResponse = await authenticatedFetch(`${API_BASE}/orders?limit=10`).catch((error) => {
+            console.warn('Dashboard orders fetch failed:', error);
+            return null;
+        });
+        
         if (ordersResponse && ordersResponse.ok) {
             let ordersData;
             try {
@@ -1697,7 +1705,11 @@ async function loadDashboardData() {
             if (ordersData && ordersData.success !== false) {
                 // Handle both formats: { orders: [...] } or direct array
                 const orders = ordersData.orders || (Array.isArray(ordersData) ? ordersData : []);
-                console.log(`Loaded ${orders.length} order(s) for dashboard`);
+                console.log(`✅ Loaded ${orders.length} order(s) for dashboard`);
+                if (orders.length > 0) {
+                    console.log('Sample dashboard order:', orders[0]);
+                }
+                // Display all orders (up to 10), don't slice if less than 10
                 displayDashboardOrders(orders.slice(0, 10));
             } else {
                 console.warn('Dashboard orders API returned error:', ordersData);
@@ -1725,9 +1737,14 @@ async function loadDashboardData() {
 // Display dashboard orders
 function displayDashboardOrders(orders) {
     const tbody = document.getElementById('dashboardOrdersTableBody');
-    if (!tbody) return;
+    if (!tbody) {
+        console.warn('⚠️ dashboardOrdersTableBody not found - dashboard might not be loaded yet');
+        return;
+    }
 
-    if (orders.length === 0) {
+    console.log(`📊 Displaying ${orders ? orders.length : 0} order(s) in dashboard`);
+
+    if (!orders || orders.length === 0) {
         tbody.innerHTML = `
             <tr>
                 <td colspan="5" class="empty-state-cell">
@@ -1740,15 +1757,35 @@ function displayDashboardOrders(orders) {
         return;
     }
 
-    tbody.innerHTML = orders.map(order => `
-        <tr>
-            <td>#${order.gloriafood_order_id || order.id}</td>
-            <td>${order.customer_name || 'N/A'}</td>
-            <td>${formatCurrency(order.total_price || 0, order.currency || 'USD')}</td>
-            <td><span class="status-badge status-${order.status && typeof order.status.toLowerCase === 'function' ? order.status.toLowerCase() : (order.status || 'n/a')}">${order.status || 'N/A'}</span></td>
-            <td>${formatDate(order.created_at || order.fetched_at)}</td>
-        </tr>
-    `).join('');
+    // Helper function to escape HTML (if not already defined)
+    const escapeHtml = (text) => {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    };
+    
+    tbody.innerHTML = orders.map(order => {
+        const orderId = order.gloriafood_order_id || order.id || 'N/A';
+        const customerName = order.customer_name || order.client_first_name || order.client_name || 'N/A';
+        const totalPrice = order.total_price || order.total || 0;
+        const currency = order.currency || 'USD';
+        const status = order.status || 'N/A';
+        const statusLower = status && typeof status.toLowerCase === 'function' ? status.toLowerCase() : String(status).toLowerCase();
+        const date = order.created_at || order.fetched_at || order.date || new Date().toISOString();
+        
+        return `
+            <tr>
+                <td>#${escapeHtml(String(orderId))}</td>
+                <td>${escapeHtml(String(customerName))}</td>
+                <td>${formatCurrency(totalPrice, currency)}</td>
+                <td><span class="status-badge status-${statusLower}">${escapeHtml(String(status))}</span></td>
+                <td>${formatDate(date)}</td>
+            </tr>
+        `;
+    }).join('');
+    
+    console.log(`✅ Dashboard orders displayed successfully`);
 }
 
 // Show Reports page
