@@ -1782,7 +1782,7 @@ function displayDashboardOrders(orders) {
     const tbody = document.getElementById('dashboardOrdersTableBody');
     if (!tbody) {
         // If tbody doesn't exist, silently return (not on dashboard or dashboard not loaded)
-        // Don't log warning as this is expected when not on dashboard page
+        // This is expected when auto-refresh runs while not on dashboard page
         return;
     }
     
