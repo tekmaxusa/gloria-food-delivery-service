@@ -5992,7 +5992,16 @@ function getOrderCategory(order) {
 
 // Filter and display orders
 function filterAndDisplayOrders() {
+    console.log(`🔍 Filtering orders: total=${allOrders ? allOrders.length : 0}, filter=${currentStatusFilter || 'none'}`);
+    
+    if (!allOrders || allOrders.length === 0) {
+        console.log('No orders to filter');
+        displayOrders([]);
+        return;
+    }
+
     let filtered = [...allOrders];
+    console.log(`Before filtering: ${filtered.length} orders`);
 
     // Apply status filter
     if (currentStatusFilter && currentStatusFilter !== 'current') {
