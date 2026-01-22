@@ -994,6 +994,7 @@ class GloriaFoodWebhookServer {
     }
     
     // Catch-all route for SPA - serve index.html for any non-API GET request that doesn't match a route
+    // IMPORTANT: This must be the last route registered to avoid interfering with API routes
     this.app.get('*', (req: Request, res: Response, next: any) => {
       // Skip if it's an API route (should have been handled by routes above)
       if (req.path.startsWith('/api/')) {
@@ -2385,15 +2386,18 @@ class GloriaFoodWebhookServer {
     });
 
     // Authentication endpoints
+    console.log(chalk.blue('🔵 Registering authentication routes...'));
     this.app.post('/api/auth/signup', async (req: Request, res: Response) => {
       try {
-        const { email, password, fullName } = req.body;
+        // Support both fullName and full_name for compatibility
+        const { email, password, fullName, full_name } = req.body;
+        const fullNameValue = fullName || full_name;
         
-        if (!email || !password || !fullName) {
+        if (!email || !password || !fullNameValue) {
           return res.status(400).json({ success: false, error: 'Email, password, and full name are required' });
         }
         
-        const user = await this.handleAsync(this.database.createUser(email, password, fullName));
+        const user = await this.handleAsync(this.database.createUser(email, password, fullNameValue));
         
         if (!user) {
           return res.status(500).json({ success: false, error: 'Failed to create user' });
@@ -2423,22 +2427,33 @@ class GloriaFoodWebhookServer {
       }
     });
 
+    console.log(chalk.green('   ✅ POST /api/auth/signup registered'));
     this.app.post('/api/auth/login', async (req: Request, res: Response) => {
       try {
+        console.log(chalk.blue(`📥 Login request received at ${new Date().toISOString()}`));
         const { email, password } = req.body;
         
         if (!email || !password) {
+          console.log(chalk.yellow(`   ⚠️  Missing email or password`));
           return res.status(400).json({ success: false, error: 'Email and password are required' });
         }
         
+        console.log(chalk.gray(`   Email: ${email}`));
+        
         const userResult = await this.handleAsync(this.database.verifyPassword(email, password));
         
-        // verifyPassword can return boolean or User
-        if (!userResult || userResult === true || typeof userResult === 'boolean') {
+        console.log(chalk.gray(`   verifyPassword result type: ${typeof userResult}, value: ${userResult ? 'exists' : 'null/false'}`));
+        
+        // verifyPassword can return boolean, null, or User
+        // Check if result is falsy, boolean, or not a User object
+        if (!userResult || userResult === true || typeof userResult === 'boolean' || 
+            (typeof userResult === 'object' && !('id' in userResult && 'email' in userResult))) {
+          console.log(chalk.yellow(`   ⚠️  Invalid credentials for email: ${email}`));
           return res.status(401).json({ success: false, error: 'Invalid email or password' });
         }
         
         const user = userResult as User;
+        console.log(chalk.green(`   ✅ User authenticated: ${user.email} (ID: ${user.id})`));
         
         // Create session
         const sessionId = crypto.randomBytes(32).toString('hex');
@@ -2447,6 +2462,8 @@ class GloriaFoodWebhookServer {
           email: user.email,
           expires: Date.now() + 24 * 60 * 60 * 1000 // 24 hours
         });
+        
+        console.log(chalk.green(`   ✅ Session created: ${sessionId.substring(0, 8)}...`));
         
         res.json({ 
           success: true, 
@@ -2459,11 +2476,13 @@ class GloriaFoodWebhookServer {
           sessionId
         });
       } catch (error: any) {
-        console.error('Login error:', error);
-        res.status(500).json({ success: false, error: 'Failed to login' });
+        console.error(chalk.red(`❌ Login error: ${error.message}`));
+        console.error(chalk.red(`   Stack: ${error.stack}`));
+        res.status(500).json({ success: false, error: error.message || 'Failed to login' });
       }
     });
 
+    console.log(chalk.green('   ✅ POST /api/auth/login registered'));
     this.app.post('/api/auth/logout', (req: Request, res: Response) => {
       const sessionId = req.headers['x-session-id'] as string;
       if (sessionId) {
@@ -2472,6 +2491,7 @@ class GloriaFoodWebhookServer {
       res.json({ success: true });
     });
 
+    console.log(chalk.green('   ✅ POST /api/auth/logout registered'));
     this.app.get('/api/auth/me', async (req: Request, res: Response) => {
       try {
         const sessionId = req.headers['x-session-id'] as string;
@@ -2519,6 +2539,7 @@ class GloriaFoodWebhookServer {
         res.status(500).json({ success: false, error: error.message });
       }
     });
+    console.log(chalk.green('   ✅ GET /api/auth/me registered'));
 
     // Dashboard stats endpoint
     // Manual DoorDash sync endpoint - trigger sync immediately
