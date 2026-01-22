@@ -42,6 +42,7 @@ class GloriaFoodWebhookServer {
   private merchantManager: MerchantManager;
   private sessions: Map<string, { userId: number; email: string; expires: number }> = new Map();
   private doorDashSyncInterval?: NodeJS.Timeout;
+  private doorDashAuthErrorLogged: boolean = false;
 
   constructor(config: WebhookConfig) {
     console.log(chalk.blue.bold('\n🔵 Starting GloriaFood Webhook Server...'));
@@ -784,6 +785,14 @@ class GloriaFoodWebhookServer {
           if (!ddStatus) {
             if (statusError && (statusError.message?.includes('404') || statusError.message?.includes('not found'))) {
               // 404 is expected for orders not in DoorDash - skip silently
+              continue;
+            } else if (statusError && (statusError.message?.includes('401') || statusError.message?.includes('JWT') || statusError.message?.includes('authentication'))) {
+              // 401/JWT errors - log once and skip (don't spam logs)
+              if (!this.doorDashAuthErrorLogged) {
+                console.log(chalk.yellow(`  ⚠️  DoorDash authentication error: ${statusError.message}`));
+                console.log(chalk.yellow(`  💡 Check DOORDASH_DEVELOPER_ID, DOORDASH_KEY_ID, and DOORDASH_SIGNING_SECRET in environment variables`));
+                this.doorDashAuthErrorLogged = true;
+              }
               continue;
             } else if (statusError) {
               console.log(chalk.gray(`  ⚠️  Order #${order.gloriafood_order_id}: Could not get DoorDash status (tried: ${triedIds.join(', ')}): ${statusError.message}`));

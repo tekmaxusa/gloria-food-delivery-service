@@ -102,8 +102,16 @@ export class DoorDashClient {
 
     // Add request interceptor for JWT authentication (DoorDash requires JWT)
     this.axiosInstance.interceptors.request.use((config) => {
-      const jwt = this.getJwt();
-      config.headers.Authorization = `Bearer ${jwt}`;
+      try {
+        const jwt = this.getJwt();
+        if (!jwt || jwt.trim().length === 0) {
+          throw new Error('JWT is null, empty, or whitespace. Check DoorDash credentials (DOORDASH_DEVELOPER_ID, DOORDASH_KEY_ID, DOORDASH_SIGNING_SECRET)');
+        }
+        config.headers.Authorization = `Bearer ${jwt}`;
+      } catch (error: any) {
+        // Re-throw with more context
+        throw new Error(`DoorDash JWT generation failed: ${error.message}. Make sure DOORDASH_DEVELOPER_ID, DOORDASH_KEY_ID, and DOORDASH_SIGNING_SECRET are set in environment variables.`);
+      }
       return config;
     });
   }
