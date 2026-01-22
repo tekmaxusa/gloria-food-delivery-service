@@ -1596,29 +1596,26 @@ class GloriaFoodWebhookServer {
         const status = req.query.status as string | undefined;
         const storeId = req.query.store_id as string | undefined;
         
-        // If no user, return empty orders instead of error
+        // Use user ID 1 if no session (matches merchant behavior)
+        // This ensures orders are visible even without session
+        const userId = user?.userId || 1;
+        
         if (!user) {
-          console.log(chalk.yellow('⚠️  /orders: No user session found, returning empty list'));
-          return res.json({ 
-            success: true, 
-            count: 0, 
-            limit: limit,
-            orders: [] 
-          });
+          console.log(chalk.yellow(`⚠️  /orders: No user session found, using default user ID ${userId}`));
         }
         
         let orders;
         if (status) {
-          orders = await this.handleAsync(this.database.getOrdersByStatus(status, user?.userId));
+          orders = await this.handleAsync(this.database.getOrdersByStatus(status, userId));
         } else {
-          orders = await this.handleAsync(this.database.getAllOrders(limit, user?.userId));
+          orders = await this.handleAsync(this.database.getAllOrders(limit, userId));
         }
         
-        // If user is logged in, also include orders with user_id = NULL that match user's merchants
+        // If user is logged in (or using default), also include orders with user_id = NULL that match user's merchants
         // This handles backward compatibility for orders saved before user_id was set
-        if (user?.userId && orders.length < limit) {
+        if (userId && orders.length < limit) {
           try {
-            const userMerchants = await this.handleAsync(this.database.getAllMerchants(user.userId));
+            const userMerchants = await this.handleAsync(this.database.getAllMerchants(userId));
             const userStoreIds = userMerchants.map(m => m.store_id).filter(Boolean);
             
             if (userStoreIds.length > 0) {
@@ -1720,18 +1717,16 @@ class GloriaFoodWebhookServer {
     this.app.get('/merchants', async (req: Request, res: Response) => {
       try {
         const user = this.getCurrentUser(req);
+        // Use user ID 1 if no session (matches POST /merchants behavior)
+        // This ensures merchants added without session are visible
+        const userId = user?.userId || 1;
+        
         if (!user) {
-          console.log(chalk.yellow('⚠️  /merchants: No user session found, returning empty list'));
-          // Return empty list instead of 401 to prevent UI errors
-          return res.json({ 
-            success: true, 
-            count: 0, 
-            merchants: [] 
-          });
+          console.log(chalk.yellow(`⚠️  /merchants: No user session found, using default user ID ${userId}`));
         }
         
-        // Get merchants for current user only
-        const merchants = await this.handleAsync(this.database.getAllMerchants(user.userId));
+        // Get merchants for current user (or default user ID 1 if no session)
+        const merchants = await this.handleAsync(this.database.getAllMerchants(userId));
         res.json({ 
           success: true, 
           count: merchants.length, 
