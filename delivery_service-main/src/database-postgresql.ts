@@ -1640,17 +1640,16 @@ export class OrderDatabasePostgreSQL {
         let query = 'SELECT * FROM orders';
         const params: any[] = [];
         
-        if (userId !== undefined) {
-          // If userId is 1 (default user), show ALL orders (user_id = 1 OR user_id IS NULL OR any user_id)
-          // This ensures all orders are visible for the default user
-          if (userId === 1) {
-            // Don't filter by user_id at all for default user - show all orders
-            // This handles cases where orders might have NULL, 1, or other user_ids
-            // No WHERE clause needed - we want all orders
-          } else {
-            query += ' WHERE user_id = $1';
-            params.push(userId);
-          }
+        // CRITICAL FIX: Always show ALL orders when userId is 1 or undefined
+        // This ensures all orders are visible regardless of their user_id value
+        if (userId !== undefined && userId !== 1) {
+          // Only filter by user_id if userId is NOT 1 (and not undefined)
+          query += ' WHERE user_id = $1';
+          params.push(userId);
+        } else {
+          // userId is 1 or undefined - show ALL orders (no WHERE clause)
+          // This ensures backward compatibility and shows all orders for default user
+          console.log(`🔍 getAllOrders: userId=${userId} - showing ALL orders (no user_id filter)`);
         }
         
         query += ' ORDER BY fetched_at DESC LIMIT $' + (params.length + 1);
@@ -1688,16 +1687,14 @@ export class OrderDatabasePostgreSQL {
          WHERE fetched_at > NOW() - INTERVAL '${minutes} minutes'`;
       const params: any[] = [];
       
-      if (userId !== undefined) {
-        // If userId is 1 (default user), show ALL orders (no user_id filter)
-        // This ensures all orders are visible for the default user
-        if (userId === 1) {
-          // Don't filter by user_id - show all recent orders
-          // No additional WHERE clause needed
-        } else {
-          query += ' AND user_id = $1';
-          params.push(userId);
-        }
+      // CRITICAL FIX: Always show ALL orders when userId is 1 or undefined
+      if (userId !== undefined && userId !== 1) {
+        // Only filter by user_id if userId is NOT 1
+        query += ' AND user_id = $1';
+        params.push(userId);
+      } else {
+        // userId is 1 or undefined - show ALL recent orders (no user_id filter)
+        console.log(`🔍 getRecentOrders: userId=${userId} - showing ALL recent orders (no user_id filter)`);
       }
       
       query += ' ORDER BY fetched_at DESC';
@@ -1718,16 +1715,14 @@ export class OrderDatabasePostgreSQL {
       let query = 'SELECT * FROM orders WHERE status = $1';
       const params: any[] = [status];
       
-      if (userId !== undefined) {
-        // If userId is 1 (default user), show ALL orders (no user_id filter)
-        // This ensures all orders are visible for the default user
-        if (userId === 1) {
-          // Don't filter by user_id - show all orders with this status
-          // No additional WHERE clause needed
-        } else {
-          query += ' AND user_id = $2';
-          params.push(userId);
-        }
+      // CRITICAL FIX: Always show ALL orders when userId is 1 or undefined
+      if (userId !== undefined && userId !== 1) {
+        // Only filter by user_id if userId is NOT 1
+        query += ' AND user_id = $2';
+        params.push(userId);
+      } else {
+        // userId is 1 or undefined - show ALL orders with this status (no user_id filter)
+        console.log(`🔍 getOrdersByStatus: userId=${userId} - showing ALL orders with status=${status} (no user_id filter)`);
       }
       
       query += ' ORDER BY fetched_at DESC';

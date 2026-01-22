@@ -1701,6 +1701,15 @@ class GloriaFoodWebhookServer {
         
         console.log(chalk.green(`✅ /orders: Returning ${enrichedOrders.length} order(s) to client`));
         
+        // CRITICAL: If 0 orders returned but we expect orders, log warning
+        if (enrichedOrders.length === 0 && userId === 1) {
+          console.log(chalk.yellow(`⚠️  WARNING: Returning 0 orders for userId=1. This might indicate:`));
+          console.log(chalk.yellow(`   1. No orders in database`));
+          console.log(chalk.yellow(`   2. Database connection issue`));
+          console.log(chalk.yellow(`   3. Query execution problem`));
+          console.log(chalk.yellow(`   Check database logs above for query results`));
+        }
+        
         res.json({ 
           success: true, 
           count: enrichedOrders.length, 
