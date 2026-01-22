@@ -1121,6 +1121,9 @@ class GloriaFoodWebhookServer {
     this.app.post(this.config.webhookPath, async (req: Request, res: Response) => {
       console.log(chalk.cyan('\n🔵 WEBHOOK ENDPOINT CALLED'));
       try {
+        // Extract merchant_id from query params (for multi-merchant support)
+        const merchantIdFromQuery = req.query.merchant_id ? parseInt(req.query.merchant_id as string) : null;
+        
         // Extract order data from request first (needed to identify merchant)
         // Try body first, then query params, then raw body
         let orderData = this.extractOrderData(req.body);
@@ -1152,20 +1155,92 @@ class GloriaFoodWebhookServer {
           });
         }
 
-        // Extract API key from request for merchant identification
-        const authHeader = req.headers['authorization'] || req.headers['x-api-key'];
-        const providedKey = authHeader?.toString().replace('Bearer ', '').trim() ||
-                          req.body?.api_key ||
-                          req.query?.token;
-
-        // Try to find merchant by API key first (for per-user merchants)
+        // Try to find merchant by merchant_id from query params first (new multi-merchant approach)
         let merchant = null;
-        if (providedKey) {
+        const client = await (this.database as any).pool?.connect();
+        
+        if (merchantIdFromQuery && client) {
           try {
-            merchant = await this.handleAsync(this.database.getMerchantByApiKey(providedKey));
-          } catch (dbError: any) {
-            console.log(chalk.yellow(`   ⚠️  Could not lookup merchant by API key (database error): ${dbError.message}`));
-            // Continue - we'll try store_id lookup
+            const merchantResult = await client.query(
+              `SELECT * FROM merchants WHERE id = $1 AND is_active = TRUE`,
+              [merchantIdFromQuery]
+            );
+            
+            if (merchantResult.rows.length > 0) {
+              merchant = merchantResult.rows[0];
+              
+              // Decrypt credentials if encrypted
+              if (merchant.credentials_encrypted) {
+                const { EncryptionService } = await import('./encryption-service');
+                const decrypted = EncryptionService.decryptCredentials({
+                  apiKey: merchant.api_key,
+                  apiUrl: merchant.api_url,
+                  masterKey: merchant.master_key,
+                  webhookSecret: merchant.webhook_secret
+                });
+                merchant = { ...merchant, ...decrypted };
+              }
+              
+              console.log(chalk.green(`   ✅ Found merchant by merchant_id: ${merchant.merchant_name} (ID: ${merchant.id})`));
+              
+              // Verify webhook secret if provided
+              const webhookSecret = req.headers['x-webhook-secret'] || req.headers['webhook-secret'] || req.query?.webhook_secret;
+              if (merchant.webhook_secret && webhookSecret) {
+                if (merchant.webhook_secret !== webhookSecret) {
+                  console.log(chalk.red(`   ❌ Webhook secret verification failed`));
+                  client.release();
+                  return res.status(401).json({ 
+                    success: false, 
+                    error: 'Invalid webhook secret' 
+                  });
+                }
+                console.log(chalk.green(`   ✅ Webhook secret verified`));
+              }
+              
+              // Update last_webhook_received timestamp
+              await client.query(`
+                UPDATE merchants 
+                SET last_webhook_received = CURRENT_TIMESTAMP,
+                    integration_status = CASE 
+                      WHEN integration_status = 'error' THEN 'connected'
+                      ELSE integration_status
+                    END
+                WHERE id = $1
+              `, [merchantIdFromQuery]);
+            }
+            client.release();
+          } catch (merchantError: any) {
+            if (client) client.release();
+            console.log(chalk.yellow(`   ⚠️  Could not lookup merchant by ID: ${merchantError.message}`));
+          }
+        }
+
+        // Fallback: Extract API key from request for merchant identification
+        if (!merchant) {
+          const authHeader = req.headers['authorization'] || req.headers['x-api-key'];
+          const providedKey = authHeader?.toString().replace('Bearer ', '').trim() ||
+                            req.body?.api_key ||
+                            req.query?.token;
+
+          if (providedKey) {
+            try {
+              merchant = await this.handleAsync(this.database.getMerchantByApiKey(providedKey));
+              
+              // Decrypt credentials if encrypted
+              if (merchant && (merchant as any).credentials_encrypted) {
+                const { EncryptionService } = await import('./encryption-service');
+                const decrypted = EncryptionService.decryptCredentials({
+                  apiKey: merchant.api_key,
+                  apiUrl: merchant.api_url,
+                  masterKey: merchant.master_key,
+                  webhookSecret: (merchant as any).webhook_secret
+                });
+                merchant = { ...merchant, ...decrypted };
+              }
+            } catch (dbError: any) {
+              console.log(chalk.yellow(`   ⚠️  Could not lookup merchant by API key (database error): ${dbError.message}`));
+              // Continue - we'll try store_id lookup
+            }
           }
         }
         
@@ -1175,6 +1250,18 @@ class GloriaFoodWebhookServer {
           try {
             const user = getCurrentUser(req);
             merchant = await this.merchantManager.findMerchantForOrder(orderData, user?.userId);
+            
+            // Decrypt credentials if encrypted
+            if (merchant && (merchant as any).credentials_encrypted) {
+              const { EncryptionService } = await import('./encryption-service');
+              const decrypted = EncryptionService.decryptCredentials({
+                apiKey: merchant.api_key,
+                apiUrl: merchant.api_url,
+                masterKey: merchant.master_key,
+                webhookSecret: (merchant as any).webhook_secret
+              });
+              merchant = { ...merchant, ...decrypted };
+            }
           } catch (error: any) {
             console.log(chalk.yellow(`   ⚠️  Could not lookup merchant by store_id: ${error.message}`));
             // Continue without merchant
@@ -1648,6 +1735,463 @@ class GloriaFoodWebhookServer {
           webhook_path: this.config.webhookPath
         });
       } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    // ============================================
+    // GLORIAFOOD INTEGRATION ENDPOINTS
+    // ============================================
+
+    // Connect merchant to GloriaFood
+    this.app.post('/api/integrations/gloriafood/connect', async (req: Request, res: Response) => {
+      try {
+        const user = getCurrentUser(req);
+        if (!user) {
+          return res.status(401).json({ success: false, error: 'Not authenticated' });
+        }
+
+        const { merchant_id, api_key, api_url, master_key, store_id, webhook_secret } = req.body;
+
+        if (!merchant_id) {
+          return res.status(400).json({ success: false, error: 'merchant_id is required' });
+        }
+
+        // Get merchant
+        const client = await (this.database as any).pool?.connect();
+        if (!client) {
+          return res.status(500).json({ success: false, error: 'Database connection failed' });
+        }
+
+        try {
+          const merchantResult = await client.query(
+            `SELECT * FROM merchants WHERE id = $1 AND user_id = $2`,
+            [merchant_id, user.userId]
+          );
+
+          if (merchantResult.rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Merchant not found' });
+          }
+
+          const merchant = merchantResult.rows[0];
+
+          // Import encryption service
+          const { EncryptionService } = await import('./encryption-service');
+
+          // Encrypt credentials
+          const encryptedCredentials = EncryptionService.encryptCredentials({
+            apiKey: api_key,
+            apiUrl: api_url,
+            masterKey: master_key,
+            webhookSecret: webhook_secret
+          });
+
+          // Generate webhook URL for this merchant
+          const webhookUrl = process.env.WEBHOOK_URL || 
+                            `${req.protocol}://${req.get('host')}${this.config.webhookPath}?merchant_id=${merchant_id}`;
+
+          // Generate webhook secret if not provided
+          const finalWebhookSecret = webhook_secret || crypto.randomBytes(32).toString('hex');
+
+          // Update merchant with encrypted credentials
+          const updateResult = await client.query(`
+            UPDATE merchants 
+            SET 
+              api_key = $1,
+              api_url = $2,
+              master_key = $3,
+              webhook_secret = $4,
+              webhook_url = $5,
+              integration_status = 'testing',
+              credentials_encrypted = TRUE,
+              updated_at = CURRENT_TIMESTAMP
+            WHERE id = $6 AND user_id = $7
+            RETURNING *
+          `, [
+            encryptedCredentials.apiKey || merchant.api_key,
+            encryptedCredentials.apiUrl || merchant.api_url,
+            encryptedCredentials.masterKey || merchant.master_key,
+            encryptedCredentials.webhookSecret || finalWebhookSecret,
+            webhookUrl,
+            merchant_id,
+            user.userId
+          ]);
+
+          const updatedMerchant = updateResult.rows[0];
+
+          // Test connection if credentials provided
+          let testResult = null;
+          if (api_key && (api_url || store_id)) {
+            try {
+              const { GloriaFoodClient } = await import('./gloriafood-client');
+              const gfClient = new GloriaFoodClient({
+                apiKey: api_key,
+                storeId: store_id || merchant.store_id || '',
+                apiUrl: api_url,
+                masterKey: master_key
+              });
+
+              // Try to fetch orders to test connection
+              await gfClient.fetchOrders(1);
+              
+              // Update status to connected
+              await client.query(`
+                UPDATE merchants 
+                SET integration_status = 'connected',
+                    integration_error = NULL
+                WHERE id = $1
+              `, [merchant_id]);
+
+              testResult = { success: true, message: 'Connection test successful' };
+            } catch (testError: any) {
+              // Update status to error
+              await client.query(`
+                UPDATE merchants 
+                SET integration_status = 'error',
+                    integration_error = $1
+                WHERE id = $2
+              `, [testError.message, merchant_id]);
+
+              testResult = { success: false, error: testError.message };
+            }
+          }
+
+          await this.merchantManager.reload();
+
+          res.json({
+            success: true,
+            merchant: {
+              ...updatedMerchant,
+              webhook_url: webhookUrl,
+              // Don't return encrypted credentials
+              api_key: undefined,
+              master_key: undefined,
+              webhook_secret: undefined
+            },
+            test_result: testResult,
+            instructions: {
+              webhook_url: webhookUrl,
+              steps: [
+                '1. Log in to your GloriaFood dashboard',
+                '2. Go to Settings → Integrations',
+                '3. Click "Add Integration" → "Custom Integration"',
+                '4. Enter the Webhook URL provided above',
+                '5. Enter the Master Key (if required by GloriaFood)',
+                '6. Select order types and statuses to receive',
+                '7. Save the integration'
+              ]
+            }
+          });
+        } finally {
+          client.release();
+        }
+      } catch (error: any) {
+        console.error(chalk.red('Error connecting GloriaFood integration:'), error);
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    // Test GloriaFood connection
+    this.app.post('/api/integrations/gloriafood/test', async (req: Request, res: Response) => {
+      try {
+        const user = getCurrentUser(req);
+        if (!user) {
+          return res.status(401).json({ success: false, error: 'Not authenticated' });
+        }
+
+        const { merchant_id } = req.body;
+
+        if (!merchant_id) {
+          return res.status(400).json({ success: false, error: 'merchant_id is required' });
+        }
+
+        const client = await (this.database as any).pool?.connect();
+        if (!client) {
+          return res.status(500).json({ success: false, error: 'Database connection failed' });
+        }
+
+        try {
+          const merchantResult = await client.query(
+            `SELECT * FROM merchants WHERE id = $1 AND user_id = $2`,
+            [merchant_id, user.userId]
+          );
+
+          if (merchantResult.rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Merchant not found' });
+          }
+
+          const merchant = merchantResult.rows[0];
+
+          if (!merchant.api_key) {
+            return res.status(400).json({ success: false, error: 'Merchant not connected to GloriaFood' });
+          }
+
+          // Decrypt credentials
+          const { EncryptionService } = await import('./encryption-service');
+          const credentials = merchant.credentials_encrypted 
+            ? EncryptionService.decryptCredentials({
+                apiKey: merchant.api_key,
+                apiUrl: merchant.api_url,
+                masterKey: merchant.master_key
+              })
+            : {
+                apiKey: merchant.api_key,
+                apiUrl: merchant.api_url,
+                masterKey: merchant.master_key
+              };
+
+          // Test connection
+          const { GloriaFoodClient } = await import('./gloriafood-client');
+          const gfClient = new GloriaFoodClient({
+            apiKey: credentials.apiKey || '',
+            storeId: merchant.store_id || '',
+            apiUrl: credentials.apiUrl,
+            masterKey: credentials.masterKey
+          });
+
+          // Try to fetch orders
+          const orders = await gfClient.fetchOrders(1);
+          
+          // Update status
+          await client.query(`
+            UPDATE merchants 
+            SET integration_status = 'connected',
+                integration_error = NULL
+            WHERE id = $1
+          `, [merchant_id]);
+
+          res.json({
+            success: true,
+            message: 'Connection test successful',
+            orders_found: orders.length,
+            merchant_status: 'connected'
+          });
+        } catch (testError: any) {
+          // Update status to error
+          await client.query(`
+            UPDATE merchants 
+            SET integration_status = 'error',
+                integration_error = $1
+            WHERE id = $2
+          `, [testError.message, merchant_id]);
+
+          res.status(400).json({
+            success: false,
+            error: testError.message,
+            merchant_status: 'error'
+          });
+        } finally {
+          client.release();
+        }
+      } catch (error: any) {
+        console.error(chalk.red('Error testing GloriaFood connection:'), error);
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    // Get integration status
+    this.app.get('/api/integrations/gloriafood/:merchantId', async (req: Request, res: Response) => {
+      try {
+        const user = getCurrentUser(req);
+        if (!user) {
+          return res.status(401).json({ success: false, error: 'Not authenticated' });
+        }
+
+        const merchantId = parseInt(req.params.merchantId);
+        if (isNaN(merchantId)) {
+          return res.status(400).json({ success: false, error: 'Invalid merchant ID' });
+        }
+
+        const merchant = await this.handleAsync(this.database.getAllMerchants(user.userId))
+          .then(merchants => merchants.find(m => m.id === merchantId));
+
+        if (!merchant) {
+          return res.status(404).json({ success: false, error: 'Merchant not found' });
+        }
+
+        // Get webhook URL
+        const webhookUrl = process.env.WEBHOOK_URL || 
+                          `${req.protocol}://${req.get('host')}${this.config.webhookPath}?merchant_id=${merchantId}`;
+
+        res.json({
+          success: true,
+          integration: {
+            merchant_id: merchant.id,
+            merchant_name: merchant.merchant_name,
+            integration_status: merchant.integration_status || 'disconnected',
+            webhook_url: webhookUrl,
+            last_webhook_received: merchant.last_webhook_received,
+            integration_error: merchant.integration_error,
+            has_credentials: !!(merchant.api_key || merchant.master_key),
+            // Don't return actual credentials
+            credentials_configured: {
+              api_key: !!merchant.api_key,
+              api_url: !!merchant.api_url,
+              master_key: !!merchant.master_key,
+              webhook_secret: !!merchant.webhook_secret
+            }
+          }
+        });
+      } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    // Update integration
+    this.app.put('/api/integrations/gloriafood/:merchantId', async (req: Request, res: Response) => {
+      try {
+        const user = getCurrentUser(req);
+        if (!user) {
+          return res.status(401).json({ success: false, error: 'Not authenticated' });
+        }
+
+        const merchantId = parseInt(req.params.merchantId);
+        if (isNaN(merchantId)) {
+          return res.status(400).json({ success: false, error: 'Invalid merchant ID' });
+        }
+
+        const { api_key, api_url, master_key, webhook_secret } = req.body;
+
+        const client = await (this.database as any).pool?.connect();
+        if (!client) {
+          return res.status(500).json({ success: false, error: 'Database connection failed' });
+        }
+
+        try {
+          // Verify merchant belongs to user
+          const merchantResult = await client.query(
+            `SELECT * FROM merchants WHERE id = $1 AND user_id = $2`,
+            [merchantId, user.userId]
+          );
+
+          if (merchantResult.rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Merchant not found' });
+          }
+
+          const merchant = merchantResult.rows[0];
+          const { EncryptionService } = await import('./encryption-service');
+
+          // Build update query dynamically
+          const updates: string[] = [];
+          const values: any[] = [];
+          let paramIndex = 1;
+
+          if (api_key !== undefined) {
+            const encrypted = EncryptionService.encrypt(api_key);
+            updates.push(`api_key = $${paramIndex++}`);
+            values.push(encrypted);
+          }
+          if (api_url !== undefined) {
+            const encrypted = api_url ? EncryptionService.encrypt(api_url) : null;
+            updates.push(`api_url = $${paramIndex++}`);
+            values.push(encrypted);
+          }
+          if (master_key !== undefined) {
+            const encrypted = master_key ? EncryptionService.encrypt(master_key) : null;
+            updates.push(`master_key = $${paramIndex++}`);
+            values.push(encrypted);
+          }
+          if (webhook_secret !== undefined) {
+            const encrypted = webhook_secret ? EncryptionService.encrypt(webhook_secret) : null;
+            updates.push(`webhook_secret = $${paramIndex++}`);
+            values.push(encrypted);
+          }
+
+          if (updates.length === 0) {
+            return res.status(400).json({ success: false, error: 'No fields to update' });
+          }
+
+          updates.push(`credentials_encrypted = TRUE`);
+          updates.push(`updated_at = CURRENT_TIMESTAMP`);
+
+          values.push(merchantId, user.userId);
+
+          const updateQuery = `
+            UPDATE merchants 
+            SET ${updates.join(', ')}
+            WHERE id = $${paramIndex++} AND user_id = $${paramIndex}
+            RETURNING *
+          `;
+
+          const updateResult = await client.query(updateQuery, values);
+
+          await this.merchantManager.reload();
+
+          res.json({
+            success: true,
+            merchant: {
+              ...updateResult.rows[0],
+              // Don't return encrypted credentials
+              api_key: undefined,
+              master_key: undefined,
+              webhook_secret: undefined
+            }
+          });
+        } finally {
+          client.release();
+        }
+      } catch (error: any) {
+        console.error(chalk.red('Error updating GloriaFood integration:'), error);
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    // Disconnect integration
+    this.app.delete('/api/integrations/gloriafood/:merchantId', async (req: Request, res: Response) => {
+      try {
+        const user = getCurrentUser(req);
+        if (!user) {
+          return res.status(401).json({ success: false, error: 'Not authenticated' });
+        }
+
+        const merchantId = parseInt(req.params.merchantId);
+        if (isNaN(merchantId)) {
+          return res.status(400).json({ success: false, error: 'Invalid merchant ID' });
+        }
+
+        const client = await (this.database as any).pool?.connect();
+        if (!client) {
+          return res.status(500).json({ success: false, error: 'Database connection failed' });
+        }
+
+        try {
+          // Verify merchant belongs to user
+          const merchantResult = await client.query(
+            `SELECT * FROM merchants WHERE id = $1 AND user_id = $2`,
+            [merchantId, user.userId]
+          );
+
+          if (merchantResult.rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Merchant not found' });
+          }
+
+          // Clear integration data (but keep merchant)
+          await client.query(`
+            UPDATE merchants 
+            SET 
+              api_key = NULL,
+              api_url = NULL,
+              master_key = NULL,
+              webhook_secret = NULL,
+              webhook_url = NULL,
+              integration_status = 'disconnected',
+              integration_error = NULL,
+              credentials_encrypted = FALSE,
+              updated_at = CURRENT_TIMESTAMP
+            WHERE id = $1 AND user_id = $2
+          `, [merchantId, user.userId]);
+
+          await this.merchantManager.reload();
+
+          res.json({
+            success: true,
+            message: 'GloriaFood integration disconnected successfully'
+          });
+        } finally {
+          client.release();
+        }
+      } catch (error: any) {
+        console.error(chalk.red('Error disconnecting GloriaFood integration:'), error);
         res.status(500).json({ success: false, error: error.message });
       }
     });

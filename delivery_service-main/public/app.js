@@ -913,103 +913,101 @@ function showDispatchPage() {
 // Show Integrations page
 function showIntegrationsPage() {
     const mainContainer = document.querySelector('.main-container');
-    const webhookUrl = `${API_BASE}/webhook`;
     
     mainContainer.innerHTML = `
+        <div class="page-header">
+            <h1>Integrations</h1>
+            <p class="page-description">Connect your GloriaFood merchants to receive orders automatically via webhooks</p>
+        </div>
+        
         <div class="integrations-container">
-            <!-- Left Sidebar -->
-            <div class="integrations-sidebar">
-                <h2 class="integrations-title">Integrations</h2>
-                <p class="integrations-description">
-                    Connect your online ordering or POS to automatically sync your orders with the system.
-                </p>
-                
-                <div class="integrations-actions">
-                    <button id="addIntegrationBtn" class="btn-primary" style="width: 100%;">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px; vertical-align: middle;">
-                            <line x1="12" y1="5" x2="12" y2="19"></line>
-                            <line x1="5" y1="12" x2="19" y2="12"></line>
-                        </svg>
-                        Add Gloria Food Integration
-                    </button>
-                </div>
-                
-                <div class="integrations-stats-section">
-                    <h3 class="integrations-stats-title">Current Integrations</h3>
-                    <div id="integrationStats" class="integrations-stats">
-                        <div class="stat-item">All: <strong id="totalIntegrations">0</strong></div>
-                        <div class="stat-item">Online Ordering: <strong id="onlineOrderingCount">0</strong></div>
-                        <div class="stat-item">Active: <strong id="activeCount">0</strong></div>
-                    </div>
-                </div>
+            <div class="integrations-header">
+                <h2>GloriaFood Integrations</h2>
+                <button class="btn-primary" onclick="openGloriaFoodIntegrationModal()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px; vertical-align: middle;">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    Connect New Merchant
+                </button>
             </div>
             
-            <!-- Main Content -->
-            <div class="integrations-content">
-                <!-- Direct Integrations Section -->
-                <div class="integrations-card">
-                    <h3 class="card-title">Direct integrations</h3>
-                    <p class="card-description">
-                        Please use your API key to establish a direct integration with our integration partners.
-                    </p>
-                    
-                    <div id="merchantApiKeys" class="merchant-keys-container">
-                        <!-- Merchant API keys will be loaded here -->
-                    </div>
+            <div id="merchantApiKeys" class="merchants-grid">
+                <div class="loading-spinner" style="text-align: center; padding: 40px;">
+                    <p>Loading integrations...</p>
                 </div>
-                
-                <!-- Webhook Setup Section -->
-                <div class="integrations-card">
-                    <h3 class="card-title">Webhook Setup</h3>
-                    <p class="card-description">
-                        Provide your webhook URL to receive order status updates from GloriaFood. Configure this URL in your GloriaFood dashboard.
-                    </p>
-                    
-                    <div class="webhook-input-group">
-                        <label class="input-label">Webhook URL:</label>
-                        <div class="input-with-button">
-                            <input type="text" id="webhookUrl" value="${webhookUrl}" readonly class="webhook-input">
-                            <button id="copyWebhookBtn" class="btn-secondary copy-btn">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="copy-icon">
-                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                                </svg>
-                                Copy URL
-                            </button>
+            </div>
+        </div>
+        
+        <!-- GloriaFood Integration Modal -->
+        <div id="gloriaFoodModal" class="modal" style="display: none;">
+            <div class="modal-content" style="max-width: 600px;">
+                <div class="modal-header">
+                    <h2>Connect GloriaFood Merchant</h2>
+                    <button class="modal-close" onclick="closeGloriaFoodIntegrationModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="gloriaFoodIntegrationForm">
+                        <div class="form-group">
+                            <label for="integrationMerchantSelect">Select Merchant</label>
+                            <select id="integrationMerchantSelect" required>
+                                <option value="">-- Select a merchant --</option>
+                            </select>
+                            <small class="form-help">Select an existing merchant or create a new one</small>
                         </div>
-                    </div>
+                        
+                        <div class="form-group">
+                            <label for="gloriaFoodApiKey">API Key *</label>
+                            <input type="password" id="gloriaFoodApiKey" placeholder="Enter your GloriaFood API Key" required>
+                            <small class="form-help">Found in GloriaFood Dashboard → Settings → API</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="gloriaFoodApiUrl">API URL</label>
+                            <input type="url" id="gloriaFoodApiUrl" placeholder="https://your-restaurant-domain.com/api">
+                            <small class="form-help">Your restaurant's custom API URL (if applicable)</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="gloriaFoodMasterKey">Master Key</label>
+                            <input type="password" id="gloriaFoodMasterKey" placeholder="Enter Master Key (if required)">
+                            <small class="form-help">Master key for webhook authentication (optional)</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="gloriaFoodStoreId">Store ID</label>
+                            <input type="text" id="gloriaFoodStoreId" placeholder="Enter Store ID">
+                            <small class="form-help">Your GloriaFood Store/Restaurant ID</small>
+                        </div>
+                        
+                        <div id="integrationFormError" class="error-message" style="display: none;"></div>
+                        
+                        <div class="modal-actions">
+                            <button type="button" class="btn-secondary" onclick="closeGloriaFoodIntegrationModal()">Cancel</button>
+                            <button type="submit" class="btn-primary">Connect & Test</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Integration Status Modal -->
+        <div id="integrationStatusModal" class="modal" style="display: none;">
+            <div class="modal-content" style="max-width: 700px;">
+                <div class="modal-header">
+                    <h2>Integration Status</h2>
+                    <button class="modal-close" onclick="closeIntegrationStatusModal()">&times;</button>
+                </div>
+                <div class="modal-body" id="integrationStatusContent">
+                    <!-- Content will be loaded dynamically -->
                 </div>
             </div>
         </div>
     `;
     
-    // Initialize event listeners
-    initializeIntegrationsPage();
+    // Load integrations after rendering
     loadIntegrations();
-    
-    // Copy webhook URL button
-    const copyWebhookBtn = document.getElementById('copyWebhookBtn');
-    if (copyWebhookBtn) {
-        copyWebhookBtn.addEventListener('click', () => {
-            const webhookInput = document.getElementById('webhookUrl');
-            if (webhookInput) {
-                webhookInput.select();
-                document.execCommand('copy');
-                showNotification('Success', 'Webhook URL copied to clipboard!', 'success');
-            }
-        });
-    }
-    
-    // Load webhook URL from API
-    loadWebhookUrl();
-    
-    // Add Integration button
-    const addIntegrationBtn = document.getElementById('addIntegrationBtn');
-    if (addIntegrationBtn) {
-        addIntegrationBtn.addEventListener('click', () => {
-            openGloriaFoodIntegrationModal();
-        });
-    }
+    initializeIntegrationsPage();
 }
 
 // Show Merchants page (legacy - redirects to integrations)
@@ -1671,6 +1669,7 @@ async function saveGloriaFoodIntegration(event, merchantId = null, locationId = 
     }
     
     try {
+        // First, create/update merchant and location
         const merchantPayload = {
             merchant_name: merchantName,
             store_id: storeId,
@@ -1683,6 +1682,8 @@ async function saveGloriaFoodIntegration(event, merchantId = null, locationId = 
         };
         
         let merchantResponse;
+        let createdMerchantId = merchantId;
+        
         if (isEdit) {
             // Update existing merchant
             merchantResponse = await authenticatedFetch(`${API_BASE}/merchants/${merchantId}`, {
@@ -1710,6 +1711,8 @@ async function saveGloriaFoodIntegration(event, merchantId = null, locationId = 
             showNotification('Error', merchantData.error || `Failed to ${isEdit ? 'update' : 'create'} integration`, 'error');
             return;
         }
+        
+        createdMerchantId = merchantData.merchant?.id || merchantId;
         
         // If editing and we have a location ID, also update the location
         if (isEdit && actualLocationId) {
@@ -1741,18 +1744,174 @@ async function saveGloriaFoodIntegration(event, merchantId = null, locationId = 
             }
         }
         
-        showNotification(
-            'Success', 
-            `Integration ${isEdit ? 'updated' : 'created'} successfully! Orders will now be received automatically.`,
-            'success'
-        );
-        closeGloriaFoodIntegrationModal();
-        loadIntegrations(); // Reload the integrations list
+        // Now connect to GloriaFood using the new integration endpoint
+        if (createdMerchantId && (apiKey || masterKey)) {
+            try {
+                const connectResponse = await authenticatedFetch(`${API_BASE}/api/integrations/gloriafood/connect`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        merchant_id: createdMerchantId,
+                        api_key: apiKey || undefined,
+                        api_url: apiUrl || undefined,
+                        master_key: masterKey || undefined,
+                        store_id: storeId
+                    })
+                });
+                
+                const connectData = await connectResponse.json();
+                
+                if (connectData.success) {
+                    // Show integration status modal with instructions
+                    showIntegrationStatus(createdMerchantId, connectData);
+                    closeGloriaFoodIntegrationModal();
+                    loadIntegrations();
+                } else {
+                    showNotification('Warning', `Merchant saved but connection test failed: ${connectData.error}`, 'warning');
+                    closeGloriaFoodIntegrationModal();
+                    loadIntegrations();
+                }
+            } catch (connectError) {
+                console.warn('Error connecting to GloriaFood:', connectError);
+                showNotification('Warning', 'Merchant saved but could not test connection. You can test it later from the integrations page.', 'warning');
+                closeGloriaFoodIntegrationModal();
+                loadIntegrations();
+            }
+        } else {
+            showNotification(
+                'Success', 
+                `Integration ${isEdit ? 'updated' : 'created'} successfully! Add API credentials to connect to GloriaFood.`,
+                'success'
+            );
+            closeGloriaFoodIntegrationModal();
+            loadIntegrations();
+        }
     } catch (error) {
         console.error('Error saving integration:', error);
         showNotification('Error', `Error ${isEdit ? 'updating' : 'creating'} integration: ${error.message}`, 'error');
     }
 }
+
+// Test GloriaFood connection
+async function testGloriaFoodConnection(merchantId) {
+    try {
+        showNotification('Testing', 'Testing connection to GloriaFood...', 'info');
+        
+        const response = await authenticatedFetch(`${API_BASE}/api/integrations/gloriafood/test`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ merchant_id: merchantId })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showNotification('Success', 'Connection test successful! Integration is working.', 'success');
+            loadIntegrations(); // Reload to show updated status
+        } else {
+            showNotification('Error', `Connection test failed: ${data.error}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error testing connection:', error);
+        showNotification('Error', `Error testing connection: ${error.message}`, 'error');
+    }
+}
+
+// Show integration status modal
+function showIntegrationStatus(merchantId, integrationData) {
+    const modal = document.getElementById('integrationStatusModal');
+    if (!modal) return;
+    
+    const status = integrationData.integration?.integration_status || integrationData.merchant?.integration_status || 'unknown';
+    const webhookUrl = integrationData.merchant?.webhook_url || integrationData.instructions?.webhook_url || '';
+    const testResult = integrationData.test_result;
+    
+    document.getElementById('integrationStatusContent').innerHTML = `
+        <div style="margin-bottom: 24px;">
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+                <span class="status-badge status-${status}" style="font-size: 14px; padding: 6px 12px;">
+                    ${status.charAt(0).toUpperCase() + status.slice(1)}
+                </span>
+                ${testResult ? (
+                    testResult.success ? 
+                        '<span style="color: #10b981;">✓ Connection test successful</span>' :
+                        '<span style="color: #ef4444;">✗ Connection test failed</span>'
+                ) : ''}
+            </div>
+            
+            ${testResult && !testResult.success ? `
+                <div style="padding: 12px; background: #fef2f2; border-radius: 8px; margin-bottom: 16px; border-left: 4px solid #ef4444;">
+                    <strong style="color: #991b1b;">Error:</strong>
+                    <p style="margin: 8px 0 0 0; color: #7f1d1d;">${escapeHtml(testResult.error || 'Unknown error')}</p>
+                </div>
+            ` : ''}
+        </div>
+        
+        ${webhookUrl ? `
+            <div style="margin-bottom: 24px;">
+                <label style="display: block; margin-bottom: 8px; font-weight: 600;">Webhook URL</label>
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" id="webhookUrlDisplay" readonly value="${escapeHtml(webhookUrl)}" 
+                           style="flex: 1; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc;">
+                    <button onclick="copyWebhookUrl()" class="btn-secondary" style="padding: 8px 16px;">
+                        Copy
+                    </button>
+                </div>
+                <small style="color: #64748b; font-size: 12px; margin-top: 4px; display: block;">
+                    Copy this URL and configure it in your GloriaFood dashboard
+                </small>
+            </div>
+        ` : ''}
+        
+        ${integrationData.instructions?.steps ? `
+            <div style="margin-bottom: 24px; padding: 16px; background: #f0f9ff; border-radius: 8px; border-left: 4px solid #3b82f6;">
+                <h4 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #1e40af;">
+                    📋 Setup Instructions:
+                </h4>
+                <ol style="margin: 0; padding-left: 20px; font-size: 13px; color: #1e40af; line-height: 1.8;">
+                    ${integrationData.instructions.steps.map(step => `<li>${escapeHtml(step)}</li>`).join('')}
+                </ol>
+            </div>
+        ` : ''}
+        
+        <div class="modal-actions" style="display: flex; gap: 12px; justify-content: flex-end;">
+            <button onclick="testGloriaFoodConnection(${merchantId})" class="btn-secondary">
+                Test Connection
+            </button>
+            <button onclick="closeIntegrationStatusModal()" class="btn-primary">
+                Done
+            </button>
+        </div>
+    `;
+    
+    modal.style.display = 'block';
+}
+
+function closeIntegrationStatusModal() {
+    const modal = document.getElementById('integrationStatusModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+function copyWebhookUrl() {
+    const input = document.getElementById('webhookUrlDisplay');
+    if (input) {
+        input.select();
+        document.execCommand('copy');
+        showNotification('Success', 'Webhook URL copied to clipboard!', 'success');
+    }
+}
+
+// Make functions globally available
+window.testGloriaFoodConnection = testGloriaFoodConnection;
+window.showIntegrationStatus = showIntegrationStatus;
+window.closeIntegrationStatusModal = closeIntegrationStatusModal;
+window.copyWebhookUrl = copyWebhookUrl;
 
 // Make functions globally available
 window.openGloriaFoodIntegrationModal = openGloriaFoodIntegrationModal;

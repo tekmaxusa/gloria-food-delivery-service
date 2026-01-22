@@ -508,6 +508,31 @@ export class OrderDatabasePostgreSQL {
             ALTER TABLE merchants 
             ADD COLUMN IF NOT EXISTS user_id INTEGER
           `);
+          // Add webhook and integration fields
+          await client.query(`
+            ALTER TABLE merchants 
+            ADD COLUMN IF NOT EXISTS webhook_secret VARCHAR(500)
+          `);
+          await client.query(`
+            ALTER TABLE merchants 
+            ADD COLUMN IF NOT EXISTS webhook_url TEXT
+          `);
+          await client.query(`
+            ALTER TABLE merchants 
+            ADD COLUMN IF NOT EXISTS integration_status VARCHAR(50) DEFAULT 'disconnected'
+          `);
+          await client.query(`
+            ALTER TABLE merchants 
+            ADD COLUMN IF NOT EXISTS last_webhook_received TIMESTAMP
+          `);
+          await client.query(`
+            ALTER TABLE merchants 
+            ADD COLUMN IF NOT EXISTS credentials_encrypted BOOLEAN DEFAULT FALSE
+          `);
+          await client.query(`
+            ALTER TABLE merchants 
+            ADD COLUMN IF NOT EXISTS integration_error TEXT
+          `);
           // Remove old unique constraint on store_id and add new partial unique indexes
           // Allow NULL user_id for backward compatibility
           try {

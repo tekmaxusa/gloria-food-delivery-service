@@ -37,6 +37,12 @@ export interface Merchant {
   api_key?: string;
   api_url?: string;
   master_key?: string;
+  webhook_secret?: string;  // Secret for verifying webhook requests
+  webhook_url?: string;  // URL where GloriaFood should send webhooks
+  integration_status?: 'connected' | 'disconnected' | 'error' | 'testing';  // Integration status
+  last_webhook_received?: string;  // Timestamp of last webhook received
+  credentials_encrypted?: boolean;  // Whether credentials are encrypted
+  integration_error?: string;  // Error message if integration failed
   is_active: number | boolean;
   locations?: Location[];  // Multiple locations per merchant
   // Backward compatibility fields (populated from first location)
