@@ -925,11 +925,12 @@ function showIntegrationsPage() {
                 </p>
                 
                 <div class="integrations-actions">
-                    <button id="apiCredentialsBtn" class="btn-primary integrations-btn">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path>
+                    <button id="addIntegrationBtn" class="btn-primary" style="width: 100%;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px; vertical-align: middle;">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
                         </svg>
-                        API Credentials
+                        Add Gloria Food Integration
                     </button>
                 </div>
                 
@@ -980,74 +981,6 @@ function showIntegrationsPage() {
                 </div>
             </div>
         </div>
-        
-        <!-- Merchant Modal (for adding and editing) -->
-        <div id="merchantModal" class="modal hidden">
-            <div class="modal-content merchant-modal-content">
-                <div class="modal-header">
-                    <h2 id="merchantModalTitle">Add Integration</h2>
-                    <button class="modal-close" id="closeMerchantModal">&times;</button>
-                </div>
-                <form id="merchantForm" class="modal-body">
-                    <div class="form-group">
-                        <label>Merchant Name <span style="color: red;">*</span></label>
-                        <input type="text" id="merchantName" required placeholder="Enter Merchant Name">
-                        <small style="color: #666; font-size: 12px;">Company or business name.</small>
-                    </div>
-                    <div class="form-group">
-                        <label>Store ID <span style="color: red;">*</span></label>
-                        <input type="text" id="merchantStoreId" required placeholder="Enter Store ID">
-                        <small style="color: #666; font-size: 12px;">GloriaFood Store ID. Required to match incoming orders.</small>
-                    </div>
-                    <div class="form-group">
-                        <label>Location Name <span style="color: red;">*</span></label>
-                        <input type="text" id="merchantLocationName" required placeholder="Enter Location Name">
-                        <small style="color: #666; font-size: 12px;">Name for this location (usually same as Merchant Name).</small>
-                    </div>
-                    <div class="form-group">
-                        <label>Location Address</label>
-                        <textarea id="merchantLocationAddress" rows="2" placeholder="Enter address"></textarea>
-                        <small style="color: #666; font-size: 12px;">Optional: Physical address of this location.</small>
-                    </div>
-                    <div class="form-group">
-                        <label>Location Phone</label>
-                        <input type="text" id="merchantLocationPhone" placeholder="Enter phone number">
-                        <small style="color: #666; font-size: 12px;">Optional: Contact phone number for this location.</small>
-                    </div>
-                    <div style="margin: 16px 0 8px; padding-top: 12px; border-top: 1px solid #e2e8f0;">
-                        <strong style="display:block; color:#0f172a; font-size: 13px; margin-bottom: 8px;">API Credentials (GloriaFood)</strong>
-                        <small style="color: #666; font-size: 12px;">
-                            These are used for API access / future polling. To receive <strong>actual orders</strong>, you still need to set the Webhook URL in GloriaFood to <code>/webhook</code>.
-                        </small>
-                    </div>
-                    <div class="form-group">
-                        <label>API Key</label>
-                        <input type="password" id="merchantApiKey" placeholder="Enter API Key">
-                        <small style="color: #666; font-size: 12px;">Leave empty to auto-generate</small>
-                    </div>
-                    <div class="form-group">
-                        <label>API URL</label>
-                        <input type="text" id="merchantApiUrl" placeholder="e.g. https://api.gloriafood.com">
-                        <small style="color: #666; font-size: 12px;">Optional: GloriaFood API base URL (leave empty if unsure)</small>
-                    </div>
-                    <div class="form-group">
-                        <label>Master Key</label>
-                        <input type="password" id="merchantMasterKey" placeholder="Enter Master Key">
-                        <small style="color: #666; font-size: 12px;">Optional: Master key for API authentication</small>
-                    </div>
-                    <div class="form-group checkbox-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="merchantIsActive" checked> Active
-                        </label>
-                        <small style="color: #666; font-size: 12px; display: block; margin-top: 4px;">Inactive integrations will not receive orders</small>
-                    </div>
-                    <div class="modal-actions">
-                        <button type="button" class="btn-secondary" id="cancelMerchantBtn">Cancel</button>
-                        <button type="submit" class="btn-primary">Save Integration</button>
-                    </div>
-                </form>
-            </div>
-        </div>
     `;
     
     // Initialize event listeners
@@ -1069,6 +1002,14 @@ function showIntegrationsPage() {
     
     // Load webhook URL from API
     loadWebhookUrl();
+    
+    // Add Integration button
+    const addIntegrationBtn = document.getElementById('addIntegrationBtn');
+    if (addIntegrationBtn) {
+        addIntegrationBtn.addEventListener('click', () => {
+            openGloriaFoodIntegrationModal();
+        });
+    }
 }
 
 // Show Merchants page (legacy - redirects to integrations)
@@ -1078,95 +1019,12 @@ function showMerchantsPage() {
 
 // Initialize Integrations page
 function initializeIntegrationsPage() {
-    // Modal close buttons
-    const closeModal = document.getElementById('closeMerchantModal');
-    const cancelBtn = document.getElementById('cancelMerchantBtn');
-    if (closeModal) closeModal.addEventListener('click', closeMerchantModal);
-    if (cancelBtn) cancelBtn.addEventListener('click', closeMerchantModal);
-
-    // Form submission
-    const merchantForm = document.getElementById('merchantForm');
-    if (merchantForm) {
-        merchantForm.addEventListener('submit', handleMerchantSubmit);
-    }
-
-    // Close modal on outside click
-    const modal = document.getElementById('merchantModal');
-    if (modal) {
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                closeMerchantModal();
-            }
-        });
-    }
-    
-    // Setup API Credentials button - use both direct listener and global function
-    function setupApiCredentialsButton() {
-        const apiCredentialsBtn = document.getElementById('apiCredentialsBtn');
-        if (apiCredentialsBtn) {
-            // Remove existing listeners to avoid duplicates
-            const newBtn = apiCredentialsBtn.cloneNode(true);
-            apiCredentialsBtn.parentNode.replaceChild(newBtn, apiCredentialsBtn);
-            
-            newBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('API Credentials button clicked');
-                if (typeof openMerchantModal === 'function') {
-                    openMerchantModal(null);
-                } else {
-                    console.error('openMerchantModal function not found');
-                }
-            });
-        }
-    }
-    
-    // Setup API Credentials button immediately
-    setupApiCredentialsButton();
-    
-    // Also setup after a short delay in case DOM isn't ready
-    setTimeout(setupApiCredentialsButton, 100);
-    
-    // Setup Add Integration button in no-integrations section
-    function setupAddIntegrationButton() {
-        const addIntegrationBtn = document.getElementById('addIntegrationBtn');
-        if (addIntegrationBtn) {
-            const newBtn = addIntegrationBtn.cloneNode(true);
-            addIntegrationBtn.parentNode.replaceChild(newBtn, addIntegrationBtn);
-            newBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('Add Integration button clicked');
-                if (typeof openMerchantModal === 'function') {
-                    openMerchantModal(null);
-                } else {
-                    const apiBtn = document.getElementById('apiCredentialsBtn');
-                    if (apiBtn) apiBtn.click();
-                }
-            });
-        }
-    }
-    
     // Use event delegation for dynamically created buttons
     const merchantApiKeysContainer = document.getElementById('merchantApiKeys');
     if (merchantApiKeysContainer) {
         merchantApiKeysContainer.addEventListener('click', (e) => {
             const target = e.target;
             let handled = false;
-            
-            // Handle Add Integration button in no-integrations section
-            if (target.id === 'addIntegrationBtn' || target.closest('#addIntegrationBtn')) {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('Add Integration button clicked');
-                if (typeof openMerchantModal === 'function') {
-                    openMerchantModal(null);
-                } else {
-                    const apiBtn = document.getElementById('apiCredentialsBtn');
-                    if (apiBtn) apiBtn.click();
-                }
-                handled = true;
-            }
             
             // Handle Edit button - check multiple ways
             const editBtn = target.closest('.edit-merchant-btn');
@@ -1270,7 +1128,6 @@ function initializeIntegrationsPage() {
     window.deleteMerchant = deleteMerchant;
     window.copyApiKey = copyApiKey;
     window.generateApiKey = generateApiKey;
-    window.openMerchantModal = openMerchantModal;
 }
 
 // Initialize Merchants page (legacy)
@@ -1305,10 +1162,15 @@ function displayIntegrations(merchants) {
 
     if (merchants.length === 0) {
         container.innerHTML = `
-            <div class="no-integrations">
-                <p>No integrations found</p>
-                <button class="btn-primary" id="addIntegrationBtn">
-                    Add Integration
+            <div class="no-integrations" style="text-align: center; padding: 40px 20px;">
+                <p style="margin-bottom: 16px; color: #64748b; font-size: 16px;">No integrations found</p>
+                <p style="margin-bottom: 24px; color: #94a3b8; font-size: 14px;">Connect your Gloria Food merchant to start receiving orders automatically</p>
+                <button class="btn-primary" onclick="openGloriaFoodIntegrationModal()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px; vertical-align: middle;">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    Add Your First Integration
                 </button>
             </div>
 `;
@@ -1517,201 +1379,6 @@ function displayMerchants(merchants) {
     }).join('');
 }
 
-// Open merchant modal for adding or editing merchant
-function openMerchantModal(merchant) {
-    const modal = document.getElementById('merchantModal');
-    const form = document.getElementById('merchantForm');
-    const title = document.getElementById('merchantModalTitle');
-
-    if (!modal || !form || !title) return;
-
-    // Reset form
-    form.reset();
-    form.dataset.editingMerchantId = '';
-    form.dataset.editingLocationId = '';
-    form.dataset.editingStoreId = '';
-
-    // Remove any existing locations container (locations managed in main form only)
-    const existingContainer = document.getElementById('merchantLocationsContainer');
-    if (existingContainer) {
-        existingContainer.remove();
-    }
-
-    if (merchant) {
-        // Editing existing merchant
-        title.textContent = 'Edit Integration';
-        document.getElementById('merchantName').value = merchant.merchant_name || '';
-        document.getElementById('merchantIsActive').checked = merchant.is_active !== false;
-        // Don't populate API key and master key for security
-        const apiUrlEl = document.getElementById('merchantApiUrl');
-        if (apiUrlEl) apiUrlEl.value = merchant.api_url || '';
-        form.dataset.editingMerchantId = merchant.id;
-        form.dataset.editingStoreId = merchant.store_id || '';
-
-        // Populate primary location fields from first active location (or first location)
-        const locations = merchant.locations || [];
-        const primaryLocation = locations.find(l => l.is_active) || locations[0] || null;
-        const storeIdInput = document.getElementById('merchantStoreId');
-        if (primaryLocation) {
-            if (storeIdInput) {
-                storeIdInput.value = primaryLocation.store_id || '';
-                storeIdInput.readOnly = false; // Allow editing Store ID
-            }
-            document.getElementById('merchantLocationName').value = primaryLocation.location_name || '';
-            document.getElementById('merchantLocationAddress').value = primaryLocation.address || '';
-            document.getElementById('merchantLocationPhone').value = primaryLocation.phone || '';
-            form.dataset.editingLocationId = primaryLocation.id;
-        } else {
-            if (storeIdInput) {
-                storeIdInput.value = merchant.store_id || '';
-                storeIdInput.readOnly = false; // Always allow editing
-            }
-            document.getElementById('merchantLocationName').value = merchant.merchant_name || '';
-            document.getElementById('merchantLocationAddress').value = merchant.address || '';
-            document.getElementById('merchantLocationPhone').value = merchant.phone || '';
-        }
-
-        // Locations are managed in the main form only - no separate location UI
-    } else {
-        // Adding new merchant
-        title.textContent = 'Add Integration';
-        document.getElementById('merchantIsActive').checked = true; // Default to active
-    }
-
-    // Show modal
-    modal.classList.remove('hidden');
-}
-
-// Close merchant modal
-function closeMerchantModal() {
-    const modal = document.getElementById('merchantModal');
-    if (modal) {
-        modal.classList.add('hidden');
-    }
-}
-
-// Handle merchant form submission
-async function handleMerchantSubmit(e) {
-    e.preventDefault();
-
-    const form = e.target;
-    const merchantNameEl = document.getElementById('merchantName');
-    const apiKeyEl = document.getElementById('merchantApiKey');
-    const apiUrlEl = document.getElementById('merchantApiUrl');
-    const masterKeyEl = document.getElementById('merchantMasterKey');
-    const isActiveEl = document.getElementById('merchantIsActive');
-    const storeIdEl = document.getElementById('merchantStoreId');
-    const locationNameEl = document.getElementById('merchantLocationName');
-    const locationAddressEl = document.getElementById('merchantLocationAddress');
-    const locationPhoneEl = document.getElementById('merchantLocationPhone');
-    
-    // Backward-compat guard: avoid ReferenceError if old code references editingStoreId
-    const editingStoreId = form.dataset.editingStoreId || '';
-
-    if (!merchantNameEl || !storeIdEl || !locationNameEl) {
-        showError('Required form fields are missing');
-        return;
-    }
-    
-    const merchantName = merchantNameEl.value.trim();
-    const apiKey = apiKeyEl ? apiKeyEl.value.trim() : '';
-    const apiUrl = apiUrlEl ? apiUrlEl.value.trim() : '';
-    const masterKey = masterKeyEl ? masterKeyEl.value.trim() : '';
-    const isActive = isActiveEl ? isActiveEl.checked : true;
-    const storeId = storeIdEl.value.trim();
-    const locationName = locationNameEl.value.trim();
-    const locationAddress = locationAddressEl ? locationAddressEl.value.trim() : '';
-    const locationPhone = locationPhoneEl ? locationPhoneEl.value.trim() : '';
-
-    // Merchant + primary location required
-    if (!merchantName || !storeId || !locationName) {
-        showError('Merchant Name, Store ID, and Location Name are required');
-        return;
-    }
-    
-    // Validate Store ID format (alphanumeric, underscore, and dash only)
-    const storeIdPattern = /^[A-Za-z0-9_-]+$/;
-    if (!storeIdPattern.test(storeId)) {
-        showError('Store ID can only contain letters, numbers, underscores, and dashes');
-        return;
-    }
-
-    const editingMerchantId = form.dataset.editingMerchantId || '';
-    const editingLocationId = form.dataset.editingLocationId || '';
-    const merchantData = {
-        merchant_name: merchantName,
-        store_id: storeId,
-        is_active: isActive
-    };
-
-    // Only include API key and master key if provided (for security)
-    if (apiKey) merchantData.api_key = apiKey;
-    if (apiUrl) merchantData.api_url = apiUrl;
-    if (masterKey) merchantData.master_key = masterKey;
-
-    try {
-        let response;
-        if (editingMerchantId) {
-            // Update existing merchant - use merchant id
-            response = await authenticatedFetch(`${API_BASE}/merchants/${editingMerchantId}`, {
-                method: 'PUT',
-                body: JSON.stringify(merchantData)
-            });
-        } else {
-            // Add new merchant
-            response = await authenticatedFetch(`${API_BASE}/merchants`, {
-                method: 'POST',
-                body: JSON.stringify(merchantData)
-            });
-        }
-
-        const data = await response.json();
-
-        if (data.success) {
-            // Save primary location (same form)
-            try {
-                const merchantIdForLocation = editingMerchantId || data.merchant?.id;
-                if (!merchantIdForLocation) throw new Error('Missing merchant id for location save');
-
-                if (editingLocationId) {
-                    await authenticatedFetch(`${API_BASE}/locations/${editingLocationId}`, {
-                        method: 'PUT',
-                        body: JSON.stringify({
-                            location_name: locationName,
-                            store_id: storeId,
-                            address: locationAddress || undefined,
-                            phone: locationPhone || undefined,
-                            is_active: true
-                        })
-                    });
-                } else {
-                    await authenticatedFetch(`${API_BASE}/merchants/${merchantIdForLocation}/locations`, {
-                        method: 'POST',
-                        body: JSON.stringify({
-                            location_name: locationName,
-                            store_id: storeId,
-                            address: locationAddress || undefined,
-                            phone: locationPhone || undefined,
-                            is_active: true
-                        })
-                    });
-                }
-            } catch (locErr) {
-                console.error('Error saving location:', locErr);
-                showNotification('Warning', 'Merchant saved but location could not be saved. Please try again.', 'warning');
-            }
-
-            showNotification('Merchant Saved', editingMerchantId ? 'Merchant updated successfully' : 'Merchant added successfully', 'success');
-            closeMerchantModal();
-            loadMerchants();
-        } else {
-            showNotification('Error', data.error || (editingMerchantId ? 'Failed to update merchant' : 'Failed to add merchant'), 'error');
-        }
-    } catch (error) {
-        console.error('Error saving merchant:', error);
-        showNotification('Error', 'Error saving merchant: ' + (error.message || 'Unknown error'), 'error');
-    }
-}
 
 // Edit merchant
 async function editMerchant(merchantId) {
@@ -1731,9 +1398,14 @@ async function editMerchant(merchantId) {
         if (merchantData.success && merchantData.merchants) {
             const merchant = merchantData.merchants.find(m => m.id == merchantId);
             if (merchant) {
-                // Add locations to merchant object
-                merchant.locations = locationsData.success ? (locationsData.locations || []) : [];
-                openMerchantModal(merchant);
+                // Get first location for editing - check both locations array in merchant and locations endpoint
+                let locations = merchant.locations || [];
+                if (locations.length === 0 && locationsData.success) {
+                    locations = locationsData.locations || [];
+                }
+                const firstLocation = locations.length > 0 ? locations[0] : null;
+                
+                openGloriaFoodIntegrationModal(merchant, firstLocation);
             } else {
                 showError('Merchant not found');
             }
@@ -1750,6 +1422,342 @@ async function editMerchant(merchantId) {
 async function manageLocations(merchantId) {
     showNotification('Info', 'Additional locations are disabled. Use the main form to edit the primary location.', 'info');
 }
+
+// Open Gloria Food Integration Modal
+function openGloriaFoodIntegrationModal(merchant = null, location = null) {
+    const isEdit = merchant !== null;
+    const modalId = 'gloriaFoodIntegrationModal';
+    const locationId = location?.id || null;
+    
+    // Create or get modal
+    let modal = document.getElementById(modalId);
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = modalId;
+        modal.className = 'modal hidden';
+        document.body.appendChild(modal);
+    }
+    
+    // Get values from merchant/location if editing
+    const merchantName = merchant?.merchant_name || '';
+    const storeId = location?.store_id || merchant?.store_id || '';
+    const apiKey = merchant?.api_key || '';
+    const apiUrl = merchant?.api_url || '';
+    const masterKey = merchant?.master_key || '';
+    const locationName = location?.location_name || '';
+    const address = location?.address || '';
+    const phone = location?.phone || '';
+    const isActive = merchant?.is_active !== false;
+    
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 700px; max-height: 90vh; overflow-y: auto;">
+            <div class="modal-header">
+                <h2>${isEdit ? 'Edit' : 'Add'} Gloria Food Integration</h2>
+                <button class="modal-close" onclick="closeGloriaFoodIntegrationModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="margin-bottom: 20px; color: #64748b; font-size: 14px;">
+                    Fill in your Gloria Food API credentials to connect your merchant and receive orders automatically.
+                </p>
+                
+                <form id="gloriaFoodIntegrationForm" onsubmit="saveGloriaFoodIntegration(event, ${merchant?.id || 'null'}, ${locationId || 'null'})">
+                    <input type="hidden" id="locationId" value="${locationId || ''}">
+                    <div class="form-group">
+                        <label class="input-label" for="merchantName">
+                            Merchant Name <span style="color: #ef4444;">*</span>
+                        </label>
+                        <input 
+                            type="text" 
+                            id="merchantName" 
+                            name="merchantName" 
+                            value="${escapeHtml(merchantName)}"
+                            required 
+                            placeholder="e.g., Sueshero Restaurant"
+                            class="form-input"
+                        >
+                        <small style="color: #64748b; font-size: 12px; margin-top: 4px; display: block;">
+                            Your business/restaurant name
+                        </small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="input-label" for="storeId">
+                            Store ID (Restaurant Token) <span style="color: #ef4444;">*</span>
+                        </label>
+                        <input 
+                            type="text" 
+                            id="storeId" 
+                            name="storeId" 
+                            value="${escapeHtml(storeId)}"
+                            required 
+                            placeholder="e.g., oGemlbPEfqnqSAEnAQJDc32vAS7ITP8nE"
+                            class="form-input"
+                        >
+                        <small style="color: #64748b; font-size: 12px; margin-top: 4px; display: block;">
+                            Found in your GloriaFood dashboard → Settings → Integrations (Restaurant Token)
+                        </small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="input-label" for="locationName">
+                            Location Name <span style="color: #ef4444;">*</span>
+                        </label>
+                        <input 
+                            type="text" 
+                            id="locationName" 
+                            name="locationName" 
+                            value="${escapeHtml(locationName)}"
+                            required 
+                            placeholder="e.g., Main Branch"
+                            class="form-input"
+                        >
+                        <small style="color: #64748b; font-size: 12px; margin-top: 4px; display: block;">
+                            Name of this location (usually same as Merchant Name)
+                        </small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="input-label" for="apiKey">
+                            API Key (Restaurant Key)
+                        </label>
+                        <input 
+                            type="text" 
+                            id="apiKey" 
+                            name="apiKey" 
+                            value="${escapeHtml(apiKey)}"
+                            placeholder="e.g., QOdM4SdOPT77oVaMO"
+                            class="form-input"
+                        >
+                        <small style="color: #64748b; font-size: 12px; margin-top: 4px; display: block;">
+                            Found in your GloriaFood dashboard → Settings → Integrations (Restaurant Key)
+                        </small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="input-label" for="masterKey">
+                            Master Key
+                        </label>
+                        <input 
+                            type="text" 
+                            id="masterKey" 
+                            name="masterKey" 
+                            value="${escapeHtml(masterKey)}"
+                            placeholder="e.g., 5YqgFlm4NL1FLgJ1SdJ8RjgPiybXij2T"
+                            class="form-input"
+                        >
+                        <small style="color: #64748b; font-size: 12px; margin-top: 4px; display: block;">
+                            Found in your GloriaFood dashboard → Settings → Integrations (Master Key)
+                        </small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="input-label" for="apiUrl">
+                            API URL
+                        </label>
+                        <input 
+                            type="text" 
+                            id="apiUrl" 
+                            name="apiUrl" 
+                            value="${escapeHtml(apiUrl)}"
+                            placeholder="e.g., https://yourdomain.com/api or leave empty for default"
+                            class="form-input"
+                        >
+                        <small style="color: #64748b; font-size: 12px; margin-top: 4px; display: block;">
+                            Your custom GloriaFood API URL (optional, leave empty if unsure)
+                        </small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="input-label" for="address">
+                            Location Address
+                        </label>
+                        <input 
+                            type="text" 
+                            id="address" 
+                            name="address" 
+                            value="${escapeHtml(address)}"
+                            placeholder="e.g., 123 Main Street, City, State"
+                            class="form-input"
+                        >
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="input-label" for="phone">
+                            Location Phone
+                        </label>
+                        <input 
+                            type="text" 
+                            id="phone" 
+                            name="phone" 
+                            value="${escapeHtml(phone)}"
+                            placeholder="e.g., +1 (555) 123-4567"
+                            class="form-input"
+                        >
+                    </div>
+                    
+                    <div class="form-group" style="display: flex; align-items: center; gap: 12px;">
+                        <label class="switch">
+                            <input type="checkbox" id="isActive" name="isActive" ${isActive ? 'checked' : ''}>
+                            <span class="slider"></span>
+                        </label>
+                        <label for="isActive" style="cursor: pointer; font-weight: 500;">
+                            Active (Enable this integration)
+                        </label>
+                    </div>
+                    
+                    <div style="margin-top: 24px; padding: 16px; background: #f0f9ff; border-radius: 8px; border-left: 4px solid #3b82f6;">
+                        <h4 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600; color: #1e40af;">
+                            📋 Next Steps:
+                        </h4>
+                        <ol style="margin: 0; padding-left: 20px; font-size: 13px; color: #1e40af; line-height: 1.6;">
+                            <li>Save this integration</li>
+                            <li>Copy the Webhook URL from the Webhook Setup section below</li>
+                            <li>Go to your GloriaFood dashboard → Settings → Integrations/Webhooks</li>
+                            <li>Configure the webhook with the URL you copied</li>
+                            <li>Orders will automatically appear in your system!</li>
+                        </ol>
+                    </div>
+                    
+                    <div class="modal-actions" style="margin-top: 24px; display: flex; gap: 12px; justify-content: flex-end;">
+                        <button type="button" class="btn-secondary" onclick="closeGloriaFoodIntegrationModal()">
+                            Cancel
+                        </button>
+                        <button type="submit" class="btn-primary">
+                            ${isEdit ? 'Update Integration' : 'Save Integration'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    `;
+    
+    modal.classList.remove('hidden');
+}
+
+// Close Gloria Food Integration Modal
+function closeGloriaFoodIntegrationModal() {
+    const modal = document.getElementById('gloriaFoodIntegrationModal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+}
+
+// Save Gloria Food Integration
+async function saveGloriaFoodIntegration(event, merchantId = null, locationId = null) {
+    event.preventDefault();
+    
+    const isEdit = merchantId !== null;
+    const form = event.target;
+    
+    // Get form values
+    const merchantName = document.getElementById('merchantName').value.trim();
+    const storeId = document.getElementById('storeId').value.trim();
+    const locationName = document.getElementById('locationName').value.trim();
+    const apiKey = document.getElementById('apiKey').value.trim();
+    const apiUrl = document.getElementById('apiUrl').value.trim();
+    const masterKey = document.getElementById('masterKey').value.trim();
+    const address = document.getElementById('address').value.trim();
+    const phone = document.getElementById('phone').value.trim();
+    const isActive = document.getElementById('isActive').checked;
+    
+    // Get location ID from hidden input if not passed as parameter
+    const locationIdInput = document.getElementById('locationId');
+    const actualLocationId = locationId || (locationIdInput ? parseInt(locationIdInput.value) : null);
+    
+    // Validate required fields
+    if (!merchantName || !storeId || !locationName) {
+        showNotification('Error', 'Please fill in all required fields (Merchant Name, Store ID, Location Name)', 'error');
+        return;
+    }
+    
+    try {
+        const merchantPayload = {
+            merchant_name: merchantName,
+            store_id: storeId,
+            api_key: apiKey || undefined,
+            api_url: apiUrl || undefined,
+            master_key: masterKey || undefined,
+            address: address || undefined,
+            phone: phone || undefined,
+            is_active: isActive
+        };
+        
+        let merchantResponse;
+        if (isEdit) {
+            // Update existing merchant
+            merchantResponse = await authenticatedFetch(`${API_BASE}/merchants/${merchantId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(merchantPayload)
+            });
+        } else {
+            // Create new merchant (includes location in POST)
+            merchantPayload.location_name = locationName;
+            merchantResponse = await authenticatedFetch(`${API_BASE}/merchants`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(merchantPayload)
+            });
+        }
+        
+        const merchantData = await merchantResponse.json();
+        
+        if (!merchantData.success) {
+            showNotification('Error', merchantData.error || `Failed to ${isEdit ? 'update' : 'create'} integration`, 'error');
+            return;
+        }
+        
+        // If editing and we have a location ID, also update the location
+        if (isEdit && actualLocationId) {
+            try {
+                const locationPayload = {
+                    location_name: locationName,
+                    store_id: storeId,
+                    address: address || undefined,
+                    phone: phone || undefined,
+                    is_active: isActive
+                };
+                
+                const locationResponse = await authenticatedFetch(`${API_BASE}/locations/${actualLocationId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(locationPayload)
+                });
+                
+                const locationData = await locationResponse.json();
+                if (!locationData.success) {
+                    console.warn('Merchant updated but location update failed:', locationData.error);
+                    // Don't fail the whole operation, just warn
+                }
+            } catch (locationError) {
+                console.warn('Error updating location:', locationError);
+                // Don't fail the whole operation if location update fails
+            }
+        }
+        
+        showNotification(
+            'Success', 
+            `Integration ${isEdit ? 'updated' : 'created'} successfully! Orders will now be received automatically.`,
+            'success'
+        );
+        closeGloriaFoodIntegrationModal();
+        loadIntegrations(); // Reload the integrations list
+    } catch (error) {
+        console.error('Error saving integration:', error);
+        showNotification('Error', `Error ${isEdit ? 'updating' : 'creating'} integration: ${error.message}`, 'error');
+    }
+}
+
+// Make functions globally available
+window.openGloriaFoodIntegrationModal = openGloriaFoodIntegrationModal;
+window.closeGloriaFoodIntegrationModal = closeGloriaFoodIntegrationModal;
+window.saveGloriaFoodIntegration = saveGloriaFoodIntegration;
 
 // Open location management modal
 function openLocationModal(merchantId, locations = []) {
@@ -1933,15 +1941,7 @@ async function handleLocationSubmit(e, merchantId, locationId) {
         if (data.success) {
             showNotification('Success', locationId ? 'Location updated successfully' : 'Location added successfully', 'success');
             closeAddLocationModal();
-            // Refresh merchant modal if open, otherwise refresh locations list
-            const merchantModal = document.getElementById('merchantModal');
-            const editingMerchantId = document.getElementById('merchantForm')?.dataset.editingMerchantId;
-            if (merchantModal && !merchantModal.classList.contains('hidden') && editingMerchantId == merchantId) {
-                // Reload merchant with locations
-                editMerchant(parseInt(merchantId));
-            } else {
-                manageLocations(merchantId); // Refresh locations list
-            }
+            manageLocations(merchantId); // Refresh locations list
         } else {
             showNotification('Error', data.error || 'Failed to save location', 'error');
         }
@@ -1989,15 +1989,7 @@ async function deleteLocation(locationId, merchantId) {
         
         if (data.success) {
             showNotification('Success', 'Location deleted successfully', 'success');
-            // Refresh merchant modal if open, otherwise refresh locations list
-            const merchantModal = document.getElementById('merchantModal');
-            const editingMerchantId = document.getElementById('merchantForm')?.dataset.editingMerchantId;
-            if (merchantModal && !merchantModal.classList.contains('hidden') && editingMerchantId == merchantId) {
-                // Reload merchant with locations
-                editMerchant(parseInt(merchantId));
-            } else {
-                manageLocations(merchantId); // Refresh locations list
-            }
+            manageLocations(merchantId); // Refresh locations list
         } else {
             showNotification('Error', data.error || 'Failed to delete location', 'error');
         }
