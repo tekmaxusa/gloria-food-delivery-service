@@ -1728,7 +1728,8 @@ export class OrderDatabasePostgreSQL {
         console.log(`🔍 getRecentOrders: userId=${userId} - showing ALL recent orders (no user_id filter)`);
       }
       
-      query += ' ORDER BY fetched_at DESC';
+      // Use COALESCE to handle NULL fetched_at
+      query += ' ORDER BY COALESCE(fetched_at, created_at, updated_at) DESC';
       
       const result = await client.query(query, params);
 
@@ -1756,7 +1757,8 @@ export class OrderDatabasePostgreSQL {
         console.log(`🔍 getOrdersByStatus: userId=${userId} - showing ALL orders with status=${status} (no user_id filter)`);
       }
       
-      query += ' ORDER BY fetched_at DESC';
+      // Use COALESCE to handle NULL fetched_at
+      query += ' ORDER BY COALESCE(fetched_at, created_at, updated_at) DESC';
       
       const result = await client.query(query, params);
 
