@@ -1394,7 +1394,6 @@ function openGloriaFoodIntegrationModal(merchant = null) {
     const merchantName = merchant?.merchant_name || '';
     const merchantStoreId = merchant?.store_id || '';
     const apiKey = merchant?.api_key || '';
-    const apiUrl = merchant?.api_url || '';
     const masterKey = merchant?.master_key || '';
     const isActive = merchant?.is_active !== false;
     
@@ -1480,23 +1479,6 @@ function openGloriaFoodIntegrationModal(merchant = null) {
                         </small>
                     </div>
                     
-                    <div class="form-group">
-                        <label class="input-label" for="apiUrl">
-                            API URL
-                        </label>
-                        <input 
-                            type="text" 
-                            id="apiUrl" 
-                            name="apiUrl" 
-                            value="${escapeHtml(apiUrl)}"
-                            placeholder="e.g., https://yourdomain.com/api or leave empty for default"
-                            class="form-input"
-                        >
-                        <small style="color: #64748b; font-size: 12px; margin-top: 4px; display: block;">
-                            Your custom GloriaFood API URL (optional, leave empty if unsure)
-                        </small>
-                    </div>
-                    
                     <div class="form-group" style="display: flex; align-items: center; gap: 12px;">
                         <label class="switch">
                             <input type="checkbox" id="isActive" name="isActive" ${isActive ? 'checked' : ''}>
@@ -1554,7 +1536,6 @@ async function saveGloriaFoodIntegration(event, merchantId = null) {
     const merchantName = document.getElementById('merchantName').value.trim();
     const merchantStoreId = document.getElementById('merchantStoreId').value.trim();
     const apiKey = document.getElementById('apiKey').value.trim();
-    const apiUrl = document.getElementById('apiUrl').value.trim();
     const masterKey = document.getElementById('masterKey').value.trim();
     const isActive = document.getElementById('isActive').checked;
     
@@ -1570,7 +1551,6 @@ async function saveGloriaFoodIntegration(event, merchantId = null) {
             merchant_name: merchantName,
             store_id: merchantStoreId,
             api_key: apiKey || undefined,
-            api_url: apiUrl || undefined,
             master_key: masterKey || undefined,
             is_active: isActive
         };
@@ -1618,7 +1598,6 @@ async function saveGloriaFoodIntegration(event, merchantId = null) {
                     body: JSON.stringify({
                         merchant_id: createdMerchantId,
                         api_key: apiKey || undefined,
-                        api_url: apiUrl || undefined,
                         master_key: masterKey || undefined,
                         store_id: merchantStoreId
                     })
