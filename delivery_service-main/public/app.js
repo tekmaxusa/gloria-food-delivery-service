@@ -977,21 +977,15 @@ function showIntegrationsPage() {
                         </div>
                         
                         <div class="form-group">
-                            <label for="gloriaFoodApiUrl">API URL</label>
-                            <input type="url" id="gloriaFoodApiUrl" placeholder="https://your-restaurant-domain.com/api">
-                            <small class="form-help">Your restaurant's custom API URL (if applicable)</small>
+                            <label for="gloriaFoodStoreId">Merchant Store ID</label>
+                            <input type="text" id="gloriaFoodStoreId" placeholder="Enter Merchant Store ID">
+                            <small class="form-help">Your GloriaFood Merchant Store ID</small>
                         </div>
                         
                         <div class="form-group">
                             <label for="gloriaFoodMasterKey">Master Key</label>
                             <input type="password" id="gloriaFoodMasterKey" placeholder="Enter Master Key (if required)">
                             <small class="form-help">Master key for webhook authentication (optional)</small>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="gloriaFoodStoreId">Store ID</label>
-                            <input type="text" id="gloriaFoodStoreId" placeholder="Enter Store ID">
-                            <small class="form-help">Your GloriaFood Store/Restaurant ID</small>
                         </div>
                         
                         <div id="integrationFormError" class="error-message" style="display: none;"></div>
