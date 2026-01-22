@@ -1652,7 +1652,8 @@ export class OrderDatabasePostgreSQL {
           console.log(`🔍 getAllOrders: userId=${userId} - showing ALL orders (no user_id filter)`);
         }
         
-        query += ' ORDER BY fetched_at DESC LIMIT $' + (params.length + 1);
+        // Use COALESCE to handle NULL fetched_at - order by created_at if fetched_at is NULL
+        query += ' ORDER BY COALESCE(fetched_at, created_at, updated_at) DESC LIMIT $' + (params.length + 1);
         params.push(limit);
         
         console.log(`🔍 getAllOrders query: ${query}`);
@@ -1670,9 +1671,22 @@ export class OrderDatabasePostgreSQL {
           
           if (totalCount > 0) {
             // There are orders but query returned 0 - show sample
-            const sampleResult = await client.query('SELECT gloriafood_order_id, user_id, fetched_at FROM orders ORDER BY fetched_at DESC LIMIT 5');
+            const sampleResult = await client.query('SELECT gloriafood_order_id, user_id, fetched_at, created_at FROM orders ORDER BY COALESCE(fetched_at, created_at) DESC LIMIT 5');
             console.log(`🔍 Sample orders in DB:`, sampleResult.rows);
             console.log(`⚠️ Query returned 0 but database has ${totalCount} orders - check query logic!`);
+            
+            // Try query without ORDER BY to see if that's the issue
+            let testQuery = 'SELECT * FROM orders';
+            if (userId !== undefined && userId !== 1) {
+              testQuery += ' WHERE user_id = $1';
+              const testResult2 = await client.query(testQuery, [userId]);
+              console.log(`🔍 Test query with user_id filter: ${testResult2.rows.length} row(s)`);
+            } else {
+              const testResult2 = await client.query(testQuery);
+              console.log(`🔍 Test query without filter: ${testResult2.rows.length} row(s)`);
+            }
+          } else {
+            console.log(`ℹ️ Database has 0 orders - this is expected if no orders have been received yet`);
           }
         }
         
@@ -3101,20 +3115,46 @@ export class OrderDatabasePostgreSQL {
   }
 
   async deleteOrder(orderId: string): Promise<boolean> {
-    try {
-      const client = await this.pool.connect();
-      // Try to delete by gloriafood_order_id first, then by id
-      const result = await client.query(
-        `DELETE FROM orders WHERE gloriafood_order_id = $1 OR id::text = $1`,
-        [orderId]
-      );
-      client.release();
-
-      return (result.rowCount || 0) > 0;
-    } catch (error) {
-      console.error('Error deleting order:', error);
-      return false;
-    }
+    console.log(`🗑️  deleteOrder called for orderId: ${orderId}`);
+    return this.retryQuery(async () => {
+      try {
+        const client = await this.pool.connect();
+        
+        // First, check if order exists
+        const checkResult = await client.query(
+          `SELECT id, gloriafood_order_id FROM orders WHERE gloriafood_order_id = $1 OR id::text = $1`,
+          [orderId]
+        );
+        
+        if (checkResult.rows.length === 0) {
+          console.log(`⚠️  Order ${orderId} not found in database`);
+          client.release();
+          return false;
+        }
+        
+        console.log(`📋 Found order to delete:`, checkResult.rows[0]);
+        
+        // Delete by gloriafood_order_id first (most common), then by id
+        const result = await client.query(
+          `DELETE FROM orders WHERE gloriafood_order_id = $1 OR id::text = $1`,
+          [orderId]
+        );
+        
+        client.release();
+        
+        const deleted = (result.rowCount || 0) > 0;
+        if (deleted) {
+          console.log(`✅ Successfully deleted order ${orderId} from database (${result.rowCount} row(s) deleted)`);
+        } else {
+          console.log(`⚠️  No rows deleted for order ${orderId}`);
+        }
+        
+        return deleted;
+      } catch (error) {
+        console.error('Error deleting order:', error);
+        throw error; // Re-throw to trigger retry
+      }
+    }, `deleteOrder(${orderId})`, 3, 1000).catch(() => false);
   }
 
   async close(): Promise<void> {

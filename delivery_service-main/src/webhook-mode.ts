@@ -2543,14 +2543,19 @@ class GloriaFoodWebhookServer {
     this.app.delete('/orders/:orderId', async (req: Request, res: Response) => {
       try {
         const orderId = req.params.orderId;
+        console.log(chalk.blue(`🗑️  DELETE /orders/${orderId} - Deleting order from database...`));
+        
         const deleted = await this.handleAsync(this.database.deleteOrder(orderId));
         
         if (deleted) {
+          console.log(chalk.green(`✅ Order ${orderId} deleted successfully from database`));
           res.json({ success: true, message: 'Order deleted successfully' });
         } else {
+          console.log(chalk.yellow(`⚠️  Order ${orderId} not found or could not be deleted`));
           res.status(404).json({ success: false, error: 'Order not found' });
         }
       } catch (error: any) {
+        console.error(chalk.red(`❌ Error deleting order: ${error.message}`));
         res.status(500).json({ success: false, error: error.message });
       }
     });
