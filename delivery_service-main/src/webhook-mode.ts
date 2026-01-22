@@ -118,6 +118,9 @@ class GloriaFoodWebhookServer {
     this.setupRoutes();
     console.log(chalk.green('✅ Routes setup complete'));
     
+    // Setup API routes (orders, merchants, auth, etc.)
+    this.setupApiRoutes();
+    
     // Setup static file serving AFTER routes (so API routes take precedence)
     console.log(chalk.blue('🔵 Setting up static file serving...'));
     this.setupStaticFiles();
@@ -1570,7 +1573,12 @@ class GloriaFoodWebhookServer {
         error: error.message 
       });
     }
+  }
 
+  // Setup all API routes (orders, merchants, auth, etc.)
+  private setupApiRoutes(): void {
+    console.log(chalk.blue('🔵 Setting up API routes...'));
+    
     // Get all orders endpoint with filters
     this.app.get('/orders', async (req: Request, res: Response) => {
       try {
@@ -3442,6 +3450,8 @@ class GloriaFoodWebhookServer {
         res.status(500).json({ success: false, error: error.message });
       }
     });
+    
+    console.log(chalk.green('✅ API routes setup complete'));
   }
 
   private hashPassword(password: string): string {
