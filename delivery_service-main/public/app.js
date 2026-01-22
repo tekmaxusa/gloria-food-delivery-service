@@ -1354,22 +1354,14 @@ async function showIntegrationsPage() {
     try {
         const response = await authenticatedFetch(`${API_BASE}/merchants`).catch(() => null);
         if (response) {
-            const contentType = response.headers.get('content-type');
-            if (contentType && contentType.includes('application/json')) {
-                try {
-                    const data = await response.json();
-                    if (data && data.success && data.merchants) {
-                        merchants = data.merchants;
-                    }
-                } catch (parseError) {
-                    // If JSON parsing fails, check if it's HTML
-                    const text = await response.text().catch(() => '');
-                    if (text.includes('<!DOCTYPE') || text.includes('<html')) {
-                        console.warn('Merchants API returned HTML instead of JSON (likely 404)');
-                    } else {
-                        console.error('Error parsing merchants JSON:', parseError);
-                    }
+            try {
+                const data = await safeJsonParse(response);
+                if (data && data.success && data.merchants) {
+                    merchants = data.merchants;
                 }
+            } catch (parseError) {
+                // Silently handle JSON parsing errors - API may not be available
+                console.warn('Merchants API not available or returned invalid response');
             }
         }
     } catch (error) {
@@ -1500,26 +1492,32 @@ async function showDashboardPage() {
                     merchant = data.merchants.find(m => m.is_active) || data.merchants[0];
                     if (merchant) {
                         hasMerchant = true;
-                const name = (merchant.merchant_name || '').toString();
-                const storeId = (merchant.store_id || '').toString();
-                
-                if (name && name.trim() !== '' &&
-                    storeId &&
-                    name !== storeId &&
-                    typeof name.toLowerCase === 'function' &&
-                    typeof storeId.toLowerCase === 'function' &&
-                    name.toLowerCase() !== storeId.toLowerCase() &&
-                    !name.startsWith('Merchant ') &&
-                    name !== 'Unknown Merchant' &&
-                    name !== 'N/A') {
-                    merchantName = name.trim();
-                } else if (storeId) {
-                    merchantName = `Merchant ${storeId}`;
+                        const name = (merchant.merchant_name || '').toString();
+                        const storeId = (merchant.store_id || '').toString();
+                        
+                        if (name && name.trim() !== '' &&
+                            storeId &&
+                            name !== storeId &&
+                            typeof name.toLowerCase === 'function' &&
+                            typeof storeId.toLowerCase === 'function' &&
+                            name.toLowerCase() !== storeId.toLowerCase() &&
+                            !name.startsWith('Merchant ') &&
+                            name !== 'Unknown Merchant' &&
+                            name !== 'N/A') {
+                            merchantName = name.trim();
+                        } else if (storeId) {
+                            merchantName = `Merchant ${storeId}`;
+                        }
+                    }
                 }
+            } catch (parseError) {
+                // Silently handle JSON parsing errors - API may not be available
+                console.warn('Merchants API not available or returned invalid response');
             }
         }
     } catch (error) {
         // Silently handle error - will show connect merchant prompt
+        console.warn('Error loading merchants, continuing without merchant data');
     }
 
     // If no merchant, show connect merchant prompt and popup modal
