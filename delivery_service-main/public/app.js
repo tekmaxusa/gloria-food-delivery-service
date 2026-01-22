@@ -935,6 +935,11 @@ function showOrdersPage() {
     // Re-initialize event listeners
     initializeOrdersPage();
     
+    // Load dashboard data after dashboard is shown
+    setTimeout(() => {
+        loadDashboardData();
+    }, 100);
+    
     // Wait for DOM to be ready before loading orders
     // Use requestAnimationFrame + setTimeout to ensure the table body element exists
     requestAnimationFrame(() => {
@@ -1765,12 +1770,41 @@ async function loadDashboardData() {
 
 // Display dashboard orders
 function displayDashboardOrders(orders) {
-    const tbody = document.getElementById('dashboardOrdersTableBody');
-    if (!tbody) {
-        console.warn('⚠️ dashboardOrdersTableBody not found - dashboard might not be loaded yet');
+    // Check if we're on dashboard page first
+    const dashboardContainer = document.getElementById('dashboardContainer');
+    const isOnDashboard = dashboardContainer && !dashboardContainer.classList.contains('hidden');
+    
+    if (!isOnDashboard) {
+        // Not on dashboard page, silently return
         return;
     }
+    
+    const tbody = document.getElementById('dashboardOrdersTableBody');
+    if (!tbody) {
+        // If tbody doesn't exist, wait a bit and retry (dashboard might still be loading)
+        setTimeout(() => {
+            const retryTbody = document.getElementById('dashboardOrdersTableBody');
+            if (retryTbody) {
+                console.log('✅ Found dashboardOrdersTableBody on retry, displaying orders');
+                displayDashboardOrdersToTable(orders, retryTbody);
+            } else {
+                console.warn('⚠️ dashboardOrdersTableBody not found - dashboard might not be fully loaded yet');
+            }
+        }, 200);
+        return;
+    }
+    
+    displayDashboardOrdersToTable(orders, tbody);
+}
 
+// Helper function to actually display dashboard orders
+function displayDashboardOrdersToTable(orders, tbody) {
+
+    if (!tbody) {
+        console.error('displayDashboardOrdersToTable: tbody is null');
+        return;
+    }
+    
     console.log(`📊 Displaying ${orders ? orders.length : 0} order(s) in dashboard`);
 
     if (!orders || orders.length === 0) {
@@ -1806,7 +1840,7 @@ function displayDashboardOrders(orders) {
         `;
     }).join('');
     
-    console.log(`✅ Dashboard orders displayed successfully`);
+    console.log(`✅ Dashboard orders displayed successfully (${orders.length} order(s))`);
 }
 
 // Show Reports page
