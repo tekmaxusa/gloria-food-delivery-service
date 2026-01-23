@@ -4055,9 +4055,10 @@ async function getDispatchSettingsContent() {
             <p class="settings-instruction-text">This time is used to indicate when a scheduled order will be put in the current order tab for dispatch. If this time is 60 minutes, it means when the required delivery time is within 60 minutes window, this order will be moved to the current order tab for dispatch.</p>
             
             <div class="driver-time-input">
-                <input type="number" class="business-input" id="dispatchTimeWindowInput" value="${Math.round(parseFloat(dispatchTimeWindow) * 60)}" min="1" max="1440" step="1" style="width: 100px; display: inline-block;">
-                <span style="margin-left: 8px; color: #475569;">minutes</span>
-                <button class="btn-primary" onclick="saveDispatchTimeWindow()" style="margin-left: 16px; padding: 8px 16px;">Save</button>
+                <div style="display: flex; align-items: center; gap: 12px; margin-top: 16px;">
+                    <input type="number" class="business-input" id="dispatchTimeWindowInput" value="${dispatchTimeWindow}" min="1" max="1440" step="1" style="width: 120px; padding: 10px 14px; font-size: 15px;">
+                    <span style="color: #64748b; font-size: 14px; font-weight: 500;">minutes</span>
+                </div>
             </div>
         </div>
         
@@ -5583,18 +5584,47 @@ async function loadOrders() {
             console.log(`Filtering and displaying orders with filter: ${currentStatusFilter || 'none'}`);
             console.log(`📦 Total orders loaded: ${allOrders.length}`);
             
-            // Only try to display if we're on Orders page
+            // Always try to display orders, even if we're not on Orders page yet
             // filterAndDisplayOrders will check if page is active
             filterAndDisplayOrders();
         } else {
             console.warn('Orders API response format unexpected:', data);
+            console.warn('Response data:', JSON.stringify(data, null, 2));
+            // Try to extract orders from different response formats
+            if (data && data.data && Array.isArray(data.data)) {
+                allOrders = data.data;
+                console.log(`✅ Extracted ${allOrders.length} order(s) from data.data`);
+                filterAndDisplayOrders();
+            } else if (data && data.data && data.data.orders && Array.isArray(data.data.orders)) {
+                allOrders = data.data.orders;
+                console.log(`✅ Extracted ${allOrders.length} order(s) from data.data.orders`);
+                filterAndDisplayOrders();
+            } else {
+                allOrders = [];
+                filterAndDisplayOrders();
+            }
+        }
+    } catch (error) {
+        console.error('❌ Error loading orders:', error);
+        const errorMessage = error.message || 'Unknown error';
+        console.error('Error details:', error);
+        
+        // Only show error notification if we don't have any cached orders
+        // This prevents showing errors when we already have orders displayed
+        if (allOrders.length === 0) {
+            showError('Error connecting to server: ' + errorMessage);
+        } else {
+            console.warn('⚠️ Error loading orders, but using cached orders:', allOrders.length);
+        }
+        
+        // Still try to display cached orders if available
+        if (allOrders.length > 0) {
+            console.log(`📋 Displaying ${allOrders.length} cached order(s) despite error`);
+            filterAndDisplayOrders();
+        } else {
             allOrders = [];
             filterAndDisplayOrders();
         }
-    } catch (error) {
-        showError('Error connecting to server: ' + (error.message || 'Unknown error'));
-        allOrders = [];
-        filterAndDisplayOrders();
     } finally {
         isLoadingOrders = false;
     }
@@ -6143,7 +6173,7 @@ function filterAndDisplayOrders() {
     console.log(`Before filtering: ${filtered.length} orders`);
 
     // Apply status filter
-    if (currentStatusFilter && currentStatusFilter !== 'current') {
+    if (currentStatusFilter && currentStatusFilter !== 'current' && currentStatusFilter !== 'history') {
         if (currentStatusFilter === 'scheduled') {
             // Scheduled = orders with scheduled delivery time that are not completed/incomplete
             filtered = filtered.filter(order => {
@@ -6163,7 +6193,7 @@ function filterAndDisplayOrders() {
                 return ['CANCELLED', 'FAILED', 'REJECTED', 'CANCELED'].includes(status);
             });
         }
-        // History = ALL orders - no filtering needed
+        // History = ALL orders - no filtering needed (handled below)
     } else if (currentStatusFilter === 'current') {
         // Current = all active orders, BUT respect dispatch time window for scheduled orders
         // dispatchTimeWindow is now stored in minutes, convert to hours for calculation
@@ -6173,6 +6203,11 @@ function filterAndDisplayOrders() {
         filtered = filtered.filter(order => {
             const status = order.status && typeof order.status.toUpperCase === 'function' ? order.status.toUpperCase() : (order.status || '');
             const isActive = status && !['DELIVERED', 'COMPLETED', 'CANCELLED', 'CANCELED', 'FAILED', 'REJECTED'].includes(status);
+
+            // If order has no status or status is empty, include it in current (might be new order)
+            if (!status || status === '' || status === 'N/A') {
+                return true;
+            }
 
             if (!isActive) return false;
 
@@ -6210,17 +6245,26 @@ function filterAndDisplayOrders() {
                         }
                     }
                 } catch (e) {
-                    // Error silently handled
+                    // Error silently handled - if we can't determine if it's scheduled, include it
+                    return true;
                 }
             }
 
             return true;
         });
+    } else if (currentStatusFilter === 'history') {
+        // History = ALL orders - no filtering needed, just show everything
+        // filtered already contains all orders, no need to filter
+        console.log('📜 History filter: Showing all orders');
+    } else if (!currentStatusFilter || currentStatusFilter === '') {
+        // No filter selected - show all orders
+        console.log('📋 No filter selected: Showing all orders');
     }
 
     // Apply search filter
     if (searchQuery) {
         const beforeSearch = filtered.length;
+        const query = searchQuery.toLowerCase();
         filtered = filtered.filter(order => {
             const searchableText = [
                 order.gloriafood_order_id || order.id,
@@ -6238,6 +6282,13 @@ function filterAndDisplayOrders() {
     }
 
     console.log(`✅ Final filtered orders: ${filtered.length} (will display)`);
+    
+    // If no orders match filter but we have orders, show a helpful message
+    if (filtered.length === 0 && allOrders.length > 0) {
+        console.warn(`⚠️ Filter "${currentStatusFilter}" returned 0 orders, but we have ${allOrders.length} total orders`);
+        console.warn('⚠️ This might indicate the filter is too restrictive. Consider checking the "History" tab to see all orders.');
+    }
+    
     displayOrders(filtered);
     
     // Reset flag after display completes (longer delay to prevent rapid re-displays)
@@ -8406,8 +8457,13 @@ async function deleteOrder(orderId) {
         const data = await response.json();
 
         if (data.success) {
-            showNotification('Success', `Order #${orderId} deleted successfully`);
-            // Reload orders
+            showNotification('Success', `Order #${orderId} deleted successfully`, 'success');
+            // Remove order from allOrders array immediately for faster UI update
+            allOrders = allOrders.filter(order => {
+                const id = order.gloriafood_order_id || order.id;
+                return String(id) !== String(orderId);
+            });
+            // Reload orders to get fresh data from server
             loadOrders();
         } else {
             showError(data.error || 'Failed to delete order');
@@ -8538,8 +8594,14 @@ async function deleteSelectedOrders() {
         }
 
         if (successCount > 0) {
-            showNotification('Success', `Successfully deleted ${successCount} order(s)${failCount > 0 ? `. ${failCount} failed.` : ''}`);
-            // Reload orders
+            showNotification('Success', `Successfully deleted ${successCount} order(s)${failCount > 0 ? `. ${failCount} failed.` : ''}`, 'success');
+            // Remove deleted orders from allOrders array immediately for faster UI update
+            const deletedOrderIds = new Set(orderIds.slice(0, successCount));
+            allOrders = allOrders.filter(order => {
+                const id = order.gloriafood_order_id || order.id;
+                return !deletedOrderIds.has(String(id));
+            });
+            // Reload orders to get fresh data from server
             loadOrders();
         } else {
             showError(`Failed to delete all orders. ${failCount} order(s) failed.`);

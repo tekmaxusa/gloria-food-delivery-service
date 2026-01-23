@@ -2833,7 +2833,19 @@ body.on-profile-page .nav-link:hover {
 }
 
 .driver-time-input {
-    margin-top: 16px;
+    margin-top: 8px;
+}
+
+.driver-time-input .business-input {
+    border: 1.5px solid #e2e8f0;
+    background: #ffffff;
+    transition: all 0.2s ease;
+}
+
+.driver-time-input .business-input:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    outline: none;
 }
 
 .driver-payment-item {
