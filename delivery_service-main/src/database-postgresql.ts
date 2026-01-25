@@ -2003,10 +2003,10 @@ export class OrderDatabasePostgreSQL {
     try {
       const client = await this.pool.connect();
       
-      // If userId is provided, only return the current user
-      // Each account is independent and should only see themselves in User Settings
+      // Only return the current user - each account is independent
+      // Each account should only see themselves in User Settings
       // Users with different merchants are completely independent and should not see each other
-      if (userId !== undefined) {
+      if (userId !== undefined && userId !== null) {
         // Only return the current user - each account is independent
         const currentUserResult = await client.query(
           'SELECT id, email, full_name, role, created_at FROM users WHERE id = $1',
@@ -2021,18 +2021,10 @@ export class OrderDatabasePostgreSQL {
           created_at: row.created_at
         }));
       } else {
-        // If no userId provided, return all users (for admin/system use)
-        const result = await client.query(
-          'SELECT id, email, full_name, role, created_at FROM users ORDER BY created_at DESC'
-        );
+        // If no userId provided, return empty array - don't show any users
+        // This ensures that only authenticated users can see themselves
         client.release();
-        return result.rows.map(row => ({
-          id: row.id,
-          email: row.email,
-          full_name: row.full_name,
-          role: row.role || 'user',
-          created_at: row.created_at
-        }));
+        return [];
       }
     } catch (error) {
       console.error('Error getting all users:', error);

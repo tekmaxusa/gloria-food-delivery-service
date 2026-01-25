@@ -3248,8 +3248,12 @@ class GloriaFoodWebhookServer {
     this.app.get('/api/auth/users', async (req: Request, res: Response) => {
       try {
         const user = this.getCurrentUser(req);
+        if (!user || !user.userId) {
+          // If no user session, return empty array - don't show any users
+          return res.json({ success: true, users: [] });
+        }
         // Only return the current user - each account is independent and should only see themselves
-        const users = await this.handleAsync(this.database.getAllUsers(user?.userId));
+        const users = await this.handleAsync(this.database.getAllUsers(user.userId));
         res.json({ success: true, users });
       } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
