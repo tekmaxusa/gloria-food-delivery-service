@@ -3244,11 +3244,11 @@ class GloriaFoodWebhookServer {
 
     // Duplicate authentication endpoints removed - using the ones defined earlier that use X-Session-Id header
 
-    // Get all users endpoint - only show users who share merchants with current user
+    // Get all users endpoint - only return the current user (each account is independent)
     this.app.get('/api/auth/users', async (req: Request, res: Response) => {
       try {
         const user = this.getCurrentUser(req);
-        // Only return users who share at least one merchant with the current user
+        // Only return the current user - each account is independent and should only see themselves
         const users = await this.handleAsync(this.database.getAllUsers(user?.userId));
         res.json({ success: true, users });
       } catch (error: any) {
