@@ -1078,6 +1078,16 @@ function showDispatchPage() {
 
 // Open Connect Merchant Modal
 function openConnectMerchantModal() {
+    // Remove existing modal if any
+    const existingModal = document.getElementById('connectMerchantModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+
+    // Get merchant data from global variable (set by showIntegrationsPage or Update button)
+    const merchantData = window.currentMerchantForModal || null;
+    const isUpdate = merchantData !== null;
+    
     const modal = document.createElement('div');
     modal.id = 'connectMerchantModal';
     modal.className = 'modal';
@@ -1086,10 +1096,17 @@ function openConnectMerchantModal() {
     modal.innerHTML = `
         <div class="modal-content" style="max-width: 600px;">
             <div class="modal-header">
-                <h2>Connect Merchant</h2>
+                <h2>${isUpdate ? 'Update Integration' : 'Connect Merchant'}</h2>
                 <button class="modal-close" onclick="closeConnectMerchantModal()">&times;</button>
             </div>
             <div class="modal-body">
+                ${isUpdate ? `
+                    <div style="background: #fef3c7; border: 1px solid #fbbf24; border-radius: 8px; padding: 12px; margin-bottom: 20px;">
+                        <p style="margin: 0; color: #92400e; font-size: 13px;">
+                            You can only have one integration per account. Updating will replace your existing integration.
+                        </p>
+                    </div>
+                ` : ''}
                 <form id="connectMerchantForm" onsubmit="saveMerchantConnection(event)">
                     <div class="form-group" style="margin-bottom: 20px;">
                         <label class="input-label" for="merchantName">
@@ -1101,6 +1118,7 @@ function openConnectMerchantModal() {
                             name="merchantName" 
                             required 
                             placeholder="Enter Merchant Name"
+                            value="${merchantData ? escapeHtml(merchantData.merchant_name || '') : ''}"
                             class="form-input"
                             style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px;"
                         >
@@ -1116,6 +1134,7 @@ function openConnectMerchantModal() {
                             name="merchantStoreId" 
                             required 
                             placeholder="Enter Merchant Store ID"
+                            value="${merchantData ? escapeHtml(merchantData.store_id || '') : ''}"
                             class="form-input"
                             style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px;"
                         >
@@ -1134,6 +1153,7 @@ function openConnectMerchantModal() {
                             name="apiKey" 
                             required 
                             placeholder="Enter GloriaFood API Key"
+                            value="${merchantData ? escapeHtml(merchantData.api_key || '') : ''}"
                             class="form-input"
                             style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px;"
                         >
@@ -1148,6 +1168,7 @@ function openConnectMerchantModal() {
                             id="apiUrl" 
                             name="apiUrl" 
                             placeholder="Enter API URL (optional)"
+                            value="${merchantData ? escapeHtml(merchantData.api_url || '') : ''}"
                             class="form-input"
                             style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px;"
                         >
@@ -1162,6 +1183,7 @@ function openConnectMerchantModal() {
                             id="masterKey" 
                             name="masterKey" 
                             placeholder="Enter Master Key (optional)"
+                            value="${merchantData ? escapeHtml(merchantData.master_key || '') : ''}"
                             class="form-input"
                             style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px;"
                         >
@@ -1169,7 +1191,7 @@ function openConnectMerchantModal() {
                     
                     <div class="form-group" style="margin-bottom: 24px; display: flex; align-items: center; gap: 12px;">
                         <label class="switch">
-                            <input type="checkbox" id="isActive" name="isActive" checked>
+                            <input type="checkbox" id="isActive" name="isActive" ${merchantData && merchantData.is_active !== false ? 'checked' : ''}>
                             <span class="slider"></span>
                         </label>
                         <label for="isActive" style="cursor: pointer; font-weight: 500;">
@@ -1184,7 +1206,7 @@ function openConnectMerchantModal() {
                             Cancel
                         </button>
                         <button type="submit" class="btn-primary" style="padding: 12px 24px; background: #3b82f6; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">
-                            Connect Merchant
+                            ${isUpdate ? 'Update Integration' : 'Connect Merchant'}
                         </button>
                     </div>
                 </form>
@@ -1201,6 +1223,8 @@ function closeConnectMerchantModal() {
     if (modal) {
         modal.remove();
     }
+    // Clear the global merchant variable
+    window.currentMerchantForModal = null;
 }
 
 // Save Merchant Connection
@@ -1254,9 +1278,10 @@ async function saveMerchantConnection(event) {
         }
         
         if (data && data.success) {
-            showNotification('Success', 'Merchant connected successfully!', 'success');
+            const message = data.updated ? 'Integration updated successfully!' : 'Merchant connected successfully!';
+            showNotification('Success', message, 'success');
             closeConnectMerchantModal();
-            showDashboardPage();
+            showIntegrationsPage();
         } else {
             if (errorDiv) {
                 errorDiv.textContent = (data && data.error) || 'Failed to connect merchant. Please check if the API endpoint is available.';
@@ -1414,17 +1439,37 @@ async function showIntegrationsPage() {
         console.warn('Merchants API not available, continuing without merchants list');
     }
 
+    const hasExistingMerchant = merchants.length > 0;
+    const existingMerchant = hasExistingMerchant ? merchants[0] : null;
+    
+    // Store merchant data globally for modal access
+    window.currentMerchantForModal = existingMerchant;
+
     mainContainer.innerHTML = `
         <div class="orders-header">
             <h1 class="page-title">Integrations</h1>
             <button onclick="openConnectMerchantModal()" class="btn-primary" style="padding: 12px 24px; font-size: 14px; font-weight: 600;">
-                + Add Integration
+                ${hasExistingMerchant ? '✏️ Update Integration' : '+ Add Integration'}
             </button>
         </div>
         
         <div style="padding: 24px;">
+            ${hasExistingMerchant ? `
+                <div style="background: #fef3c7; border: 1px solid #fbbf24; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                        </svg>
+                        <p style="margin: 0; color: #92400e; font-size: 14px; font-weight: 500;">
+                            Only one integration is allowed per account. You can update your existing integration or delete it to create a new one.
+                        </p>
+                    </div>
+                </div>
+            ` : ''}
             <div style="background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
-                <h2 style="font-size: 20px; font-weight: 600; color: #0f172a; margin-bottom: 16px;">Connected Merchants</h2>
+                <h2 style="font-size: 20px; font-weight: 600; color: #0f172a; margin-bottom: 16px;">Connected Integration</h2>
                 
                 ${merchants.length === 0 ? `
                     <div style="text-align: center; padding: 48px 24px;">
@@ -1435,14 +1480,14 @@ async function showIntegrationsPage() {
                                 <path d="M20 8v6M23 11h-6"></path>
                             </svg>
                         </div>
-                        <p style="font-size: 16px; color: #64748b; margin-bottom: 24px;">No merchants connected yet</p>
+                        <p style="font-size: 16px; color: #64748b; margin-bottom: 24px;">No integration connected yet</p>
                         <button onclick="openConnectMerchantModal()" class="btn-primary" style="padding: 12px 24px; font-size: 14px; font-weight: 600;">
-                            Connect Your First Merchant
+                            Connect Your Integration
                         </button>
                     </div>
                 ` : `
                     <div style="display: grid; gap: 16px;">
-                        ${merchants.map(merchant => `
+                        ${merchants.map((merchant, index) => `
                             <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; display: flex; justify-content: space-between; align-items: center;">
                                 <div>
                                     <h3 style="font-size: 18px; font-weight: 600; color: #0f172a; margin-bottom: 8px;">
@@ -1458,6 +1503,10 @@ async function showIntegrationsPage() {
                                     </div>
                                 </div>
                                 <div style="display: flex; gap: 8px;">
+                                    <button onclick="window.currentMerchantForModal = ${JSON.stringify(merchant)}; openConnectMerchantModal();" 
+                                            style="padding: 8px 16px; border: 1px solid #3b82f6; background: white; color: #3b82f6; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                                        Update
+                                    </button>
                                     <button onclick="deleteMerchant(${merchant.id}, '${escapeHtml(merchant.merchant_name || 'Unknown')}')" 
                                             style="padding: 8px 16px; border: 1px solid #ef4444; background: white; color: #ef4444; border-radius: 6px; cursor: pointer; font-size: 14px;">
                                         Delete

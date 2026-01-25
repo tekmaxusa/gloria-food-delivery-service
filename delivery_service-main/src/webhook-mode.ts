@@ -1915,23 +1915,50 @@ class GloriaFoodWebhookServer {
           });
         }
 
-        // Create/update merchant
-        const merchant = await this.handleAsync(this.database.insertOrUpdateMerchant({
-          user_id: userId,
-          store_id,
-          merchant_name,
-          api_key,
-          api_url,
-          master_key,
-          is_active: is_active !== false
-        }));
+        // Check if user already has a merchant (only one integration per account)
+        const existingMerchants = await this.handleAsync(this.database.getAllMerchants(userId));
+        if (existingMerchants && existingMerchants.length > 0) {
+          // User already has a merchant, update the existing one instead
+          const existingMerchant = existingMerchants[0];
+          
+          // Update existing merchant
+          const merchant = await this.handleAsync(this.database.insertOrUpdateMerchant({
+            id: existingMerchant.id,
+            user_id: userId,
+            store_id,
+            merchant_name,
+            api_key,
+            api_url,
+            master_key,
+            is_active: is_active !== false
+          }));
 
-        if (merchant) {
-          // Reload merchants in manager
-          await this.merchantManager.reload();
-          res.json({ success: true, merchant });
+          if (merchant) {
+            // Reload merchants in manager
+            await this.merchantManager.reload();
+            res.json({ success: true, merchant, updated: true });
+          } else {
+            res.status(500).json({ success: false, error: 'Failed to update merchant' });
+          }
         } else {
-          res.status(500).json({ success: false, error: 'Failed to create merchant' });
+          // No existing merchant, create new one
+          const merchant = await this.handleAsync(this.database.insertOrUpdateMerchant({
+            user_id: userId,
+            store_id,
+            merchant_name,
+            api_key,
+            api_url,
+            master_key,
+            is_active: is_active !== false
+          }));
+
+          if (merchant) {
+            // Reload merchants in manager
+            await this.merchantManager.reload();
+            res.json({ success: true, merchant, updated: false });
+          } else {
+            res.status(500).json({ success: false, error: 'Failed to create merchant' });
+          }
         }
       } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
