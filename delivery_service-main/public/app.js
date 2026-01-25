@@ -1126,37 +1126,40 @@ function openConnectMerchantModal() {
                     
                     <div class="form-group" style="margin-bottom: 20px;">
                         <label class="input-label" for="merchantStoreId">
-                            Merchant Store ID <span style="color: #ef4444;">*</span>
+                            Restaurant Token (Store ID) <span style="color: #ef4444;">*</span>
                         </label>
                         <input 
                             type="text" 
                             id="merchantStoreId" 
                             name="merchantStoreId" 
                             required 
-                            placeholder="Enter Merchant Store ID"
+                            placeholder="Enter Restaurant Token from GloriaFood"
                             value="${merchantData ? escapeHtml(merchantData.store_id || '') : ''}"
                             class="form-input"
                             style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px;"
                         >
                         <small style="color: #64748b; font-size: 12px; margin-top: 4px; display: block;">
-                            This Store ID will be used to match incoming GloriaFood orders
+                            Found in GloriaFood: Settings → Integrations → Custom Integration → Restaurant Token
                         </small>
                     </div>
                     
                     <div class="form-group" style="margin-bottom: 20px;">
                         <label class="input-label" for="apiKey">
-                            GloriaFood API Key <span style="color: #ef4444;">*</span>
+                            Restaurant Key (API Key) <span style="color: #ef4444;">*</span>
                         </label>
                         <input 
                             type="text" 
                             id="apiKey" 
                             name="apiKey" 
                             required 
-                            placeholder="Enter GloriaFood API Key"
+                            placeholder="Enter Restaurant Key from GloriaFood"
                             value="${merchantData ? escapeHtml(merchantData.api_key || '') : ''}"
                             class="form-input"
                             style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px;"
                         >
+                        <small style="color: #64748b; font-size: 12px; margin-top: 4px; display: block;">
+                            Found in GloriaFood: Settings → Integrations → Custom Integration → Restaurant Key
+                        </small>
                     </div>
                     
                     <div class="form-group" style="margin-bottom: 20px;">
@@ -1176,17 +1179,21 @@ function openConnectMerchantModal() {
                     
                     <div class="form-group" style="margin-bottom: 20px;">
                         <label class="input-label" for="masterKey">
-                            Master Key
+                            Master Key <span style="color: #ef4444;">*</span>
                         </label>
                         <input 
                             type="text" 
                             id="masterKey" 
                             name="masterKey" 
-                            placeholder="Enter Master Key (optional)"
+                            required
+                            placeholder="Enter Master Key from GloriaFood"
                             value="${merchantData ? escapeHtml(merchantData.master_key || '') : ''}"
                             class="form-input"
                             style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px;"
                         >
+                        <small style="color: #64748b; font-size: 12px; margin-top: 4px; display: block;">
+                            Found in GloriaFood: Settings → Integrations → Custom Integration → Master key
+                        </small>
                     </div>
                     
                     <div class="form-group" style="margin-bottom: 24px; display: flex; align-items: center; gap: 12px;">
@@ -1244,13 +1251,13 @@ async function saveMerchantConnection(event) {
     const isActive = document.getElementById('isActive')?.checked || false;
     
     // Validate required fields
-    if (!merchantName || !merchantStoreId || !apiKey) {
-        if (errorDiv) {
-            errorDiv.textContent = 'Please fill in all required fields (Merchant Name, Merchant Store ID, API Key)';
-            errorDiv.style.display = 'block';
+        if (!merchantName || !merchantStoreId || !apiKey || !masterKey) {
+            if (errorDiv) {
+                errorDiv.textContent = 'Please fill in all required fields (Merchant Name, Restaurant Token, Restaurant Key, Master Key)';
+                errorDiv.style.display = 'block';
+            }
+            return;
         }
-        return;
-    }
     
     try {
         const response = await authenticatedFetch(`${API_BASE}/merchants`, {
