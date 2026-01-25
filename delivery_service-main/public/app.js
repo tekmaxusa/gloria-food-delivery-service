@@ -4072,10 +4072,10 @@ async function getBusinessSettingsContent() {
 // Get Dispatch Settings content
 async function getDispatchSettingsContent() {
     const autoAssign = localStorage.getItem('dispatchAutoAssign') === 'true';
-    // Get dispatch time window - handle both old format (hours) and new format (minutes)
+    // Get dispatch time window - stored in minutes, convert to hours and minutes for display
     let dispatchTimeWindowMinutes = localStorage.getItem('dispatchTimeWindow');
     if (!dispatchTimeWindowMinutes) {
-        dispatchTimeWindowMinutes = '60'; // Default to 60 minutes
+        dispatchTimeWindowMinutes = '60'; // Default to 60 minutes (1 hour 0 minutes)
     } else {
         // Convert old format (hours) to new format (minutes) if needed
         const value = parseFloat(dispatchTimeWindowMinutes);
@@ -4087,7 +4087,11 @@ async function getDispatchSettingsContent() {
             saveSetting('dispatchTimeWindow', dispatchTimeWindowMinutes);
         }
     }
-    const dispatchTimeWindow = dispatchTimeWindowMinutes;
+    
+    // Convert minutes to hours and minutes for display
+    const totalMinutes = parseInt(dispatchTimeWindowMinutes) || 60;
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
 
     return `
         <h1 class="settings-content-title">Dispatch settings</h1>
@@ -4109,12 +4113,14 @@ async function getDispatchSettingsContent() {
         <!-- Dispatch time window Section -->
         <div class="driver-settings-section">
             <h3 class="settings-section-subtitle">Dispatch time window</h3>
-            <p class="settings-instruction-text">This time is used to indicate when a scheduled order will be put in the current order tab for dispatch. If this time is 60 minutes, it means when the required delivery time is within 60 minutes window, this order will be moved to the current order tab for dispatch.</p>
+            <p class="settings-instruction-text">This time is used to indicate when a scheduled order will be put in the current order tab for dispatch. For example, if set to 1 hour 30 minutes, orders with delivery time within 1 hour 30 minutes will be moved to the current order tab for dispatch.</p>
             
             <div class="driver-time-input">
                 <div style="display: flex; align-items: center; gap: 12px; margin-top: 16px;">
-                    <input type="number" class="business-input" id="dispatchTimeWindowInput" value="${dispatchTimeWindow}" min="1" max="1440" step="1" style="width: 120px; padding: 10px 14px; font-size: 15px;">
-                    <span style="color: #64748b; font-size: 14px; font-weight: 500;">minutes</span>
+                    <input type="number" class="business-input" id="dispatchTimeWindowHours" value="${hours}" min="0" max="23" step="1" style="width: 100px; padding: 10px 14px; font-size: 15px;">
+                    <span style="color: #64748b; font-size: 14px; font-weight: 500;">hour(s)</span>
+                    <input type="number" class="business-input" id="dispatchTimeWindowMinutes" value="${minutes}" min="0" max="59" step="1" style="width: 100px; padding: 10px 14px; font-size: 15px;">
+                    <span style="color: #64748b; font-size: 14px; font-weight: 500;">minute(s)</span>
                 </div>
             </div>
         </div>
@@ -5247,21 +5253,43 @@ async function toggleDispatchSetting(setting, enabled) {
 }
 
 async function saveDispatchTimeWindow() {
-    const input = document.getElementById('dispatchTimeWindowInput');
-    if (input) {
-        const value = parseInt(input.value);
-        if (!isNaN(value) && value >= 1 && value <= 1440) {
-            // Store in minutes
-            await saveSetting('dispatchTimeWindow', value.toString());
-            showNotification('Success', `Dispatch time window updated to ${value} minutes`, 'success');
-            
-            // Refresh orders display to apply new dispatch window immediately
-            if (typeof filterAndDisplayOrders === 'function' && allOrders.length > 0) {
-                filterAndDisplayOrders();
-            }
-        } else {
-            showNotification('Error', 'Please enter a valid number (1-1440 minutes)', 'error');
+    // Get hours and minutes from inputs
+    const hoursInput = document.getElementById('dispatchTimeWindowHours');
+    const minutesInput = document.getElementById('dispatchTimeWindowMinutes');
+    const hours = parseInt(hoursInput?.value || '0') || 0;
+    const minutes = parseInt(minutesInput?.value || '0') || 0;
+    
+    // Validate inputs
+    if (hours < 0 || hours > 23) {
+        showNotification('Error', 'Hours must be between 0 and 23', 'error');
+        return;
+    }
+    if (minutes < 0 || minutes > 59) {
+        showNotification('Error', 'Minutes must be between 0 and 59', 'error');
+        return;
+    }
+    
+    // Convert to total minutes for storage
+    const totalMinutes = (hours * 60) + minutes;
+    
+    if (totalMinutes >= 1 && totalMinutes <= 1440) {
+        // Store in minutes (for backward compatibility with existing logic)
+        await saveSetting('dispatchTimeWindow', totalMinutes.toString());
+        
+        const timeDisplay = hours > 0 && minutes > 0 
+            ? `${hours} hour(s) ${minutes} minute(s)`
+            : hours > 0 
+                ? `${hours} hour(s)`
+                : `${minutes} minute(s)`;
+        
+        showNotification('Success', `Dispatch time window updated to ${timeDisplay}`, 'success');
+        
+        // Refresh orders display to apply new dispatch window immediately
+        if (typeof filterAndDisplayOrders === 'function' && allOrders.length > 0) {
+            filterAndDisplayOrders();
         }
+    } else {
+        showNotification('Error', 'Total time must be between 1 minute and 24 hours (1440 minutes)', 'error');
     }
 }
 
@@ -5269,17 +5297,42 @@ async function saveDispatchTimeWindow() {
 function saveDispatchSettings() {
     // Save all dispatch settings
     // Auto-assign is already saved via toggleDispatchSetting
-    const dispatchTimeWindow = document.getElementById('dispatchTimeWindowInput')?.value || '60';
-    if (dispatchTimeWindow) {
-        const value = parseInt(dispatchTimeWindow);
-        if (!isNaN(value) && value >= 1 && value <= 1440) {
-            // Store in minutes
-            localStorage.setItem('dispatchTimeWindow', dispatchTimeWindow);
-            saveSetting('dispatchTimeWindow', dispatchTimeWindow);
-        }
+    
+    // Get hours and minutes from inputs
+    const hoursInput = document.getElementById('dispatchTimeWindowHours');
+    const minutesInput = document.getElementById('dispatchTimeWindowMinutes');
+    const hours = parseInt(hoursInput?.value || '0') || 0;
+    const minutes = parseInt(minutesInput?.value || '0') || 0;
+    
+    // Validate inputs
+    if (hours < 0 || hours > 23) {
+        showNotification('Error', 'Hours must be between 0 and 23', 'error');
+        return;
     }
-
-    showNotification('Success', 'Dispatch settings saved successfully', 'success');
+    if (minutes < 0 || minutes > 59) {
+        showNotification('Error', 'Minutes must be between 0 and 59', 'error');
+        return;
+    }
+    
+    // Convert to total minutes for storage
+    const totalMinutes = (hours * 60) + minutes;
+    
+    if (totalMinutes >= 1 && totalMinutes <= 1440) {
+        // Store in minutes (for backward compatibility with existing logic)
+        localStorage.setItem('dispatchTimeWindow', totalMinutes.toString());
+        saveSetting('dispatchTimeWindow', totalMinutes.toString());
+        
+        const timeDisplay = hours > 0 && minutes > 0 
+            ? `${hours} hour(s) ${minutes} minute(s)`
+            : hours > 0 
+                ? `${hours} hour(s)`
+                : `${minutes} minute(s)`;
+        
+        showNotification('Success', `Dispatch time window updated to ${timeDisplay}`, 'success');
+    } else {
+        showNotification('Error', 'Total time must be between 1 minute and 24 hours (1440 minutes)', 'error');
+        return;
+    }
     
     // Refresh orders display to apply new dispatch window immediately
     if (typeof filterAndDisplayOrders === 'function' && allOrders.length > 0) {
@@ -5689,6 +5742,9 @@ async function loadOrders() {
 
 // Helper function to check if order has scheduled delivery time
 // Cached result to avoid repeated calculations
+// IMPORTANT: This function determines if an order is scheduled
+// Orders with "Later" option selected and time slots (e.g., "05:45 AM - 06:00 AM")
+// should return true so they appear in the Scheduled tab
 function hasScheduledDeliveryTime(order) {
     // Use cached result if available
     if (order._isScheduled !== undefined) {
@@ -5766,13 +5822,31 @@ function hasScheduledDeliveryTime(order) {
         rawData.isScheduled === true ||
         rawData.scheduled === true ||
         rawData.is_later === true ||
-        rawData.isLater === true;
+        rawData.isLater === true ||
+        // Check for time slot format (e.g., "05:45 AM - 06:00 AM")
+        (rawData.time_slot && rawData.time_slot.includes('-')) ||
+        (rawData.delivery_time_slot && rawData.delivery_time_slot.includes('-')) ||
+        (rawData.available_time && rawData.available_time.includes('-')) ||
+        (rawData.selected_time && rawData.selected_time.includes('-'));
 
     // If "Later" is explicitly selected, it's scheduled (even if no time found yet)
     // This is important for Gloria Food "in later" orders
+    // Also check if time slot format exists (e.g., "05:45 AM - 06:00 AM")
     if (isLaterSelected) {
         order._isScheduled = true;
         return true;
+    }
+    
+    // Check for time slot format (e.g., "05:45 AM - 06:00 AM") - this indicates scheduled order
+    const timeSlot = rawData.time_slot || rawData.delivery_time_slot || rawData.available_time || rawData.selected_time || rawData.time_option;
+    if (timeSlot && typeof timeSlot === 'string' && timeSlot.includes('-')) {
+        // Time slot format detected (e.g., "05:45 AM - 06:00 AM")
+        // Extract start time from slot (before the "-")
+        const startTimeStr = timeSlot.split('-')[0].trim();
+        if (startTimeStr) {
+            order._isScheduled = true;
+            return true;
+        }
     }
 
     // If NOT "asap" and has delivery date/time, it's likely scheduled
@@ -5913,7 +5987,7 @@ function hasScheduledDeliveryTime(order) {
             (rawData.schedule && rawData.schedule.date) ||
             (rawData.schedule && rawData.schedule.delivery_date);
 
-        const deliveryTimeOnly = rawData.delivery_time_only ||
+        let deliveryTimeOnly = rawData.delivery_time_only ||
             rawData.deliveryTimeOnly ||
             rawData.scheduled_time ||
             rawData.scheduledTime ||
@@ -5923,8 +5997,6 @@ function hasScheduledDeliveryTime(order) {
             rawData.chosenDeliveryTime ||
             rawData.preferred_delivery_time ||
             rawData.preferredDeliveryTime ||
-            rawData.time_slot ||
-            rawData.delivery_time_slot ||
             rawData.requested_delivery_time_only ||
             deliveryObj.delivery_time_only ||
             deliveryObj.deliveryTimeOnly ||
@@ -5933,6 +6005,21 @@ function hasScheduledDeliveryTime(order) {
             scheduleObj.scheduled_time ||
             (rawData.schedule && rawData.schedule.time) ||
             (rawData.schedule && rawData.schedule.delivery_time);
+
+        // Check for time slot format (e.g., "05:45 AM - 06:00 AM")
+        // Extract start time from slot (before the "-")
+        const timeSlot = rawData.time_slot || rawData.delivery_time_slot || rawData.available_time || rawData.selected_time || rawData.time_option || deliveryObj.time_slot || scheduleObj.time_slot;
+        if (timeSlot && typeof timeSlot === 'string' && timeSlot.includes('-')) {
+            // Time slot format detected (e.g., "05:45 AM - 06:00 AM")
+            // Extract start time from slot (before the "-")
+            const startTimeStr = timeSlot.split('-')[0].trim();
+            if (startTimeStr) {
+                deliveryTimeOnly = startTimeStr; // Use start time from slot
+            }
+        } else if (timeSlot && !deliveryTimeOnly) {
+            // If time_slot exists but not in range format, use it as deliveryTimeOnly
+            deliveryTimeOnly = timeSlot;
+        }
 
         if (deliveryDate && deliveryTimeOnly) {
             // Combine date and time - try different formats

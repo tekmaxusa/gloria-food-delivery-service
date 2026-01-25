@@ -1420,6 +1420,9 @@ export class OrderDatabasePostgreSQL {
     return '';
   }
 
+  // IMPORTANT: This function extracts scheduled delivery time from order data
+  // Orders with "Later" option selected and time slots (e.g., "05:45 AM - 06:00 AM")
+  // should be detected as scheduled orders and appear in the Scheduled tab
   private extractScheduledDeliveryTime(orderData: any): string | null {
     // Check for scheduled delivery time in various possible fields
     const deliveryObj = orderData.delivery || {};
@@ -1437,6 +1440,10 @@ export class OrderDatabasePostgreSQL {
     const deliveryType = String(orderData.delivery_type || orderData.delivery_option || orderData.deliveryOption || orderData.deliveryType || orderData.delivery_time_type || orderData.time_type || orderData.delivery_method || '').toLowerCase();
     const deliveryOption = String(orderData.delivery_option || orderData.deliveryOption || orderData.available_time || orderData.availableTime || orderData.time_option || orderData.timeOption || orderData.selected_time_option || '').toLowerCase();
 
+    // Check for time slot format (e.g., "05:45 AM - 06:00 AM") - this indicates scheduled order
+    const timeSlot = orderData.time_slot || orderData.delivery_time_slot || orderData.available_time || orderData.selected_time || orderData.time_option || deliveryObj.time_slot || scheduleObj.time_slot;
+    const hasTimeSlot = timeSlot && typeof timeSlot === 'string' && timeSlot.includes('-');
+    
     const isLaterSelected = deliveryType === 'later' ||
       deliveryType === 'scheduled' ||
       deliveryOption === 'later' ||
@@ -1446,7 +1453,8 @@ export class OrderDatabasePostgreSQL {
       orderData.isScheduled === true ||
       orderData.scheduled === true ||
       orderData.is_later === true ||
-      orderData.isLater === true;
+      orderData.isLater === true ||
+      hasTimeSlot; // Time slot format also indicates "Later" was selected
 
     // If explicitly ASAP (and not "Later"), it's not scheduled
     if (isAsap && !isLaterSelected) {
@@ -1509,7 +1517,7 @@ export class OrderDatabasePostgreSQL {
         (orderData.schedule && orderData.schedule.date) ||
         (orderData.schedule && orderData.schedule.delivery_date);
 
-      const deliveryTimeOnly = orderData.delivery_time_only ||
+      let deliveryTimeOnly = orderData.delivery_time_only ||
         orderData.deliveryTimeOnly ||
         orderData.scheduled_time ||
         orderData.scheduledTime ||
@@ -1519,8 +1527,6 @@ export class OrderDatabasePostgreSQL {
         orderData.chosenDeliveryTime ||
         orderData.preferred_delivery_time ||
         orderData.preferredDeliveryTime ||
-        orderData.time_slot ||
-        orderData.delivery_time_slot ||
         deliveryObj.delivery_time_only ||
         deliveryObj.deliveryTimeOnly ||
         scheduleObj.delivery_time_only ||
@@ -1528,6 +1534,21 @@ export class OrderDatabasePostgreSQL {
         scheduleObj.scheduled_time ||
         (orderData.schedule && orderData.schedule.time) ||
         (orderData.schedule && orderData.schedule.delivery_time);
+
+      // Check for time slot format (e.g., "05:45 AM - 06:00 AM")
+      // Extract start time from slot (before the "-")
+      const timeSlot = orderData.time_slot || orderData.delivery_time_slot || orderData.available_time || orderData.selected_time || orderData.time_option || deliveryObj.time_slot || scheduleObj.time_slot;
+      if (timeSlot && typeof timeSlot === 'string' && timeSlot.includes('-')) {
+        // Time slot format detected (e.g., "05:45 AM - 06:00 AM")
+        // Extract start time from slot (before the "-")
+        const startTimeStr = timeSlot.split('-')[0].trim();
+        if (startTimeStr) {
+          deliveryTimeOnly = startTimeStr; // Use start time from slot
+        }
+      } else if (timeSlot && !deliveryTimeOnly) {
+        // If time_slot exists but not in range format, use it as deliveryTimeOnly
+        deliveryTimeOnly = timeSlot;
+      }
 
       if (deliveryDate && deliveryTimeOnly) {
         // Combine date and time
