@@ -1915,10 +1915,12 @@ class GloriaFoodWebhookServer {
           });
         }
 
-        // Check if user already has a merchant (only one integration per account)
+        // ENFORCE: Only one integration per account
+        // Check if user already has a merchant (active or inactive - only one allowed total)
         const existingMerchants = await this.handleAsync(this.database.getAllMerchants(userId));
         if (existingMerchants && existingMerchants.length > 0) {
-          // User already has a merchant, update the existing one instead
+          // User already has a merchant, update the existing one instead of creating new
+          // This ensures only one integration connection per account
           const existingMerchant = existingMerchants[0];
           
           // Update existing merchant
