@@ -2004,10 +2004,12 @@ export class OrderDatabasePostgreSQL {
       const client = await this.pool.connect();
       
       // If userId is provided, only return users who share at least one merchant with this user
+      // Users with the same store_id (same merchant/integration) will see each other
+      // Users with different store_ids (different merchants) will be independent and not see each other
       if (userId !== undefined) {
-        // Get current user's merchants (store_ids)
+        // Get current user's merchants (store_ids) - these represent the integrations/merchants the user is connected to
         const userMerchantsResult = await client.query(
-          'SELECT DISTINCT store_id FROM merchants WHERE user_id = $1 AND is_active = TRUE',
+          'SELECT DISTINCT store_id FROM merchants WHERE user_id = $1 AND is_active = TRUE AND store_id IS NOT NULL',
           [userId]
         );
         const userStoreIds = userMerchantsResult.rows.map(row => row.store_id).filter(Boolean);
@@ -2028,13 +2030,15 @@ export class OrderDatabasePostgreSQL {
           }));
         }
         
-        // Get all user_ids that have merchants with the same store_ids
+        // Get all user_ids that have merchants with the same store_ids (same integration/merchant)
+        // This ensures users only see other users who are using the same GloriaFood merchant/integration
         const sharedUsersResult = await client.query(
           `SELECT DISTINCT user_id 
            FROM merchants 
            WHERE store_id = ANY($1::text[]) 
              AND is_active = TRUE 
-             AND user_id IS NOT NULL`,
+             AND user_id IS NOT NULL
+             AND store_id IS NOT NULL`,
           [userStoreIds]
         );
         
