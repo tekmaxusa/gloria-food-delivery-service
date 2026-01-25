@@ -4213,6 +4213,10 @@ async function getUsersContent() {
         const data = await response.json();
         if (data.success && data.users) {
             users = data.users;
+            // If API returns empty array but we have currentUser, use currentUser as fallback
+            if (users.length === 0 && currentUser) {
+                users = [currentUser];
+            }
         } else if (currentUser) {
             // Fallback to current user if API fails
             users = [currentUser];

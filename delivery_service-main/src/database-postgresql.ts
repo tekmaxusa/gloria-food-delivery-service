@@ -2013,13 +2013,21 @@ export class OrderDatabasePostgreSQL {
           [userId]
         );
         client.release();
-        return currentUserResult.rows.map(row => ({
-          id: row.id,
-          email: row.email,
-          full_name: row.full_name,
-          role: row.role || 'user',
-          created_at: row.created_at
-        }));
+        
+        // If user found, return it; otherwise return empty array
+        if (currentUserResult.rows.length > 0) {
+          return currentUserResult.rows.map(row => ({
+            id: row.id,
+            email: row.email,
+            full_name: row.full_name,
+            role: row.role || 'user',
+            created_at: row.created_at
+          }));
+        } else {
+          // User not found in database
+          console.warn(`User with id ${userId} not found in database`);
+          return [];
+        }
       } else {
         // If no userId provided, return empty array - don't show any users
         // This ensures that only authenticated users can see themselves
