@@ -3116,6 +3116,9 @@ export class OrderDatabasePostgreSQL {
     }
   }
 
+  // IMPORTANT: Orders are only deleted when explicitly deleted by the user
+  // Orders should persist in the database and remain visible unless manually deleted
+  // This ensures order history is maintained and orders don't disappear automatically
   async deleteOrder(orderId: string): Promise<boolean> {
     console.log(`🗑️  deleteOrder called for orderId: ${orderId}`);
     return this.retryQuery(async () => {

@@ -806,11 +806,11 @@ function showOrdersPage() {
             <h1 class="page-title">Orders</h1>
             <div class="orders-controls">
                 <div class="order-status-tabs">
-                    <button class="status-tab active" data-status="current">Current</button>
+                    <button class="status-tab" data-status="current">Current</button>
                     <button class="status-tab" data-status="scheduled">Scheduled</button>
                     <button class="status-tab" data-status="completed">Completed</button>
                     <button class="status-tab" data-status="incomplete">Incomplete</button>
-                    <button class="status-tab" data-status="history">History</button>
+                    <button class="status-tab active" data-status="history">History</button>
                 </div>
                 <div class="action-bar">
                     <div class="search-box">
@@ -929,8 +929,9 @@ function showOrdersPage() {
         </div>
     `;
 
-    // Set initial status filter to 'current' since that tab is active by default
-    currentStatusFilter = 'current';
+    // Set initial status filter to 'history' to show ALL orders by default
+    // Orders should always be visible unless explicitly deleted
+    currentStatusFilter = 'history';
 
     // Re-initialize event listeners
     initializeOrdersPage();
@@ -6310,10 +6311,13 @@ function filterAndDisplayOrders() {
         });
     } else if (currentStatusFilter === 'history') {
         // History = ALL orders - no filtering needed, just show everything
+        // IMPORTANT: Orders should always be visible unless explicitly deleted by user
+        // This ensures orders persist in the system and don't disappear
         // filtered already contains all orders, no need to filter
-        console.log('📜 History filter: Showing all orders');
+        console.log('📜 History filter: Showing all orders (default view - orders persist unless deleted)');
     } else if (!currentStatusFilter || currentStatusFilter === '') {
         // No filter selected - show all orders
+        // IMPORTANT: Orders persist in database and should always be visible
         console.log('📋 No filter selected: Showing all orders');
     }
 
