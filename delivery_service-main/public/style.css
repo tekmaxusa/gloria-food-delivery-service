@@ -3475,3 +3475,192 @@ body.on-profile-page .nav-link:hover {
     color: var(--text-secondary);
     font-size: 12px;
 }
+
+/* Integration Warning Banner - Dark Mode Compatible */
+.integration-warning-banner {
+    background: #fef3c7;
+    border: 1px solid #fbbf24;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 24px;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+[data-theme="dark"] .integration-warning-banner {
+    background: #78350f;
+    border-color: #f59e0b;
+}
+
+.integration-warning-banner p {
+    margin: 0;
+    color: #92400e;
+    font-size: 14px;
+    font-weight: 500;
+    transition: color 0.3s ease;
+}
+
+[data-theme="dark"] .integration-warning-banner p {
+    color: #fef3c7;
+}
+
+.integration-warning-banner svg {
+    stroke: #f59e0b;
+    transition: stroke 0.3s ease;
+}
+
+[data-theme="dark"] .integration-warning-banner svg {
+    stroke: #fbbf24;
+}
+
+/* Integration Card - Dark Mode Compatible */
+.integration-card {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    transition: background-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+[data-theme="dark"] .integration-card {
+    background: var(--bg-secondary);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.integration-card-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: #0f172a;
+    margin-bottom: 16px;
+    transition: color 0.3s ease;
+}
+
+[data-theme="dark"] .integration-card-title {
+    color: var(--text-primary);
+}
+
+/* Merchant Item Card - Dark Mode Compatible */
+.merchant-item-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: border-color 0.3s ease, background-color 0.3s ease;
+}
+
+[data-theme="dark"] .merchant-item-card {
+    border-color: var(--border-color);
+    background: var(--bg-primary);
+}
+
+.merchant-item-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #0f172a;
+    margin-bottom: 8px;
+    transition: color 0.3s ease;
+}
+
+[data-theme="dark"] .merchant-item-title {
+    color: var(--text-primary);
+}
+
+.merchant-item-details {
+    display: flex;
+    gap: 24px;
+    color: #64748b;
+    font-size: 14px;
+    transition: color 0.3s ease;
+}
+
+[data-theme="dark"] .merchant-item-details {
+    color: var(--text-secondary);
+}
+
+/* Integration Buttons - Dark Mode Compatible */
+.integration-btn-update {
+    padding: 8px 16px;
+    border: 1px solid #3b82f6;
+    background: white;
+    color: #3b82f6;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+[data-theme="dark"] .integration-btn-update {
+    background: var(--bg-secondary);
+    color: #60a5fa;
+    border-color: #60a5fa;
+}
+
+.integration-btn-update:hover {
+    background: #eff6ff;
+}
+
+[data-theme="dark"] .integration-btn-update:hover {
+    background: var(--bg-tertiary);
+}
+
+.integration-btn-delete {
+    padding: 8px 16px;
+    border: 1px solid #ef4444;
+    background: white;
+    color: #ef4444;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+[data-theme="dark"] .integration-btn-delete {
+    background: var(--bg-secondary);
+    color: #f87171;
+    border-color: #f87171;
+}
+
+.integration-btn-delete:hover {
+    background: #fef2f2;
+}
+
+[data-theme="dark"] .integration-btn-delete:hover {
+    background: var(--bg-tertiary);
+}
+
+/* Empty State Icon - Dark Mode Compatible */
+.empty-state-icon {
+    width: 64px;
+    height: 64px;
+    background: #f1f5f9;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 16px;
+    transition: background-color 0.3s ease;
+}
+
+[data-theme="dark"] .empty-state-icon {
+    background: var(--bg-tertiary);
+}
+
+.empty-state-icon svg {
+    stroke: #64748b;
+    transition: stroke 0.3s ease;
+}
+
+[data-theme="dark"] .empty-state-icon svg {
+    stroke: var(--text-secondary);
+}
+
+.empty-state-text {
+    font-size: 16px;
+    color: #64748b;
+    transition: color 0.3s ease;
+}
+
+[data-theme="dark"] .empty-state-text {
+    color: var(--text-secondary);
+}

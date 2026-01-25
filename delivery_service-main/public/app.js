@@ -1102,8 +1102,8 @@ function openConnectMerchantModal() {
             </div>
             <div class="modal-body">
                 ${isUpdate ? `
-                    <div style="background: #fef3c7; border: 1px solid #fbbf24; border-radius: 8px; padding: 12px; margin-bottom: 20px;">
-                        <p style="margin: 0; color: #92400e; font-size: 13px;">
+                    <div class="integration-warning-banner" style="margin-bottom: 20px; padding: 12px;">
+                        <p style="font-size: 13px;">
                             You can only have one integration per account. Updating will replace your existing integration.
                         </p>
                     </div>
@@ -1463,32 +1463,32 @@ async function showIntegrationsPage() {
         
         <div style="padding: 24px;">
             ${hasExistingMerchant ? `
-                <div style="background: #fef3c7; border: 1px solid #fbbf24; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
+                <div class="integration-warning-banner">
                     <div style="display: flex; align-items: center; gap: 12px;">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2">
                             <circle cx="12" cy="12" r="10"></circle>
                             <line x1="12" y1="8" x2="12" y2="12"></line>
                             <line x1="12" y1="16" x2="12.01" y2="16"></line>
                         </svg>
-                        <p style="margin: 0; color: #92400e; font-size: 14px; font-weight: 500;">
+                        <p>
                             Only one integration is allowed per account. You can update your existing integration or delete it to create a new one.
                         </p>
                     </div>
                 </div>
             ` : ''}
-            <div style="background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
-                <h2 style="font-size: 20px; font-weight: 600; color: #0f172a; margin-bottom: 16px;">Connected Integration</h2>
+            <div class="integration-card">
+                <h2 class="integration-card-title">Connected Integration</h2>
                 
                 ${merchants.length === 0 ? `
                     <div style="text-align: center; padding: 48px 24px;">
-                        <div style="width: 64px; height: 64px; background: #f1f5f9; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
-                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2">
+                        <div class="empty-state-icon">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke-width="2">
                                 <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
                                 <circle cx="8.5" cy="7" r="4"></circle>
                                 <path d="M20 8v6M23 11h-6"></path>
                             </svg>
                         </div>
-                        <p style="font-size: 16px; color: #64748b; margin-bottom: 24px;">No integration connected yet</p>
+                        <p class="empty-state-text" style="margin-bottom: 24px;">No integration connected yet</p>
                         <button onclick="openConnectMerchantModal()" class="btn-primary" style="padding: 12px 24px; font-size: 14px; font-weight: 600;">
                             Connect Your Integration
                         </button>
@@ -1496,12 +1496,12 @@ async function showIntegrationsPage() {
                 ` : `
                     <div style="display: grid; gap: 16px;">
                         ${merchants.map((merchant, index) => `
-                            <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; display: flex; justify-content: space-between; align-items: center;">
+                            <div class="merchant-item-card">
                                 <div>
-                                    <h3 style="font-size: 18px; font-weight: 600; color: #0f172a; margin-bottom: 8px;">
+                                    <h3 class="merchant-item-title">
                                         ${escapeHtml(merchant.merchant_name || 'Unknown Merchant')}
                                     </h3>
-                                    <div style="display: flex; gap: 24px; color: #64748b; font-size: 14px;">
+                                    <div class="merchant-item-details">
                                         <span><strong>Store ID:</strong> ${escapeHtml(merchant.store_id || 'N/A')}</span>
                                         <span><strong>Status:</strong> 
                                             <span style="color: ${merchant.is_active ? '#10b981' : '#ef4444'};">
@@ -1512,11 +1512,11 @@ async function showIntegrationsPage() {
                                 </div>
                                 <div style="display: flex; gap: 8px;">
                                     <button onclick="window.currentMerchantForModal = ${JSON.stringify(merchant)}; openConnectMerchantModal();" 
-                                            style="padding: 8px 16px; border: 1px solid #3b82f6; background: white; color: #3b82f6; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                                            class="integration-btn-update">
                                         Update
                                     </button>
                                     <button onclick="deleteMerchant(${merchant.id}, '${escapeHtml(merchant.merchant_name || 'Unknown')}')" 
-                                            style="padding: 8px 16px; border: 1px solid #ef4444; background: white; color: #ef4444; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                                            class="integration-btn-delete">
                                         Delete
                                     </button>
                                 </div>
