@@ -2837,15 +2837,59 @@ body.on-profile-page .nav-link:hover {
 }
 
 .driver-time-input .business-input {
-    border: 1.5px solid #e2e8f0;
-    background: #ffffff;
+    border: 1.5px solid var(--border-color);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
     transition: all 0.2s ease;
 }
 
 .driver-time-input .business-input:focus {
-    border-color: #3b82f6;
+    border-color: var(--accent-color);
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
     outline: none;
+}
+
+[data-theme="dark"] .driver-time-input .business-input {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .driver-time-input .business-input:focus {
+    border-color: var(--accent-color);
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.time-label {
+    color: var(--text-secondary);
+    transition: color 0.3s ease;
+}
+
+/* Ensure number inputs are visible in dark mode */
+[data-theme="dark"] input[type="number"] {
+    background: var(--bg-tertiary) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-color) !important;
+}
+
+[data-theme="dark"] input[type="number"]:focus {
+    background: var(--bg-tertiary) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--accent-color) !important;
+}
+
+/* Ensure all business-input elements are visible in dark mode */
+[data-theme="dark"] .business-input {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .business-input:focus {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border-color: var(--accent-color);
 }
 
 .driver-payment-item {

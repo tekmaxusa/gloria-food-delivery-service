@@ -4118,9 +4118,9 @@ async function getDispatchSettingsContent() {
             <div class="driver-time-input">
                 <div style="display: flex; align-items: center; gap: 12px; margin-top: 16px;">
                     <input type="number" class="business-input" id="dispatchTimeWindowHours" value="${hours}" min="0" max="23" step="1" style="width: 100px; padding: 10px 14px; font-size: 15px;">
-                    <span style="color: #64748b; font-size: 14px; font-weight: 500;">hour(s)</span>
+                    <span class="time-label" style="font-size: 14px; font-weight: 500;">hour(s)</span>
                     <input type="number" class="business-input" id="dispatchTimeWindowMinutes" value="${minutes}" min="0" max="59" step="1" style="width: 100px; padding: 10px 14px; font-size: 15px;">
-                    <span style="color: #64748b; font-size: 14px; font-weight: 500;">minute(s)</span>
+                    <span class="time-label" style="font-size: 14px; font-weight: 500;">minute(s)</span>
                 </div>
             </div>
         </div>
