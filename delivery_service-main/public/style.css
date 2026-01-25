@@ -2850,15 +2850,15 @@ body.on-profile-page .nav-link:hover {
 }
 
 [data-theme="dark"] .driver-time-input .business-input {
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-    border-color: var(--border-color);
+    background: #26292b;
+    color: #ffffff;
+    border-color: #3f4447;
 }
 
 [data-theme="dark"] .driver-time-input .business-input:focus {
     border-color: var(--accent-color);
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
+    background: #26292b;
+    color: #ffffff;
 }
 
 .time-label {
@@ -2868,14 +2868,14 @@ body.on-profile-page .nav-link:hover {
 
 /* Ensure number inputs are visible in dark mode */
 [data-theme="dark"] input[type="number"] {
-    background: var(--bg-tertiary) !important;
-    color: var(--text-primary) !important;
-    border-color: var(--border-color) !important;
+    background: #26292b !important;
+    color: #ffffff !important;
+    border-color: #3f4447 !important;
 }
 
 [data-theme="dark"] input[type="number"]:focus {
-    background: var(--bg-tertiary) !important;
-    color: var(--text-primary) !important;
+    background: #26292b !important;
+    color: #ffffff !important;
     border-color: var(--accent-color) !important;
 }
 
